@@ -584,7 +584,7 @@ Return the number of records actually moved."
   parent
   latest
   latest-sel                            ; latest selector (LATEST)
-  checkout      ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
+  status      ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
   mode-line
   base
   branch
@@ -626,11 +626,11 @@ first that it exists."
 
 (defsubst ah-clearcase-fprop-hijacked-p (fprop)
   "Return true if FPROP is hijacked."
-  (eq (ah-clearcase-fprop-checkout fprop) 'hijacked))
+  (eq (ah-clearcase-fprop-status fprop) 'hijacked))
 
 (defsubst ah-clearcase-fprop-checkedout-p (fprop)
   "Return the checked out mode for FPROP or nil."
-  (memq (ah-clearcase-fprop-checkout fprop) '(reserved unreserved)))
+  (memq (ah-clearcase-fprop-status fprop) '(reserved unreserved)))
 
 (defsubst ah-clearcase-fprop-broken-view-p (fprop)
   "Return true if the there's a problem with this FPROP in the view.
@@ -639,7 +639,7 @@ This can happen in snapshot views, occasionally cleartool reports
 that another process does an update and refuses to operate on the
 files.  The solution to the problem is to run an update on the
 whole view, but it is beyond the scope of this FPROP."
-  (eq (ah-clearcase-fprop-checkout fprop) 'broken-view))
+  (eq (ah-clearcase-fprop-status fprop) 'broken-view))
 
 (defun ah-clearcase-wash-mode-line (mode-line)
   "Make the modeline string shorter by replacing some of the words in
@@ -682,7 +682,7 @@ file' command."
         ;; and modeline (set by ah-clearcase-fprop-set-version-simple)
         (unless (or (ah-clearcase-fprop-hijacked-p fprop)
                     (ah-clearcase-fprop-broken-view-p fprop))
-          (setf (ah-clearcase-fprop-checkout fprop) co-mode)
+          (setf (ah-clearcase-fprop-status fprop) co-mode)
           (setf (ah-clearcase-fprop-mode-line fprop)
                 (ah-clearcase-wash-mode-line
                 (concat "Cc:"
@@ -713,11 +713,11 @@ Ls-string is returned by a 'cleartool ls file' command."
   ;; The ls string will also tell us when something is wrong with the
   ;; file.
   (cond ((string-match "hijacked" ls-string)
-         (setf (ah-clearcase-fprop-checkout fprop) 'hijacked)
+         (setf (ah-clearcase-fprop-status fprop) 'hijacked)
          (setf (ah-clearcase-fprop-mode-line fprop) "Cc:HIJACKED"))
 
         ((string-match "rule info unavailable" ls-string)
-         (setf (ah-clearcase-fprop-checkout fprop) 'broken-view)
+         (setf (ah-clearcase-fprop-status fprop) 'broken-view)
          (setf (ah-clearcase-fprop-mode-line fprop) "Cc:BROKEN-VIEW"))))
 
 ;;}}}
@@ -768,13 +768,26 @@ a new vprop for it."
 (defun ah-clearcase-vprop-get (view-tag)
   "Return the vprop struct associated with VIEW-TAG.
 
-If no such structure exists, a new, empty, one is created and
-returned."
-  (let ((vprop (gethash view-tag ah-clearcase-all-vprops)))
-    (unless vprop
-      (setq vprop (ah-clearcase-make-vprop :name view-tag))
-      (puthash view-tag vprop ah-clearcase-all-vprops))
-    vprop))
+VIEW-TAG can be:
+
+1/ a vprop, in which case it is returned, 
+
+2/ a string in which case a vprop with that name is looked up and
+returned (if no such vprop exists, it is created first)
+
+3/ a fprop, in which case its view-tag is searced using 2/."
+  
+  (if (ah-clearcase-vprop-p view-tag)
+      view-tag                          ; case 1/
+    (let ((vtag-name (cond ((stringp view-tag) view-tag)
+                           ((ah-clearcase-fprop-p view-tag)
+                            (ah-clearcase-fprop-view-tag view-tag))
+                           (t (error "Unknown type for VIEW-TAG")))))
+      (let ((vprop (gethash vtag-name ah-clearcase-all-vprops)))
+        (unless vprop
+          (setq vprop (ah-clearcase-make-vprop :name vtag-name))
+          (puthash vtag-name vprop ah-clearcase-all-vprops))
+        vprop))))
 
 (defun ah-clearcase-declare-view (view-tag type &optional root)
   "Declare a VIEW as a view of TYPE 'snapshot or 'dynamic.
@@ -793,28 +806,18 @@ that view first."
     (setf (ah-clearcase-vprop-type vprop) type)
     (setf (ah-clearcase-vprop-root vprop) root)))
 
-(defun ah-clearcase-snapshot-view-p (view-or-fprop)
-  "Return t if VIEW-OR-FPROP is a snapshot view.
+(defsubst ah-clearcase-snapshot-view-p (view)
+  "Return t if VIEW is a snapshot view.
 
 View can be either a view name (a string) a vprop or a fprop"
-  (let ((vprop (cond ((ah-clearcase-vprop-p view-or-fprop) view-or-fprop)
-                     ((stringp view-or-fprop) (ah-clearcase-vprop-get view))
-                     ((ah-clearcase-fprop-p view-or-fprop)
-                      (ah-clearcase-vprop-get
-                       (ah-clearcase-fprop-view-tag view-or-fprop)))
-                     (t (error "Unknown type for VIEW-OR-FPROP")))))
+  (let ((vprop (ah-clearcase-vprop-get view)))
     (eq (ah-clearcase-vprop-type vprop) 'snapshot)))
 
-(defun ah-clearcase-dynamic-view-p (view-or-fprop)
-  "Return t if VIEW-OR-FPROP is a dynamic  view.
+(defsubst ah-clearcase-dynamic-view-p (view)
+  "Return t if VIEW is a dynamic view.
 
 View can be either a view name (a string) a vprop or a fprop"
-  (let ((vprop (cond ((ah-clearcase-vprop-p view-or-fprop) view-or-fprop)
-                     ((stringp view-or-fprop) (ah-clearcase-vprop-get view))
-                     ((ah-clearcase-fprop-p view-or-fprop)
-                      (ah-clearcase-vprop-get
-                       (ah-clearcase-fprop-view-tag view-or-fprop)))
-                     (t (error "Unknown type for VIEW-OR-FPROP")))))
+  (let ((vprop (ah-clearcase-vprop-get view)))
     (eq (ah-clearcase-vprop-type vprop) 'dynamic)))
 
 (defun ah-clearcase-refresh-files-in-view (view-tag)
@@ -1664,12 +1667,13 @@ repository."
           (ah-clearcase-maybe-set-vc-state file)
           (let* ((fprop (ah-clearcase-fprop-file file))
                  (version (ah-clearcase-fprop-version fprop))
-                 (co-status (ah-clearcase-fprop-checkout fprop)))
+                 (co-status (ah-clearcase-fprop-status fprop)))
             (message "File version: %s%s" version
                      (cond
                       ((eq co-status 'reserved) ", checkedout reserved")
                       ((eq co-status 'unreserved) ", checkedout unreserved")
                       ((eq co-status 'hijacked) ", hijacked")
+                      ((eq co-status 'broken-view) ", broken view")
                       (t "")))))
       (message "Not a clearcase file"))))
 

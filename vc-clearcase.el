@@ -5,6 +5,7 @@
 ;; Keywords: version-control, clearcase
 ;; $Id$
 
+;;{{{ Commentary
 
 ;;; Commentary:
 ;;
@@ -98,10 +99,14 @@
 ;; causing an error from tq.  The error can be safely ignored, but it
 ;; is annoying.
 
+;;}}}
+
 ;;; History:
 ;;
 
 ;;; Code:
+
+;;{{{ Initial requires and setup
 
 (require 'tq)
 (require 'vc-hooks)
@@ -113,6 +118,8 @@
 (defvar ah-clearcase-tmpdir
   (or (getenv "TEMP") "/tmp")
   "The location of the temporary directory")
+
+;;}}}
 
 ;;{{{ Cleartool transaction queue interface
 
@@ -695,52 +702,6 @@ Ls-string is returned by a 'cleartool ls file' command."
 (defvar ah-clearcase-all-vprops
   (make-hash-table :test 'equal))
 
-(defun ah-clearcase-declare-view (view-tag type &optional root)
-  "Declare a VIEW-TAG as a view of TYPE 'snapshot or 'dynamic.
-
-For a snapshot view, the view's ROOT also has to be specified.
-
-This function can be used to pre-declare views so that
-ah-clearcase-setcs will not complain that you have to visit a file in
-that view first."
-
-  (unless (memq type '(snapshot dynamic))
-    (error "Bad view type"))
-  (when (eq type 'snapshot)
-    (unless (and (stringp root) (file-directory-p root))
-      (error "Bad view root")))
-  (let ((vprop (ah-clearcase-vprop-get view-tag)))
-    (setf (ah-clearcase-vprop-type vprop) type)
-    (setf (ah-clearcase-vprop-root vprop) root)))
-
-(defun ah-clearcase-vprop-get (view-tag)
-  "Return the vprop struct associated with VIEW-TAG.
-
-If no such structure exists, a new, empty, one is created and
-returned."
-  (let ((vprop (gethash view-tag ah-clearcase-all-vprops)))
-    (unless vprop
-      (setq vprop (ah-clearcase-make-vprop :name view-tag))
-      (puthash view-tag vprop ah-clearcase-all-vprops))
-    vprop))
-
-(defun ah-clearcase-snapshot-view-p (view)
-  "Return t if VIEW is a snapshot view.
-
-View can be either a view name (a string) or a vprop"
-  (let ((vprop (if (ah-clearcase-vprop-p view) view
-                 (ah-clearcase-vprop-get view))))
-    (eq (ah-clearcase-vprop-type vprop) 'snapshot)))
-
-(defun ah-clearcase-dynamic-view-p (view)
-  "Return t if VIEW is a dynamic  view.
-
-View can be either a view name (a string) or a vprop"
-  (let ((vprop (if (ah-clearcase-vprop-p view) view
-                 (ah-clearcase-vprop-get view))))
-    (eq (ah-clearcase-vprop-type vprop) 'dynamic)))
-
-
 (defun ah-clearcase-vprop-prepare (file fprop)
   "Find the view in which FILE resides and populate it.
 
@@ -749,7 +710,7 @@ a new vprop for it."
   ;; first, we switch the current directory in cleartool, as it is the
   ;; only way to get the current view and its root directory
   (ah-cleartool-ask (format "cd \"%s\"" (file-name-directory file)))
-  (ah-cleartool-ask "pwv -short" 'wait fprop 
+  (ah-cleartool-ask "pwv -short" 'wait fprop
               '(lambda (fprop view-tag)
                  (setf (ah-clearcase-fprop-view-tag fprop)
                              (replace-regexp-in-string "[\n\r]+" "" view-tag))))
@@ -771,6 +732,70 @@ a new vprop for it."
          '(lambda (vprop root-dir)
         (let ((root (replace-regexp-in-string "[\n\r]+" "" root-dir)))
               (setf (ah-clearcase-vprop-root vprop) root))))))))
+
+(defun ah-clearcase-vprop-get (view-tag)
+  "Return the vprop struct associated with VIEW-TAG.
+
+If no such structure exists, a new, empty, one is created and
+returned."
+  (let ((vprop (gethash view-tag ah-clearcase-all-vprops)))
+    (unless vprop
+      (setq vprop (ah-clearcase-make-vprop :name view-tag))
+      (puthash view-tag vprop ah-clearcase-all-vprops))
+    vprop))
+
+(defun ah-clearcase-declare-view (view type &optional root)
+  "Declare a VIEW as a view of TYPE 'snapshot or 'dynamic.
+
+For a snapshot view, the view's ROOT also has to be specified.
+
+This function can be used to pre-declare views so that
+ah-clearcase-setcs will not complain that you have to visit a file in
+that view first."
+  (unless (memq type '(snapshot dynamic))
+    (error "Bad view type"))
+  (when (eq type 'snapshot)
+    (unless (and (stringp root) (file-directory-p root))
+      (error "Bad view root")))
+  (let ((vprop (ah-clearcase-vprop-get view-tag)))
+    (setf (ah-clearcase-vprop-type vprop) type)
+    (setf (ah-clearcase-vprop-root vprop) root)))
+
+(defun ah-clearcase-snapshot-view-p (view)
+  "Return t if VIEW is a snapshot view.
+
+View can be either a view name (a string) or a vprop"
+  (let ((vprop (if (ah-clearcase-vprop-p view) view
+                 (ah-clearcase-vprop-get view))))
+    (eq (ah-clearcase-vprop-type vprop) 'snapshot)))
+
+(defun ah-clearcase-dynamic-view-p (view)
+  "Return t if VIEW is a dynamic  view.
+
+View can be either a view name (a string) or a vprop"
+  (let ((vprop (if (ah-clearcase-vprop-p view) view
+                 (ah-clearcase-vprop-get view))))
+    (eq (ah-clearcase-vprop-type vprop) 'dynamic)))
+
+(defun ah-clearcase-refresh-files-in-view (view)
+  "Update all visited files from VIEW.
+
+This is usefull when the view changes (by a setcs or update
+command).  VIEW can be either a view-tag name or a vprop."
+  (when (ah-clearcase-vprop-p view)
+    (setq view (ah-clearcase-vprop-name view)))
+  (dolist (buffer (buffer-list))
+    (ignore-errors
+      ;; ignore modified buffers, don't rob the user from the joy of
+      ;; figuring out that he just changed the view and he had
+      ;; modified files in it...
+      (unless (buffer-modified-p buffer)
+        (let* ((file (buffer-file-name buffer))
+               (fprop (ah-clearcase-fprop-file file))
+               (vtag (ah-clearcase-fprop-view-tag fprop)))
+          (when (string= vtag view-tag)
+            (ah-clearcase-maybe-set-vc-state file 'force)
+            (vc-resynch-buffer file t t)))))))
 
 ;;}}}
 
@@ -1573,6 +1598,24 @@ repository."
               (message "View tag not (yet?) known"))))
       (message "Not a clearcase file"))))
 
+(defun vc-clearcase-gui-vtree-browser (ask-for-file)
+  "Start the version tree browser gui on a file or directory.
+
+When ASK-FOR-FILE is nil, the file in the current buffer is used.
+Otherwise, it will ask for a file (you can also specify a directory,
+in this case the versions of the directory itself will be browsed)"
+  (interactive "P")
+  (let ((file (buffer-file-name (current-buffer))))
+    (when ask-for-file
+      (setq file
+            (read-file-name "Browse vtree for: " file file t)))
+    (if (and file (vc-clearcase-registered file))
+        (progn
+          (message "Starting Vtree browser...")
+          (start-process-shell-command
+           "Vtree_browser" nil "clearvtree" file))
+      (message "Not a clearcase file"))))
+
 (defconst ah-cleartool-lsco-fmt
   (concat "----------\n"
           "file: %n\n"
@@ -1633,47 +1676,12 @@ made to the views)."
           ;; from this view?
           )))))
 
-(defun vc-clearcase-gui-vtree-browser (ask-for-file)
-  "Start the version tree browser gui on a file or directory.
-
-When ASK-FOR-FILE is nil, the file in the current buffer is used.
-Otherwise, it will ask for a file (you can also specify a directory,
-in this case the versions of the directory itself will be browsed)"
-  (interactive "P")
-  (let ((file (buffer-file-name (current-buffer))))
-    (when ask-for-file
-      (setq file
-            (read-file-name "Browse vtree for: " file file t)))
-    (if (and file (vc-clearcase-registered file))
-        (progn
-          (message "Starting Vtree browser...")
-          (start-process-shell-command
-           "Vtree_browser" nil "clearvtree" file))
-      (message "Not a clearcase file"))))
-
 ;;}}}
 
-;;{{{ Edit configspecs
+;;{{{ Editing configspecs
 
 (defvar ah-clearcase-edcs-view-tag nil
   "The name of the view whose configspec we are editing.")
-
-;;; This should be renamed to ah-clearcase-refresh-files-in-view.  Or
-;;; something...
-(defun ah-clearcase-after-setcs (view-tag)
-  "Update all visited files affected by a setcs on VIEW-TAG."
-  (dolist (buffer (buffer-list))
-    (ignore-errors
-      ;; ignore modified buffers, don't rob the user from the joy of
-      ;; figuring out that he just changed the config spec and he had
-      ;; modified files in the view...
-      (unless (buffer-modified-p buffer)
-        (let* ((file (buffer-file-name buffer))
-               (fprop (ah-clearcase-fprop-file file))
-               (vtag (ah-clearcase-fprop-view-tag fprop)))
-          (when (string= vtag view-tag)
-            (ah-clearcase-maybe-set-vc-state file 'force)
-            (vc-resynch-buffer file t t)))))))
 
 (defun ah-clearcase-setcs (&optional buffer view-tag)
   "Set the configspec found in BUFFER to the VIEW-TAG.
@@ -1709,7 +1717,7 @@ to inspect the configspec of ANY view accessible from this machine."
              (ah-cleartool-ask (concat "setcs -tag " view-tag
                                        " \"" configspec "\""))
              (message "%s's confispec updated." view-tag)
-             (ah-clearcase-after-setcs view-tag))
+             (ah-clearcase-refresh-files-in-view view-tag))
 
             ((eq type 'snapshot)
              ;; in a snapshot view, a update will be triggered, so we
@@ -1730,15 +1738,11 @@ to inspect the configspec of ANY view accessible from this machine."
                    (setq ah-clearcase-edcs-view-tag view-tag)
                    (setq ah-cleartool-finished-function
                          #'(lambda ()
-                             (ah-clearcase-after-setcs
+                             (ah-clearcase-refresh-files-in-view
                               ah-clearcase-edcs-view-tag)))))))))))
 
 (define-derived-mode ah-clearcase-edcs-mode fundamental-mode "Configspec"
   "Generic mode to edit clearcase configspecs."
-
-  ;; apparently this is required in CVS emacs
-  :syntax-table ah-clearcase-edcs-mode-syntax-table
-
   (make-local-variable 'ah-clearcase-edcs-view-tag)
 
   ;; 'adapded' from values in emacs-lisp-mode
@@ -1748,6 +1752,12 @@ to inspect the configspec of ANY view accessible from this machine."
         comment-end-skip nil)
 
   (font-lock-mode t))
+
+(defalias 'edcs-mode 'ah-clearcase-edcs-mode
+  "Provide a shorter alias for the edcs mode.
+
+This is usefull if you want to keep configspecs separately and
+have mode tags in them.")
 
 (easy-mmode-defmap ah-clearcase-edcs-mode-map
                    '(("\C-c\C-s" . ah-clearcase-setcs))
@@ -1878,12 +1888,24 @@ it."
   '("Show view tag" . vc-clearcase-what-view-tag) 'separator2)
 (define-key-after vc-menu-map [vc-clearcase-gui-vtree-browser]
   '("Browse version tree (GUI)" . vc-clearcase-gui-vtree-browser) 'separator2)
-(define-key-after vc-menu-map [vc-clearcase-edcs]
-  '("Edit configspec" . vc-clearcase-edcs) 'separator2)
-(define-key-after vc-menu-map [vc-clearcase-update-view]
-  '("Update snapshot view" . vc-clearcase-update-view) 'separator2)
-(define-key-after vc-menu-map [vc-clearcase-list-checkouts]
-  '("List checkouts" . vc-clearcase-list-checkouts) 'separator2)
+
+;; 'borrowed' from pcvs-defs.el
+(defvar clearcase-global-menu
+  (let ((m (make-sparse-keymap "Clearcase")))
+    (define-key m [vc-clearcase-list-checkouts]
+      '(menu-item "List Checkouts" vc-clearcase-list-checkouts
+		  :help "List Clearcase checkouts in a directory"))
+    (define-key m [vc-clearcase-update-view]
+      '(menu-item "Update snapshot view" vc-clearcase-update-view
+		  :help "Update a snpshot view"))
+    (define-key m [vc-clearcase-edcs]
+      '(menu-item "Edit Configspec" vc-clearcase-edcs
+		  :help "Edit a view's configspec"))
+    (fset 'clearcase-global-menu m)))
+
+(define-key-after menu-bar-tools-menu [ah-clearcase]
+  '(menu-item "Clearcase" clearcase-global-menu)
+  'vc)
 
 ;;}}}
 

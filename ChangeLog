@@ -1,3 +1,15 @@
+2004-09-19  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-fprop): 1.15 add a 'broken-view
+	checkout type
+	(ah-clearcase-fprop-broken-view-p): 1.15 the fprop struct hoolds
+	the broken-view state internally, so just return that.
+	(ah-clearcase-fprop-set-version): 1.15 don't update the checkout
+	status or modeline when the file is hijacked or is in a broken
+	view.
+	(ah-clearcase-fprop-set-version-simple): 1.15 check for a broken
+	view as well.
+
 2004-09-17  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-status-rx): 1.14 match only at the

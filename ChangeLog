@@ -1,3 +1,21 @@
+2004-10-08  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-save-stop-data): 1.21 new
+	variable, used for debugging mysterious timeouts in cleartool
+	(ah-cleartool-tq-stop): 1.21 when ah-cleartool-save-stop-data is
+	not nil, we save the contents of the tq buffer plus some state
+	info to the *cleartool-aborts* buffer.
+	(ah-cleartool-wait-for): 1.21 the wait strategy has changed, we
+	only timeout if cleartool has not written anything to the
+	tq-buffer in ah-cleartool-timeout seconds.
+	(vc-clearcase-workfile-unchanged-p): 1.21 use the -status_only
+	option to the cleartool diff command, more efficient this way.
+
+2004-09-30  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-create-snapshot): 1.20 use
+	file-name-directory on DIR, as it might be a file.
+
 2004-09-29  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-wait-for): 1.19 comment update.

@@ -1,9 +1,9 @@
-;;; vc-clearcase.el --- support for ClearCase version control
+;;; vc-clearcase.el --- support for ClearCase version control system
 
 ;; Author: Alexandru Harsanyi (harsanyi@bigpond.com)
 ;; Created: 28 July 2004
 ;; Keywords: version-control, clearcase
-;; $Id$	
+;; $Id$
 
 
 ;;; Commentary:
@@ -39,6 +39,10 @@
 ;;
 ;; the 'ah' prefix stands for Alex Harsanyi and is used to avoid
 ;; conflicts with the clearcase.el package.
+;;
+;; In adition, two macros are defined: with-checkedout-dir and
+;; with-comment-file, if you compile this file they will not polute
+;; the Emacs namespace.
 ;;
 ;;
 ;;
@@ -520,6 +524,11 @@ Return the number of records actually moved."
 
 ;;{{{ Clearcase file properties
 
+;; Rather than keeping all the version information as poperties
+;; accessible via vc-file-{get/set}prop, we define a structure to hold
+;; all the information and store it in as the 'vc-clearcase-prop
+;; property of a file.
+
 (defstruct (ah-clearcase-fprop
             (:constructor ah-clearcase-make-fprop)
             (:copier ah-clearcase-copy-fprop))
@@ -804,7 +813,7 @@ If DIR was checked out by us, check it back in."
                (message "Checking out %s" ,real-dir)
                (ah-cleartool-ask
                 (format "checkout -reserved -nc \"%s\"" ,real-dir)))
-             ,(cons 'progn forms))
+             ,@forms)
          (when ,checkout-needed-flag
            (message "Checking in %s" ,real-dir)
            (ah-cleartool-ask (format "checkin -nc \"%s\"" ,real-dir)))))))
@@ -823,7 +832,7 @@ When alll is finished, COMMENT-FILE is removed."
              (insert comment-text)
              (save-buffer)
              (kill-buffer (current-buffer)))
-           ,(cons 'progn forms))
+           ,@forms)
        (delete-file comment-file))))
 
 )
@@ -1664,11 +1673,27 @@ to inspect the configspec of ANY view accessible from this machine."
 
 (define-derived-mode ah-clearcase-edcs-mode fundamental-mode "Configspec"
   "Generic mode to edit clearcase configspecs."
-  (make-local-variable 'ah-clearcase-edcs-view-tag))
+
+  ;; apparently this is required in CVS emacs
+  :syntax-table ah-clearcase-edcs-mode-syntax-table
+
+  (make-local-variable 'ah-clearcase-edcs-view-tag)
+
+  ;; 'adapded' from values in emacs-lisp-mode
+  (setq comment-start "#"
+        comment-start-skip "\\(\\(^\\|[^\\\\\n]\\)\\(\\\\\\\\\\)*\\)#+ *"
+        comment-end ""
+        comment-end-skip nil)
+
+  (font-lock-mode t))
 
 (easy-mmode-defmap ah-clearcase-edcs-mode-map
                    '(("\C-c\C-s" . ah-clearcase-setcs))
                    "Keymap for Clearcase Edit Configspec mode")
+
+(with-syntax-table ah-clearcase-edcs-mode-syntax-table
+    (modify-syntax-entry ?\# "<")
+    (modify-syntax-entry ?\n ">"))
 
 (defvar ah-clearcase-edcs-all-view-tags nil
   "A list of all viewtags on this server.")

@@ -2012,6 +2012,19 @@ LABEL-2."
     (kill-buffer buf1)
     (kill-buffer buf2)))
 
+(defun ah-clearcase-list-view-private-files (dir)
+  "List the view private files in DIR.
+You can edit the files using 'find-file-at-point'"
+  (interactive "DReport on directory: ")
+  (let ((buf (get-buffer-create "*clearcase-view-private-files*")))
+    (with-current-buffer buf
+      (buffer-disable-undo)
+      (erase-buffer)
+      (cd dir)
+      (insert (format "View private files in %s:\n\n" dir))
+      (ah-cleartool-do "ls" (list "-recurse" "-short" "-view_only") buf))
+    (pop-to-buffer buf)))
+
 ;;}}}
 
 ;;{{{ Editing configspecs
@@ -2238,6 +2251,9 @@ it."
 		  :help "Report file version differences between two labels"))
     (define-key m [separator-clearcase-1]
       '("----" 'separator-1))
+    (define-key m [ah-clearcase-list-view-private-files]
+      '(menu-item "List View Private Files" ah-clearcase-list-view-private-files
+		  :help "List view private files in a directory"))
     (define-key m [vc-clearcase-list-checkouts]
       '(menu-item "List Checkouts" vc-clearcase-list-checkouts
 		  :help "List Clearcase checkouts in a directory"))

@@ -45,8 +45,6 @@
 ;; the Emacs namespace.
 ;;
 ;;
-;;
-;;
 ;; ClearCase is slow.  Two techniques are used to improve the
 ;; responsiveness of Emacs when doing version-control opreations.
 ;; First, cleartool is only started once (via a transaction queue),
@@ -68,6 +66,25 @@
 ;; should search for 'name' as a branch and use that revision
 ;; (involves finding out about all the branches), and if the revision
 ;; starts with a '/' just leave it in place.
+;;
+;; - reformat the annotate buffer to print a meaningfull substring of
+;; the version for long version strings.  Provide a keymapping to
+;; display the version at the line.
+;;
+;; - provide filter functions for the modeline string to reduce its
+;; length.  For example, VTK_Iteration12_patch should be reduced to
+;; VTK_I~12_pat.  This should be configurable, as other sites will
+;; have different needs.  (This is implemented, but it applies a fixed
+;; set of replacements).
+;;
+;; - update vc-clearcase-merge to only add merge hyperlinks instead of
+;; doing actual merges when the prefix arg is specified.
+;;
+;; - add the possibility to label a single file with the option to
+;; move an existing label. (vc-clearcase-create-snapshot will not move
+;; labels).  Should it provide completion for the label name?  We have
+;; over 4600 labels in MASS_Dev_Infra at the last count.
+;;
 
 ;;; Known bugs:
 ;;
@@ -76,6 +93,10 @@
 ;; pops up, and vc-merge assumes the file was already checked out.  We
 ;; need to do an automatic checkout in this case, but how do we detect
 ;; it?
+;;
+;; On solaris, when cleartool starts up it prints out the prompt,
+;; causing an error from tq.  The error can be safely ignored, but it
+;; is annoying.
 
 ;;; History:
 ;;
@@ -178,7 +199,8 @@ Cleans up properly if cleartool exits."
     ;; mark all pending transactions as aborted
     (while (< ah-cleartool-ctid (1- ah-cleartool-ntid))
       (incf ah-cleartool-ctid)
-      (push (cons ah-cleartool-ctid "cleatool command was aborted") ah-cleartool-terr))))
+      (push (cons ah-cleartool-ctid "cleatool command was aborted")
+            ah-cleartool-terr))))
 
 (defun ah-cleartool-tq-maybe-start ()
   "Start the transaction queue to cleartool, if not already started."
@@ -586,6 +608,21 @@ first that it exists."
   "Return the checked out mode for FPROP or nil."
   (memq (ah-clearcase-fprop-checkout fprop) '(reserved unreserved)))
 
+
+(defun ah-clearcase-wash-mode-line (mode-line)
+  "Make the modeline string shorter by replacing some of the words in
+it with shorter versions.  This is probably specific to my site, so it
+should be made configurable..."
+  (replace-regexp-in-string
+   "\\<release\\([0-9]*\\)\\>" "rel\\1"
+  (replace-regexp-in-string
+   "\\<branch\\([0-9]*\\)\\>" "br\\1"
+   (replace-regexp-in-string
+    "\\<patch\\([0-9]*\\)\\>" "pat\\1"
+    (replace-regexp-in-string
+     "iteration\\([0-9]+\\)" "I~\\1" mode-line)))))
+
+
 (defun ah-clearcase-fprop-set-version (fprop version-string)
   "Set the version information in FPROP from VERSION-STRING.
 
@@ -614,11 +651,13 @@ file' command."
         (unless (ah-clearcase-fprop-hijacked-p fprop)
           (setf (ah-clearcase-fprop-checkout fprop) co-mode)
           (setf (ah-clearcase-fprop-mode-line fprop)
+                (ah-clearcase-wash-mode-line
                 (concat "Cc:"
                         (cond ((eq co-mode 'reserved) "(R)")
                               ((eq co-mode 'unreserved) "(U)")
                               (t ""))
-                        ".../" branch "/" version)))
+                         ;; ".../"
+                         branch "/" version))))
         (setf (ah-clearcase-fprop-base fprop) base)
         (setf (ah-clearcase-fprop-branch fprop) branch)))))
 
@@ -709,38 +748,29 @@ FPROP is used to get the view name.  If the view is not known, create
 a new vprop for it."
   ;; first, we switch the current directory in cleartool, as it is the
   ;; only way to get the current view and its root directory
-  (ah-cleartool-ask
-   (format "cd \"%s\"" (file-name-directory file))
-   'nowait nil '(lambda (x y)))
-
-  ;; We need to enqueue the pwv command immediately (instead of
-  ;; enqueueing it in the handler of the cd command), to make sure no
-  ;; one changes the directory.  If the above command fails, however,
-  ;; the pwv will be wrong.
-
-  (let ((tid (ah-cleartool-ask
-              "pwv -short" 'nowait fprop
+  (ah-cleartool-ask (format "cd \"%s\"" (file-name-directory file)))
+  (ah-cleartool-ask "pwv -short" 'wait fprop 
               '(lambda (fprop view-tag)
                  (setf (ah-clearcase-fprop-view-tag fprop)
-                       (replace-regexp-in-string "[\n\r]+" "" view-tag))))))
-    (ah-cleartool-wait-for tid))
-
-
-  (let* ((vprop (ah-clearcase-vprop-get (ah-clearcase-fprop-view-tag fprop)))
-         (lsview (ah-cleartool-ask
+                             (replace-regexp-in-string "[\n\r]+" "" view-tag))))
+  (let ((vprop (ah-clearcase-vprop-get (ah-clearcase-fprop-view-tag fprop))))
+    (unless (ah-clearcase-vprop-type vprop)
+      ;; This is the first time we see this view, colect some info on it
+      (let ((lsview (ah-cleartool-ask
                   (format "lsview %s" (ah-clearcase-vprop-name vprop)))))
     (setf (ah-clearcase-vprop-type vprop)
-          (if (string= "*" (substring lsview 0 1)) 'dynamic 'snapshot)))
-
-  ;; Ask the view's root directory.  By the time the handler runs, the
-  ;; viewtag is already present in fprop.
+              ;; the first char in a lsview listing is '*'.  At least
+              ;; at our site...  I think the '*' means the view is
+              ;; started, but that's the same thing for us... (since
+              ;; we are visiting a file in this view, it must be
+              ;; started)
+          (if (eq ?* (aref lsview 0)) 'dynamic 'snapshot)))
+      (when (ah-clearcase-snapshot-view-p vprop)
   (ah-cleartool-ask
-   "pwv -root" 'nowait fprop
-   '(lambda (fprop root-dir)
-      (let ((vprop (ah-clearcase-vprop-get
-                    (ah-clearcase-fprop-view-tag fprop))))
+         "pwv -root" 'nowait vprop
+         '(lambda (vprop root-dir)
         (let ((root (replace-regexp-in-string "[\n\r]+" "" root-dir)))
-          (setf (ah-clearcase-vprop-root vprop) root))))))
+              (setf (ah-clearcase-vprop-root vprop) root))))))))
 
 ;;}}}
 
@@ -1303,6 +1333,13 @@ Only works for the clearcase log format defined in
 ;;;; comment-history
 ;;;; update-changelog
 
+(defvar ah-clearcase-diff-format 'diff
+  "Type of diff to be output by the cleartool diff command.  Can be
+'diff or 'serial")
+
+(defvar ah-clearcase-diff-cleanup-flag t
+  "Default remove ^M characters from the diff output")
+
 (defun vc-clearcase-diff (file &optional rev1 rev2)
   "Return the diff on FILE between REV1 and REV2."
   (let ((fprop (ah-clearcase-fprop-file file)))
@@ -1316,10 +1353,17 @@ Only works for the clearcase log format defined in
         (message "Comparing file revisions...")
         (let ((inhibit-read-only t))
           (erase-buffer)
-          (let ((diff (ah-cleartool-ask
-                       (format "diff -serial_format \"%s\" \"%s\""
-                               fver1 fver2))))
+          (let* ((diff-format (cond ((eq ah-clearcase-diff-format 'diff)
+                                     "-diff_format")
+                                    ((eq ah-clearcase-diff-format 'serial)
+                                     "-serial_format")
+                                    (t (error "Unknown diff format"))))
+                 (diff (ah-cleartool-ask
+                        (format "diff %s \"%s\" \"%s\""
+                                diff-format fver1 fver2))))
             (insert diff)
+            (when ah-clearcase-diff-cleanup-flag
+              (replace-regexp "\r$" "" nil (point-min) (point-max)))
             (goto-char (point-min))
             (not (looking-at "Files are identical"))))))))
 
@@ -1483,8 +1527,26 @@ repository."
 
 ;;{{{ Aditional vc clearcase commands
 
+(defun vc-clearcase-what-version ()
+  "Show what is the version of the current file."
+  (interactive)
+  (let ((file (buffer-file-name (current-buffer))))
+    (if (vc-clearcase-registered file)
+        (progn
+          (ah-clearcase-maybe-set-vc-state file)
+          (let* ((fprop (ah-clearcase-fprop-file file))
+                 (version (ah-clearcase-fprop-version fprop))
+                 (co-status (ah-clearcase-fprop-checkout fprop)))
+            (message "File version: %s%s" version
+                     (cond
+                      ((eq co-status 'reserved) ", checkedout reserved")
+                      ((eq co-status 'unreserved) ", checkedout unreserved")
+                      ((eq co-status 'hijacked) ", hijacked")
+                      (t "")))))
+      (message "Not a clearcase file"))))
+
 (defun vc-clearcase-what-rule ()
-  "Show what configspec rule selects this version of the file."
+  "Show what configspec rule selects this version of the current file."
   (interactive)
   (let ((file (buffer-file-name (current-buffer))))
     (if (vc-clearcase-registered file)
@@ -1691,9 +1753,8 @@ to inspect the configspec of ANY view accessible from this machine."
                    '(("\C-c\C-s" . ah-clearcase-setcs))
                    "Keymap for Clearcase Edit Configspec mode")
 
-(with-syntax-table ah-clearcase-edcs-mode-syntax-table
-    (modify-syntax-entry ?\# "<")
-    (modify-syntax-entry ?\n ">"))
+(modify-syntax-entry ?\# "<" ah-clearcase-edcs-mode-syntax-table)
+(modify-syntax-entry ?\n ">" ah-clearcase-edcs-mode-syntax-table)
 
 (defvar ah-clearcase-edcs-all-view-tags nil
   "A list of all viewtags on this server.")
@@ -1714,8 +1775,9 @@ to inspect the configspec of ANY view accessible from this machine."
                              (if (string= string x)
                                  ;; will also return t for remove-if-not
                                  (setq exact-match? t)
-                               (and (>= (length x) len) ;
-                                    (string= string (substring x 0 len))))))
+                               (and (>= (length x) len)
+                                    (eq (compare-strings string 0 len x 0 len)
+                                        t)))))
                     ah-clearcase-edcs-all-view-tags)))
 
       ;; NOTE: when we are asked for a list of completions, we must
@@ -1732,14 +1794,13 @@ to inspect the configspec of ANY view accessible from this machine."
                  ;; we need to find the longest common substring...
                  (let ((min-len (apply #'min (mapcar #'length matches)))
                        (a-string (car matches)))
-                   (setq a-string (substring a-string 0 min-len))
                    (while (notevery
                            #'(lambda (x)
-                               (string= a-string (substring x 0 min-len)))
+                               (eq t (compare-strings a-string 0 min-len
+                                                      x 0 min-len)))
                            matches)
-                     (setq a-string (substring a-string 0 (1- min-len)))
                      (decf min-len))
-                   a-string))))))))
+                   (substring a-string 0 min-len)))))))))
 
 (defun vc-clearcase-edcs ()
   "Start ediding a config spec.
@@ -1755,10 +1816,13 @@ it."
       (setq view-tag (ah-clearcase-fprop-view-tag
                       (ah-clearcase-fprop-file file))))
 
+    ;; don't remove the old view-tag list.  The view we are looking
+    ;; for might already be in there.
+
+    ;; (setq ah-clearcase-edcs-all-view-tags nil)
+
     ;; start reading the view-tags. By the time the user decides what
     ;; view-tag it wants, we may have the answer already.
-
-    (setq ah-clearcase-edcs-all-view-tags nil)
     (setq ah-clearcase-edcs-all-view-tags-tid
           (ah-cleartool-ask
            "lsview -short" 'nowait nil
@@ -1770,12 +1834,6 @@ it."
                     "Edit configspec for view: "
                     #'ah-clearcase-view-tag-complete
                     nil nil view-tag))
-
-    ;; it seems we cannot wait for this in
-    ;; ah-clearcase-view-tag-complete, as the sit-for interferes with
-    ;; the minibuffer.  This is fine, until the viewtags come in, the
-    ;; user will get a NO MATCH when he hits TAB
-    (ah-cleartool-wait-for ah-clearcase-edcs-all-view-tags-tid)
 
     (message "Fetching configspec for %s" view-tag)
     (let ((tid (ah-cleartool-ask (concat "catcs -tag " view-tag) 'nowait))
@@ -1789,7 +1847,12 @@ it."
         (insert (ah-cleartool-wait-for tid))
         (goto-char (point-min))
         (pop-to-buffer (current-buffer))
-        (message nil)))))
+        (message nil)))
+
+    ;; We wait for this transaction here because by this time it will
+    ;; already have ended (since we already read a configspec above).
+    (ignore-errors
+      (ah-cleartool-wait-for ah-clearcase-edcs-all-view-tags-tid))))
 
 ;;}}}
 
@@ -1798,6 +1861,7 @@ it."
 ;;; bind the extra clearcase commands to keys and menus in the vc
 ;;; keymap
 
+(define-key vc-prefix-map "y" 'vc-clearcase-what-version)
 (define-key vc-prefix-map "w" 'vc-clearcase-what-rule)
 (define-key vc-prefix-map "t" 'vc-clearcase-what-view-tag)
 (define-key vc-prefix-map "e" 'vc-clearcase-edcs)
@@ -1806,6 +1870,8 @@ it."
 (define-key vc-prefix-map "j" 'vc-clearcase-gui-vtree-browser)
 
 (define-key-after vc-menu-map [separator-clearcase] '("----") 'separator2)
+(define-key-after vc-menu-map [vc-clearcase-what-version]
+  '("Show file version" . vc-clearcase-what-version) 'separator2)
 (define-key-after vc-menu-map [vc-clearcase-what-rule]
   '("Show configspec rule" . vc-clearcase-what-rule) 'separator2)
 (define-key-after vc-menu-map [vc-clearcase-what-view-tag]

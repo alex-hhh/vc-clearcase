@@ -202,7 +202,7 @@ their answer stored here for retrieval by 'ah-cleartool-wait-for'.")
 (put 'ah-cleartool-error 'error-message "cleartool")
 
 (defun ah-cleartool-signal-error (message)
-  "Signal an error from cleartool.  
+  "Signal an error from cleartool.
 MESSAGE is searched for an error from cleartool and that error is
 signaled as an `ah-cleartool-error' error.  If MESSAGE does not
 contain a cleartool error, the entire MESSAGE is signaled.  If
@@ -211,7 +211,7 @@ the string \"(multiple)\" is prepended to it."
   (let* ((tag "cleartool: Error: \\(.*\\)")
          (pos (string-match tag message))
          (str (if pos (match-string 1 message) message)))
-    (when (string-match tag message (1+ pos))
+    (when (and pos (string-match tag message (1+ pos)))
       (setq str (concat "(multiple) " str)))
     (while t (signal 'ah-cleartool-error (list str)))))
 
@@ -933,7 +933,7 @@ returned (if no such vprop exists, it is created first)
           ;; declare them first.  NOTE: maybe we could start it if it
           ;; is not?
           (let ((view-info
-                 (ignore-errors 
+                 (ignore-errors
                    (ah-cleartool-ask (format "lsview %s" vtag-name)))))
             (when (and view-info
                        (char-equal ?* (aref view-info 0)))

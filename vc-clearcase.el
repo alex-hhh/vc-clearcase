@@ -794,9 +794,10 @@ file' command."
           (setf (ah-clearcase-fprop-mode-line fprop)
                 (ah-clearcase-wash-mode-line
                  (concat "Cc:"
-                         (cond ((eq co-mode 'reserved) "(R)")
-                               ((eq co-mode 'unreserved) "(U)")
-                               (t ""))
+                         (case co-mode
+                           ('reserved "(R)")
+                           ('unreserved "(U)")
+                           (t ""))
                          ;; ".../"
                          branch "/" version))))
         (setf (ah-clearcase-fprop-base fprop) base)
@@ -908,7 +909,19 @@ returned (if no such vprop exists, it is created first)
       (let ((vprop (gethash vtag-name ah-clearcase-all-vprops)))
         (unless vprop
           (setq vprop (ah-clearcase-make-vprop :name vtag-name))
-          (puthash vtag-name vprop ah-clearcase-all-vprops))
+          (puthash vtag-name vprop ah-clearcase-all-vprops)
+
+          ;; find out if this is a started dynamic view.  This allows
+          ;; to set configspec in dynamic views without having to
+          ;; declare them first.  NOTE: maybe we could start it if it
+          ;; is not?
+          (let ((view-info
+                 (ignore-errors 
+                   (ah-cleartool-ask (format "lsview %s" vtag-name)))))
+            (when (and view-info
+                       (char-equal ?* (aref view-info 0)))
+              ;; we have a started dynamic view
+              (setf (ah-clearcase-vprop-type vprop) 'dynamic))))
         vprop))))
 
 (defun ah-clearcase-declare-view (view-tag type &optional root)
@@ -1578,11 +1591,9 @@ Only works for the clearcase log format defined in
         (message "Comparing file revisions...")
         (let ((inhibit-read-only t))
           (erase-buffer)
-          (let* ((diff-format (cond ((eq ah-clearcase-diff-format 'diff)
-                                     "-diff_format")
-                                    ((eq ah-clearcase-diff-format 'serial)
-                                     "-serial_format")
-                                    (t (error "Unknown diff format"))))
+          (let* ((diff-format (ecase ah-clearcase-diff-format
+                                ('diff "-diff_format")
+                                ('serial "-serial_format")))
                  (diff (ah-cleartool-ask
                         (format "diff %s \"%s\" \"%s\""
                                 diff-format fver1 fver2))))
@@ -1596,14 +1607,14 @@ Only works for the clearcase log format defined in
             (not
              ;; the way we determine whether the files are identical
              ;; depends on the diff format we use.
-             (cond ((eq ah-clearcase-diff-format 'diff)
-                    ;; diff format has an empty buffer
-                    (equal (point-min) (point-max)))
-                   ((eq ah-clearcase-diff-format 'serial)
-                    ;; serial format prints "Files are identical", so
-                    ;; we look for that.
-                    (looking-at "Files are identical"))
-                   (t (error "Unknown diff format"))))))))))
+             (ecase ah-clearcase-diff-format
+               ('diff
+                ;; diff format has an empty buffer
+                (equal (point-min) (point-max)))
+               ('serial
+                ;; serial format prints "Files are identical", so
+                ;; we look for that.
+                (looking-at "Files are identical"))))))))))
 
 
 ;;;; diff-tree
@@ -1784,12 +1795,12 @@ repository."
                  (version (ah-clearcase-fprop-version fprop))
                  (co-status (ah-clearcase-fprop-status fprop)))
             (message "File version: %s%s" version
-                     (cond
-                      ((eq co-status 'reserved) ", checkedout reserved")
-                      ((eq co-status 'unreserved) ", checkedout unreserved")
-                      ((eq co-status 'hijacked) ", hijacked")
-                      ((eq co-status 'broken-view) ", broken view")
-                      (t "")))))
+                     (case co-status
+                       ('reserved ", checkedout reserved")
+                       ('unreserved ", checkedout unreserved")
+                       ('hijacked ", hijacked")
+                       ('broken-view ", broken view")
+                       (t "")))))
       (message "Not a clearcase file"))))
 
 (defun vc-clearcase-what-rule ()
@@ -2086,37 +2097,35 @@ to inspect the configspec of ANY view accessible from this machine."
       (if (yes-or-no-p (format "Save %s? " configspec))
           (save-buffer buffer)
         (error "Aborted")))
-    (let ((type (ah-clearcase-vprop-type vprop)))
-      (cond ((eq type 'dynamic)
-             ;; in a dynamic view, we simply set the configspec, than
-             ;; trigger a resynch on all the visited files from that
-             ;; view.
-             (ah-cleartool-ask (concat "setcs -tag " view-tag
-                                       " \"" configspec "\""))
-             (message "%s's confispec updated." view-tag)
-             (ah-clearcase-refresh-files-in-view view-tag))
+    (case (ah-clearcase-vprop-type vprop)
+      ('dynamic
+       ;; in a dynamic view, we simply set the configspec, than
+       ;; trigger a resynch on all the visited files from that view.
+       (ah-cleartool-ask
+        (concat "setcs -tag " view-tag " \"" configspec "\""))
+       (message "%s's confispec updated." view-tag)
+       (ah-clearcase-refresh-files-in-view view-tag))
 
-            ((eq type 'snapshot)
-             ;; in a snapshot view, a update will be triggered, so we
-             ;; set the configspec with a ah-cleartool-do command, and
-             ;; trigger the resynch in its finished callback.
-             (with-current-buffer (get-buffer-create "*clearcase-setcs*")
-               (let ((inhibit-read-only t))
-                 (erase-buffer)
-                 (cd (ah-clearcase-vprop-root vprop))
-                 (let ((process
-                        (ah-cleartool-do "setcs"
-                                         (list "-tag" view-tag configspec)
-                                         (current-buffer))))
-                   (switch-to-buffer-other-window (process-buffer process))
-                   ;; reuse this variable to hold the view tag in the
-                   ;; update buffer.
-                   (make-local-variable 'ah-clearcase-edcs-view-tag)
-                   (setq ah-clearcase-edcs-view-tag view-tag)
-                   (setq ah-cleartool-finished-function
-                         #'(lambda ()
-                             (ah-clearcase-refresh-files-in-view
-                              ah-clearcase-edcs-view-tag)))))))))))
+      ('snapshot
+       ;; in a snapshot view, a update will be triggered, so we set
+       ;; the configspec with a ah-cleartool-do command, and trigger
+       ;; the resynch in its finished callback.
+       (with-current-buffer (get-buffer-create "*clearcase-setcs*")
+         (let ((inhibit-read-only t))
+           (erase-buffer)
+           (cd (ah-clearcase-vprop-root vprop))
+           (let ((process
+                  (ah-cleartool-do "setcs"
+                                   (list "-tag" view-tag configspec)
+                                   (current-buffer))))
+             (switch-to-buffer-other-window (process-buffer process))
+             ;; reuse this variable to hold the view tag in the update
+             ;; buffer.
+             (set (make-local-variable 'ah-clearcase-edcs-view-tag) view-tag)
+             (setq ah-cleartool-finished-function
+                   #'(lambda ()
+                       (ah-clearcase-refresh-files-in-view
+                        ah-clearcase-edcs-view-tag))))))))))
 
 (define-derived-mode ah-clearcase-edcs-mode fundamental-mode "Configspec"
   "Generic mode to edit clearcase configspecs."

@@ -1953,6 +1953,7 @@ LABEL-2."
       ;; the process on exit.
       (while (or (ignore-errors (eq (process-status buf1) 'run))
                  (ignore-errors (eq (process-status buf2) 'run)))
+        (accept-process-output)
         (sit-for 1)))
 
     ;; Process the listed files for label-1.  For each line in the

@@ -87,8 +87,6 @@
 ;; at checkout or no comments at checkout).  Being able to specify
 ;; these values on a 'per VOB path' basis would be nice.
 ;;
-;; - customize based configuration would be nice
-;;
 ;; - vc-clearcase-dir-state is both inefficient and incomplete
 ;;
 
@@ -122,11 +120,22 @@
 ;; etc
 (require 'cl)
 
-(defvar ah-clearcase-vtree-program
+(defgroup vc-clearcase nil
+  "Support for the ClearCase version control system."
+  :group 'tools)
+
+(defcustom ah-clearcase-cleartool-program "cleartool"
+  "The name of the cleartool executable."
+  :type 'string
+  :group 'vc-clearcase)
+
+(defcustom ah-clearcase-vtree-program
   (if (eq system-type 'windows-nt)
       "clearvtree"
     "xlsvtree")
-  "The Vtree browser program.")
+  "The name of the Version Tree Browser program."
+  :type 'string
+  :group 'vc-clearcase)
 
 ;;}}}
 
@@ -161,13 +170,20 @@ us." )
   (concat "\\(" ah-cleartool-status-rx
           "\\)\\|\\(" ah-cleartool-question-rx "\\)"))
 
-(defvar ah-cleartool-timeout 20
-  "Timeout (in seconds) for cleartool commands.")
+(defcustom ah-cleartool-timeout 20
+  "Timeout (in seconds) for cleartool commands.
+This is actually the amount of time cleartool has to be inactive
+when receiving data from it, not the total transaction time."
+  :type 'integer
+  :group 'vc-clearcase)
 
-(defvar ah-cleartool-idle-timeout 900   ; 15 minutes
+(defcustom ah-cleartool-idle-timeout 900   ; 15 minutes
   "If cleartool is idle for this many seconds, we kill it at the next
 command.  The reason for this is that cleartool seems unresponsive
-after long periods of inactivity.")
+after long periods of inactivity."
+  :type 'integer
+  :group 'vc-clearcase)
+
 
 (defvar ah-cleartool-last-command-timestamp (float-time)
   "Timestamp when the last command was issued.  Used by
@@ -234,7 +250,8 @@ Cleans up properly if cleartool exits."
 (defun ah-cleartool-tq-start ()
   "Start the transaction queue to cleartool."
   (let ((process
-         (start-process "cleartool" " *cleartool*" "cleartool" "-status")))
+         (start-process "cleartool" " *cleartool*" 
+                        ah-clearcase-cleartool-program "-status")))
     (when (not (eq system-type 'windows-nt))
       ;; on systems other than windows-nt, cleartool will print a
       ;; prompt when it starts up and tq will complain about it.  In
@@ -520,7 +537,8 @@ In addition, the buffer local variable 'ah-cleartool-last-command' is
 set to the command and arguments that were run to create this buffer."
   (let ((name (format "cleartool-%s" cmd))
         (args1 (cons cmd args)))
-    (let ((process (apply 'start-process name buffer "cleartool" args1)))
+    (let ((process (apply 'start-process name buffer
+                          ah-clearcase-cleartool-program args1)))
       (with-current-buffer (process-buffer process)
         (set-process-sentinel process 'ah-cleartool-sentinel)
         (setq ah-cleartool-mode-line "run")
@@ -1612,12 +1630,16 @@ Only works for the clearcase log format defined in
 ;;;; comment-history
 ;;;; update-changelog
 
-(defvar ah-clearcase-diff-format 'diff
-  "Type of diff to be output by the cleartool diff command.  Can be
-'diff or 'serial")
+(defcustom ah-clearcase-diff-format 'diff
+  "Format of the output by the cleartool diff command."
+  :type '(choice (const :tag "Diff Format" diff)
+                 (const :tag "Serial Format" serial))
+  :group 'vc-clearcase)
 
-(defvar ah-clearcase-diff-cleanup-flag t
-  "Default remove ^M characters from the diff output")
+(defcustom ah-clearcase-diff-cleanup-flag t
+  "Default remove ^M characters from the diff output."
+  :type 'boolean
+  :group 'vc-clearcase)
 
 (defun vc-clearcase-diff (file &optional rev1 rev2)
   "Return the diff on FILE between REV1 and REV2."

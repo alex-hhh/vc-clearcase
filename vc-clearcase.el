@@ -236,7 +236,7 @@ calls the function callback with the answer."
     (if (string-match ah-cleartool-status-rx answer)
         (let ((cmd (string-to-int (match-string 1 answer)))
               (status (string-to-int (match-string 2 answer))))
-          (unless (eq ah-cleartool-next-command cmd)
+          (unless (= ah-cleartool-next-command cmd)
             ;; transaction queue is out of sync, stop it
             (ah-cleartool-tq-stop)
             (error "Unexpected command index received"))
@@ -641,7 +641,7 @@ file' command."
     (let ((fver (nth 0 fver-raw))       ; file version
           (pver (nth 1 fver-raw))       ; parent version
           (co-mode (let ((co-mode-raw (nth 2 fver-raw)))
-                     (cond ((eq co-mode-raw nil) nil)
+                     (cond ((null co-mode-raw) nil)
                            ((string= co-mode-raw "reserved") 'reserved)
                            ((string= co-mode-raw "unreserved") 'unreserved)
                            (t 'unknown)))))
@@ -727,7 +727,7 @@ a new vprop for it."
               ;; started, but that's the same thing for us... (since
               ;; we are visiting a file in this view, it must be
               ;; started)
-          (if (eq ?* (aref lsview 0)) 'dynamic 'snapshot)))
+          (if (char-equal ?* (aref lsview 0)) 'dynamic 'snapshot)))
       (when (ah-clearcase-snapshot-view-p vprop)
   (ah-cleartool-ask
          "pwv -root" 'nowait vprop
@@ -779,13 +779,13 @@ View can be either a view name (a string) or a vprop"
                  (ah-clearcase-vprop-get view))))
     (eq (ah-clearcase-vprop-type vprop) 'dynamic)))
 
-(defun ah-clearcase-refresh-files-in-view (view)
+(defun ah-clearcase-refresh-files-in-view (view-tag)
   "Update all visited files from VIEW.
 
 This is usefull when the view changes (by a setcs or update
 command).  VIEW can be either a view-tag name or a vprop."
-  (when (ah-clearcase-vprop-p view)
-    (setq view (ah-clearcase-vprop-name view)))
+  (when (ah-clearcase-vprop-p view-tag)
+    (setq view-tag (ah-clearcase-vprop-name view-tag)))
   (dolist (buffer (buffer-list))
     (ignore-errors
       ;; ignore modified buffers, don't rob the user from the joy of
@@ -795,7 +795,7 @@ command).  VIEW can be either a view-tag name or a vprop."
         (let* ((file (buffer-file-name buffer))
                (fprop (ah-clearcase-fprop-file file))
                (vtag (ah-clearcase-fprop-view-tag fprop)))
-          (when (string= vtag view)
+          (when (string= vtag view-tag)
             (ah-clearcase-maybe-set-vc-state file 'force)
             (vc-resynch-buffer file t t)))))))
 
@@ -1571,21 +1571,22 @@ element * NAME -nocheckout"
              (message nil))))
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
-    (condition-case nil
-        (ah-cleartool-ask (concat "mklabel -nc "
-                                  (when branchp "-replace")
-                                  (when dir? "-recurse")
-                                  " lbtype:" name " " dir))
-      (error nil))
+    (ah-cleartool-ask 
+     (format "mklabel -nc %s %s lbtype:%s \"%s\""
+             (if branchp "-replace" "")
+             (if dir? "-recurse" "")
+             name dir))
     (when dir?                     ; apply label to parent directories
       (message "Applying label to parent directories...")
       (condition-case nil
           (while t               ; until cleartool will throw an error
             (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
             (setq dir (file-name-directory dir))
-            (ah-cleartool-ask (concat "mklabel -nc lbtype:" name " " dir)))
-        (error nil)))
-    (message "Finished applying label")))
+            (ah-cleartool-ask 
+             (format "mklabel -nc %s lbtype:%s \"%s\"" 
+                     (if branchp "-replace" "") name dir)))
+        (error nil))))
+    (message "Finished applying label"))
 
 ;;;; assign-name
 ;;;; retrieve-snapshot
@@ -1696,7 +1697,7 @@ views are listed."
   (let ((user-selection
          (if prefix-arg
              (let ((u (read-from-minibuffer "User: ")))
-               (unless (equal u "")
+               (unless (string= u "")
                  (list "-user" u)))
            (list "-me" "-cview")))
         (other-options (list "-recurse" "-fmt" ah-cleartool-lsco-fmt dir)))
@@ -1733,6 +1734,142 @@ made to the views)."
           ;; TODO: how do we refresh all the files that were loaded
           ;; from this view?
           )))))
+
+(defun ah-clearcase-label-diff-report (dir label-1 label-2)
+  "Print a report on version differences in DIR between LABEL-1 and
+LABEL-2."
+  (interactive "DReport on directory: \nsLabel 1: \nsLabel 2: ")
+  ;; make sure both labels exist
+  (ah-cleartool-ask (format "cd \"%s\"" dir))
+  (ah-cleartool-ask (format "desc -fmt \"ok\" lbtype:%s" label-1))
+  (ah-cleartool-ask (format "desc -fmt \"ok\" lbtype:%s" label-2))
+
+  (let ((buf1 (get-buffer-create " *ah-clearcase-label-1*"))
+        (buf2 (get-buffer-create " *ah-clearcase-label-2*"))
+
+        ;; Will hold the file report.  KEY is file-name, VALUE is
+        ;; (cons label-1-version label-2-version).  If one of the
+        ;; versions does not exist, the string "*no version*" is used
+        ;; instead.
+        (report (make-hash-table :test 'equal))
+
+        ;; We don't want the full pathname in front of each file so we
+        ;; remove it by skipping SKIP chars.
+        (skip (length dir)))
+
+    ;; Start a cleartool find for label-1
+    (with-current-buffer buf1
+      (buffer-disable-undo)
+      (erase-buffer)
+      (ah-cleartool-do
+       "find" (list dir "-version" (format "lbtype(%s)" label-1) "-print")
+       buf1))
+
+    ;; Start a cleartoo find for label-2
+    (with-current-buffer buf2
+      (buffer-disable-undo)
+      (erase-buffer)
+      (ah-cleartool-do
+       "find" (list dir "-version" (format "lbtype(%s)" label-2) "-print")
+       buf2))
+
+    ;; Wait for both processes to complete
+    (with-timeout (30 (error "Cleartool takes too long to complete"))
+      ;; we use ignore-errors because the cleartool sentinel deletes
+      ;; the process on exit.
+      (while (and (ignore-errors (eq (process-status buf1) 'run))
+                  (ignore-errors (eq (process-status buf2) 'run)))
+        (sit-for 1)))
+
+    ;; Process the listed files for label-1.  For each line in the
+    ;; buffer, find the file and version and add it to the report.
+    (with-current-buffer buf1
+      (goto-char (point-min))
+      (while (not (= (point) (point-max)))
+        (beginning-of-line)
+        (forward-char skip)
+        (let* ((start (point))
+               (end (progn (end-of-line) (point)))
+               (str (buffer-substring-no-properties start end))
+               (file-and-version (split-string str "@@")))
+          (when (= (length file-and-version) 2)
+            (let ((file (car file-and-version))
+                  (version (cadr file-and-version)))
+              (puthash file (cons version "*no version*") report))))
+        (forward-line 1)))
+
+    ;; Process the listed files for label-2.  For each line in the
+    ;; buffer, find the file and version than update the report with
+    ;; the second label's version.  We remove entries that have the
+    ;; same version for both labels and add new entries for files that
+    ;; only have label 2.
+    (with-current-buffer buf2
+      (goto-char (point-min))
+      (while (not (= (point) (point-max)))
+        (beginning-of-line)
+        (forward-char skip)
+        (let* ((start (point))
+               (end (progn (end-of-line) (point)))
+               (str (buffer-substring-no-properties start end))
+               (file-and-version (split-string str "@@")))
+          (when (= (length file-and-version) 2)
+            (let ((file (car file-and-version))
+                  (version (cadr file-and-version)))
+              (let ((ver1 (car (gethash file report))))
+                (cond
+                 ;; no version 1
+                 ((null ver1)
+                  (puthash file (cons "*no version*" version) report))
+                 ;; the two versions are identical
+                 ((string= ver1 version)
+                  (remhash file report))
+                 ;; version 1 exists, add version 2
+                 (t (puthash file (cons ver1 version) report)))))))
+        (forward-line 1)))
+
+    ;; prepare the report
+    (let (all-files
+          (max-file-len 0)
+          (max-lb-1-len 0)
+          (max-lb-2-len 0)
+          fmt-str)
+      (maphash (lambda (x y)
+                 (push x all-files)
+                 (setq max-file-len (max max-file-len (length x)))
+                 (setq max-lb-1-len (max max-lb-1-len (length (car y))))
+                 (setq max-lb-2-len (max max-lb-2-len (length (cdr y)))))
+               report)
+      (setq all-files (sort all-files 'string<))
+      (setq fmt-str (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n"
+                            max-file-len max-lb-1-len max-lb-2-len))
+
+      (with-current-buffer (get-buffer-create "*label-diff-report*")
+        (make-local-variable 'ps-landscape-mode)
+        (setq ps-landscape-mode 'landscape)
+        (make-local-variable 'ps-number-of-columns)
+        (setq ps-number-of-columns 1)
+        (make-local-variable 'ps-zebra-stripes)
+        (setq ps-zebra-stripes t)
+        (erase-buffer)
+        (buffer-disable-undo)
+        (insert (format "Directory: %s\nLabel 1: %s\nLabel 2: %s\n\n"
+                        dir label-1 label-2))
+        (insert (format fmt-str 0 "File" label-1 label-2))
+        (insert (make-string
+                 (+ 3 4 max-file-len 4 max-lb-1-len 4 max-lb-2-len)
+                 ?=))
+        (insert "\n")
+        (let ((cnt 0))
+          (dolist (i all-files)
+            (let ((v (gethash i report)))
+              (insert (format fmt-str cnt i (car v) (cdr v))))
+            (incf cnt)))
+        (goto-char (point-min))
+        (pop-to-buffer (current-buffer))))
+
+    ;; cleanup after us.  maybe these should be in an unwind-protect
+    (kill-buffer buf1)
+    (kill-buffer buf2)))
 
 ;;}}}
 
@@ -1913,8 +2050,10 @@ it."
       (with-current-buffer (find-file-noselect configspec-file)
         (ah-clearcase-edcs-mode)
         (setq ah-clearcase-edcs-view-tag view-tag)
+        (buffer-disable-undo)
         (erase-buffer)
         (insert (ah-cleartool-wait-for tid))
+        (buffer-enable-undo)
         (goto-char (point-min))
         (pop-to-buffer (current-buffer))
         (message nil)))
@@ -1953,6 +2092,11 @@ it."
 ;; related will go in a Clearcase menu under Tools.
 (defvar clearcase-global-menu
   (let ((m (make-sparse-keymap "Clearcase")))
+    (define-key m [ah-clearcase-label-diff-report]
+      '(menu-item "Label diff report" ah-clearcase-label-diff-report
+		  :help "Report file version differences between two labels"))
+    (define-key m [separator-clearcase-1]
+      '("----" 'separator-1))
     (define-key m [vc-clearcase-list-checkouts]
       '(menu-item "List Checkouts" vc-clearcase-list-checkouts
 		  :help "List Clearcase checkouts in a directory"))

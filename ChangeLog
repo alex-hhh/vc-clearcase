@@ -1,3 +1,43 @@
+2004-09-17  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-status-rx): 1.14 match only at the
+	end of the string.
+	(ah-cleartool-question-rx): 1.14 new regexp
+	(ah-cleartool-tq-rx): 1.14 combines ah-cleartool-status-rx and
+	ah-cleartool-question-rx, used by the transaction queue to
+	determine the end of record from cleartool.
+	(ah-cleartool-tq-handler): 1.14 try ah-cleartool-status-rx, than
+	ah-cleartool-question-rx, and report an error if the latter
+	matches.  Also removed the save-match-data form as Emacs already
+	saves these.
+	(ah-cleartool-ask): 1.14 use ah-cleartool-tq-rx as the end of
+	record regexp.
+	(ah-clearcase-fprop-broken-view-p): 1.14 new function
+	(ah-clearcase-snapshot-view-p, ah-clearcase-dynamic-view-p): 1.14
+	accept a fprop as argument in addition to a vprop or a view-tag
+	name.
+	(vc-clearcase-state): 1.14 don't run cleartool update if the view
+	is broken, instead report an error.
+	(vc-clearcase-dir-state): 1.14 use new semantics of
+	ah-clearcase-snapshot-view-p
+
+2004-09-16  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-tq-handler): 1.13 use = instead of
+	eq
+	(ah-clearcase-fprop-set-version): 1.13 use null instead of eq
+	(ah-clearcase-vprop-prepare): 1.13 use char-equal instead of eq
+	(ah-clearcase-refresh-files-in-view): 1.13 renamed view to
+	view-tag
+	(vc-clearcase-create-snapshot): 1.13 use format to create the
+	cleartool command, quote dir properly
+	(vc-clearcase-list-checkouts): 1.13 use string= instead of equal
+	(ah-clearcase-label-diff-report): 1.13 new function
+	(vc-clearcase-edcs): 1.13 disable undo when inserting the
+	configspec, re-enable it afterwards.
+	(clearcase-global-menu): 1.13 add ah-clearcase-label-diff-report
+	to the Clearcase menu.
+	
 2004-09-10  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-fprop-initialized-p): 1.12 made it

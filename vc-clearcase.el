@@ -164,7 +164,12 @@ Cleans up properly if cleartool exits."
     ;; (kill-buffer (process-buffer (tq-process ah-cleartool-tq)))
     ;; (kill-buffer (tq-buffer ah-cleartool-tq))
     (setq ah-cleartool-next-command 0)
-    (setq ah-cleartool-tq nil)))
+    (setq ah-cleartool-tq nil)
+
+    ;; mark all pending transactions as aborted
+    (while (< ah-cleartool-ctid (1- ah-cleartool-ntid))
+      (incf ah-cleartool-ctid)
+      (push (cons ah-cleartool-ctid "cleatool command was aborted") ah-cleartool-terr))))
 
 (defun ah-cleartool-tq-maybe-start ()
   "Start the transaction queue to cleartool, if not already started."

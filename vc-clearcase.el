@@ -1886,12 +1886,14 @@ LABEL-2."
                             max-file-len max-lb-1-len max-lb-2-len))
 
       (with-current-buffer (get-buffer-create "*label-diff-report*")
-        (make-local-variable 'ps-landscape-mode)
-        (setq ps-landscape-mode 'landscape)
-        (make-local-variable 'ps-number-of-columns)
-        (setq ps-number-of-columns 1)
-        (make-local-variable 'ps-zebra-stripes)
-        (setq ps-zebra-stripes t)
+        ;; these are declared in ps-print.el, but I want to avoid an
+        ;; (eval-when-compile (require 'ps-print))
+        (declare 
+         (special ps-landscape-mode ps-number-of-columns ps-zebra-stripes))
+        (set (make-local-variable 'ps-landscape-mode) 'landscape)
+        (set (make-local-variable 'ps-number-of-columns) 1)
+        (set (make-local-variable 'ps-zebra-stripes) t)
+
         (erase-buffer)
         (buffer-disable-undo)
         (insert (format "Directory: %s\nLabel 1: %s\nLabel 2: %s\n\n"

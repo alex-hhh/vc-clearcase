@@ -763,13 +763,13 @@ a new vprop for it."
 
 VIEW-TAG can be:
 
-1/ a vprop, in which case it is returned, 
+1/ a vprop, in which case it is returned,
 
 2/ a string in which case a vprop with that name is looked up and
 returned (if no such vprop exists, it is created first)
 
 3/ a fprop, in which case its view-tag is searced using 2/."
-  
+
   (if (ah-clearcase-vprop-p view-tag)
       view-tag                          ; case 1/
     (let ((vtag-name (cond ((stringp view-tag) view-tag)
@@ -1215,7 +1215,7 @@ FILE, REV and COMMENT are the same as the one from
           (ah-cleartool-timeout (* 1.5 ah-cleartool-timeout)))
       ;; NOTE: if this fails, we should prompt the user to checkout
       ;; unreserved.
-      (ah-cleartool-ask 
+      (ah-cleartool-ask
        (format "checkout %s %s \"%s\"" co-mode options pname)))
     (ah-clearcase-maybe-set-vc-state file 'force)
     (vc-resynch-buffer file t t)))
@@ -1605,7 +1605,7 @@ with this single line in the configspec:
 element * NAME -nocheckout"
    (when (and branchp (not (yes-or-no-p "Move existing label? ")))
      (error "Aborted."))
-  (ah-cleartool-ask (format "cd \"%s\"" dir))
+  (ah-cleartool-ask (format "cd \"%s\"" (file-name-directory dir)))
   ;; let's see if the label exists
   (condition-case nil
       (ah-cleartool-ask (concat "desc lbtype:" name))

@@ -1,4 +1,4 @@
-;;; vc-clearcase.el --- support for ClearCase version control system
+;; vc-clearcase.el --- support for ClearCase version control system
 
 ;; Author: Alexandru Harsanyi (harsanyi@bigpond.com)
 ;; Created: 28 July 2004
@@ -211,7 +211,7 @@ Cleans up properly if cleartool exits."
       (push (cons ah-cleartool-ctid "cleatool command was aborted")
             ah-cleartool-terr))))
 
-(defun ah-cleartool-tq-maybe-start ()
+(defsubst ah-cleartool-tq-maybe-start ()
   "Start the transaction queue to cleartool, if not already started."
   (unless ah-cleartool-tq
     (ah-cleartool-tq-start))
@@ -581,7 +581,7 @@ Return the number of records actually moved."
   view-tag
   )
 
-(defun ah-clearcase-fprop-file (file)
+(defsubst ah-clearcase-fprop-file (file)
   "Return the fprop structure associated with FILE."
   (vc-file-getprop file 'vc-clearcase-fprop))
 
@@ -609,11 +609,11 @@ first that it exists."
     (setf (ah-clearcase-fprop-latest fprop) nil)
     (setf (ah-clearcase-fprop-version-tid fprop) nil)))
 
-(defun ah-clearcase-fprop-hijacked-p (fprop)
+(defsubst ah-clearcase-fprop-hijacked-p (fprop)
   "Return true if FPROP is hijacked."
   (eq (ah-clearcase-fprop-checkout fprop) 'hijacked))
 
-(defun ah-clearcase-fprop-checkedout-p (fprop)
+(defsubst ah-clearcase-fprop-checkedout-p (fprop)
   "Return the checked out mode for FPROP or nil."
   (memq (ah-clearcase-fprop-checkout fprop) '(reserved unreserved)))
 
@@ -892,7 +892,7 @@ When alll is finished, COMMENT-FILE is removed."
            ,@forms)
        (delete-file comment-file))))
 
-)
+)                                       ; eval-when-compile
 
 (put 'with-checkedout-dir 'lisp-indent-function 1)
 (put 'with-comment-file 'lisp-indent-function 1)
@@ -1519,7 +1519,7 @@ looking up regexps for each line in
                            'face '(:strike-through t))))))
 
 (defun vc-clearcase-create-snapshot (dir name branchp)
-  "Apply label NAME to DIR. 
+  "Apply label NAME to DIR.
 
 BRANCHP is used to move an existing label.  This is not the default
 behaviour, but the default behaviour is useless for Clearcase.
@@ -1544,7 +1544,7 @@ element * NAME -nocheckout"
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
     (condition-case nil
-        (ah-cleartool-ask (concat "mklabel -nc " 
+        (ah-cleartool-ask (concat "mklabel -nc "
                                   (when branchp "-replace")
                                   (when dir? "-recurse")
                                   " lbtype:" name " " dir))

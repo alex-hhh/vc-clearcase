@@ -1,3 +1,9 @@
+2004-12-23  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-wait-for): 1.28 rewrote code that
+	waits for the transaction to complete, uses accept-process-output.
+	Works better on Solaris ClearCase.
+
 2004-12-01  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-label-diff-report): 1.27 bugfix:

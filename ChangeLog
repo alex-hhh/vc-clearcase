@@ -1,3 +1,8 @@
+2005-03-10  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-signal-error): 1.35 handle the
+	case when POS is nil
+	
 2005-03-02  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-update-view): 1.34 strip directory

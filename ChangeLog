@@ -1,3 +1,15 @@
+2004-12-26  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-idle-timeout): 1.29 increased to
+	15 minutes
+	(ah-cleartool-wait-for): 1.29 assert that tid is not nil at the
+	begining; also call sit-for in the inner loop, see comment inside
+	function for the reason.
+	(ah-clearcase-label-diff-report): 1.29 start with default values
+	for the length of the report columns, this produces a more
+	pleasing result when the report is empty or the labels are longer
+	than any version in the report
+
 2004-12-23  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-wait-for): 1.28 rewrote code that

@@ -119,10 +119,6 @@
 ;; etc
 (require 'cl)
 
-(defvar ah-clearcase-tmpdir
-  (or (getenv "TEMP") "/tmp")
-  "The location of the temporary directory.")
-
 (defvar ah-clearcase-vtree-program
   (if (eq system-type 'windows-nt)
       "clearvtree"
@@ -1064,7 +1060,7 @@ If DIR was checked out by us, check it back in."
 Binds the name of the temporary file to the variable COMMENT-FILE.
 When all is finished, COMMENT-FILE is removed."
     `(let ((comment-file
-            (make-temp-name (concat ah-clearcase-tmpdir "/clearcase-")))
+            (make-temp-name (concat temporary-file-directory "/clearcase-")))
            (comment-text ,comment-text))
        (unwind-protect
            (progn
@@ -1924,6 +1920,8 @@ views are listed."
 With PREFIX-ARG, run update in preview mode (no actual changes are
 made to the views)."
   (interactive "DUpdate directory: \nP")
+  (when (string-match "[\\\/]+$" dir)
+    (setq dir (substring dir 0 (match-beginning 0))))
   (with-current-buffer (get-buffer-create "*clearcase-update*")
     (setq buffer-read-only t)
     (let ((inhibit-read-only t))
@@ -2262,7 +2260,7 @@ it."
 
     (message "Fetching configspec for %s" view-tag)
     (let ((tid (ah-cleartool-ask (concat "catcs -tag " view-tag) 'nowait))
-          (configspec-file (concat ah-clearcase-tmpdir
+          (configspec-file (concat temporary-file-directory
                                    (format "/%s.configspec" view-tag))))
 
       (with-current-buffer (find-file-noselect configspec-file)

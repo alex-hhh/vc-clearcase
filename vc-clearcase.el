@@ -169,14 +169,14 @@ us." )
 (defvar ah-cleartool-timeout 20
   "Timeout (in seconds) for cleartool commands.")
 
-(defvar ah-cleartool-idle-timeout 300
+(defvar ah-cleartool-idle-timeout 900   ; 15 minutes
   "If cleartool is idle for this many seconds, we kill it at the next
 command.  The reason for this is that cleartool seems unresponsive
 after long periods of inactivity.")
 
 (defvar ah-cleartool-last-command-timestamp (float-time)
   "Timestamp when the last command was issued.  Used by
-ah-cleartool-ask to know when to restart cleartool.")
+`ah-cleartool-ask' to know when to restart cleartool.")
 
 (defvar ah-cleartool-ctid 0
   "The ID of the last completed transaction.
@@ -187,14 +187,14 @@ this value is considered completed.")
 (defvar ah-cleartool-ntid 1
   "The next transaction id.
 
-Whenever 'ah-cleartool-ask' enqueues a transaction, it increments this
+Whenever `ah-cleartool-ask' enqueues a transaction, it increments this
 value.")
 
 (defvar ah-cleartool-terr nil
   "Assoc list of (tid . error-message).
 
 Transactions that have errors will have their tid's and error messages
-stored in this list.  'ah-cleartool-wait-for' will check this list and
+stored in this list.  `ah-cleartool-wait-for' will check this list and
 signal an error with the error message." )
 
 (defvar ah-cleartool-tresults nil
@@ -280,8 +280,9 @@ ANSWER is the string that was received from cleartool.
 The function checks the command index and status received from
 cleartool, updates the completed transaction id ('ah-cleartool-ctid')
 and either stores the answer in `ah-cleartool-terr' or
-`ah-cleartool-tresults' for later retrieval by `ah-cleartool-wait-for', or
-calls the function callback with the answer."
+`ah-cleartool-tresults' for later retrieval by
+`ah-cleartool-wait-for', or calls the function callback with the
+answer."
 
   ;; NOTE: emacs will save the match data, so we can do regexps
   ;; without the need of a save-match-data form.
@@ -315,20 +316,21 @@ calls the function callback with the answer."
   "Wait for TID to complete, return the result or signal an error.
 
 Wait in TIMEOUT seconds intervals, or, if TIMEOUT is nil, wait
-'ah-cleartool-to' seconds.  If during this time, cleartool has written
-something to the output, we wait another interval.  That is, if a
-transaction takes a very long time to complete, but cleartool appears
-to be working, we don't stop it.
+`ah-cleartool-timeout' seconds.  If during this time, cleartool has
+written something to the output, we wait another interval.  That is,
+if a transaction takes a very long time to complete, but cleartool
+appears to be working, we don't stop it.
 
-If transaction-id has completed, search 'ah-cleartool-terr' for an
+If transaction-id has completed, search `ah-cleartool-terr' for an
 error message associated with that transaction, and if found, signals
-an error.  Otherwise look in 'ah-cleartool-tresults' for a result for
+an error.  Otherwise look in `ah-cleartool-tresults' for a result for
 the transaction and returns that.  Else return t.
 
 NOTE: a successful transaction might not have a result associated, as
-'ah-cleartool-tq-handler' passes the result to the callback function
+`ah-cleartool-tq-handler' passes the result to the callback function
 if that is available."
-  (when tid
+
+  (assert tid nil "nil `tid' passed to ah-cleartool-wait-for")
 
     ;; we use an external loop so that if the with-timeout form exits
     ;; but the process has sent some data we can start the wait again.
@@ -342,15 +344,28 @@ if that is available."
             (setq received-some-data
                   (or received-some-data
                       ;; will return t if some data was received
-                      (accept-process-output cleartool-process 2))))
-          (when (and (not received-some-data)
-                     (< ah-cleartool-ctid tid))
-            ;; so our transaction is not yet complete and cleartool
-            ;; hasn't written anything for us.  Assume that cleartool
-            ;; is hung and kill it.
-            (ah-cleartool-tq-stop)
-            (ah-cleartool-tq-start)
-            (error "Cleartool timed out")))))
+                      (accept-process-output cleartool-process 2)))
+
+            ;; Hmm, sometimes the input from cleartool is not
+            ;; processed in accept-process-output and we need to call
+            ;; sit-for with a non zero argument.  This occurs when we
+            ;; 'uncheckout' a revision.  It will loop forever (outer
+            ;; while) since `ah-cleartool-tq-handler' is not called to
+            ;; increment `ah-cleartool-ctid'.  There's some race
+            ;; condition here, but I'm not sure what it is.  Do not
+            ;; remove the sit-for call witout understanding what it
+            ;; does.  If you remove it, it will work in 99% of the
+            ;; cases and fail misteriously in 1%.
+            (sit-for 0.1)))
+
+        (when (and (not received-some-data)
+                   (< ah-cleartool-ctid tid))
+          ;; so our transaction is not yet complete and cleartool
+          ;; hasn't written anything for us.  Assume that cleartool
+          ;; is hung and kill it.
+          (ah-cleartool-tq-stop)
+          (ah-cleartool-tq-start)
+          (error "Cleartool timed out"))))
 
     ;; if we are here, the transaction is complete.
     (let ((err (assq tid ah-cleartool-terr))
@@ -360,13 +375,13 @@ if that is available."
       (when result
         (setq ah-cleartool-tresults
               (assq-delete-all tid ah-cleartool-tresults)))
-      (if err (error (cdr err)) (if result (cdr result) t)))))
+      (if err (error (cdr err)) (if result (cdr result) t))))
 
 (defun ah-cleartool-ask (question &optional wait closure fn)
   "Enqueue QUESTION to the cleartool-tq.
 
 If WAIT is different than 'nowait, the transaction is waited for with
-'ah-cleartool-wait-for' and returns whatever 'ah-cleartool-wait-for'
+`ah-cleartool-wait-for' and returns whatever `ah-cleartool-wait-for'
 returns.  Otherwise the the transaction id is returned (you will have
 to wait for it yourself).  If CLOSURE and FN are specified, fn will be
 called when the transaction is complete as funcall(fn closure
@@ -1961,9 +1976,10 @@ LABEL-2."
 
     ;; prepare the report
     (let (all-files
-          (max-file-len 0)
-          (max-lb-1-len 0)
-          (max-lb-2-len 0)
+          ;; start with some values in case the report is empty...
+          (max-file-len (length "File"))
+          (max-lb-1-len (length label-1))
+          (max-lb-2-len (length label-2))
           fmt-str)
       (maphash (lambda (x y)
                  (push x all-files)

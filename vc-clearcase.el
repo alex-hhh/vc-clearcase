@@ -157,6 +157,15 @@ us." )
 (defvar ah-cleartool-timeout 20
   "Timeout (in seconds) for cleartool commands.")
 
+(defvar ah-cleartool-idle-timeout 300
+  "If cleartool is idle for thid many seconds, we kill it at the next
+command.  The reason for this is that cleartool seems unresponsive
+after long periods of innactivity.")
+
+(defvar ah-cleartool-last-command-timestamp (float-time)
+  "Timestamp when the last command was issued.  Used by
+ah-cleartool-ask to know when to restart cleartool.")
+
 (defvar ah-cleartool-ctid 0
   "The ID of the last completed transaction.
 
@@ -202,7 +211,8 @@ Cleans up properly if cleartool exits."
     (set-process-sentinel process #'ah-cleartool-tq-sentinel)
     (process-kill-without-query process nil)
     (setq ah-cleartool-tq (tq-create process)
-          ah-cleartool-next-command 1)))
+          ah-cleartool-next-command 1
+          ah-cleartool-last-command-timestamp (float-time))))
 
 (defun ah-cleartool-save-stop-data nil
   "If t, when cleartool is stopped, a report will be output into the
@@ -213,8 +223,9 @@ Cleans up properly if cleartool exits."
   (when ah-cleartool-tq
     (when (ah-cleartool-save-stop-data)
       (with-current-buffer (get-buffer-create "*cleartool-aborts*")
-        (insert "\l" (current-time-string) "\n"
+        (insert "\n\f\n" (current-time-string) "\n"
                 (format "ah-cleartool-ctid: %d\n" ah-cleartool-ctid)
+                (format "ah-cleartool-ntid: %d\n" ah-cleartool-ntid)
                 (format "ah-cleartool-next-command: %d\n"
                         ah-cleartool-next-command))
         (insert "ah-cleartool-terr:\n")
@@ -349,6 +360,11 @@ returns.  Otherwise the the transaction id is returned (you will have
 to wait for it yourself).  If CLOSURE and FN are specified, fn will be
 called when the transaction is complete as funcall(fn closure
 answer)."
+  (when (> (- (float-time) ah-cleartool-last-command-timestamp)
+           ah-cleartool-idle-timeout)
+    (message "Cleartool is idle for too long, restarting...")
+    (ah-cleartool-tq-stop))
+  (setq ah-cleartool-last-command-timestamp (float-time))
   (ah-cleartool-tq-maybe-start)
   (let ((tid ah-cleartool-ntid)
         (command (concat question "\n")))

@@ -744,7 +744,7 @@ returned."
       (puthash view-tag vprop ah-clearcase-all-vprops))
     vprop))
 
-(defun ah-clearcase-declare-view (view type &optional root)
+(defun ah-clearcase-declare-view (view-tag type &optional root)
   "Declare a VIEW as a view of TYPE 'snapshot or 'dynamic.
 
 For a snapshot view, the view's ROOT also has to be specified.
@@ -793,7 +793,7 @@ command).  VIEW can be either a view-tag name or a vprop."
         (let* ((file (buffer-file-name buffer))
                (fprop (ah-clearcase-fprop-file file))
                (vtag (ah-clearcase-fprop-view-tag fprop)))
-          (when (string= vtag view-tag)
+          (when (string= vtag view)
             (ah-clearcase-maybe-set-vc-state file 'force)
             (vc-resynch-buffer file t t)))))))
 

@@ -330,28 +330,27 @@ NOTE: a successful transaction might not have a result associated, as
 if that is available."
   (when tid
 
+    ;; we use an external loop so that if the with-timeout form exits
+    ;; but the process has sent some data we can start the wait again.
+    ;; We don't want to abort a cleartool command that is sending us
+    ;; lots of data and takes longer than our timeout.
     (while (< ah-cleartool-ctid tid)
-      (let ((pmpos
-             (marker-position (process-mark (tq-process ah-cleartool-tq))))
-            (sit-for-time 0.1))
-
-        ;; wait for the transaction to complete.  We increase the
-        ;; sit-for-time by 10% in each loop.
+      (let (received-some-data
+            (cleartool-process (tq-process ah-cleartool-tq)))
         (with-timeout ((or timeout ah-cleartool-timeout))
           (while (< ah-cleartool-ctid tid)
-            (sit-for sit-for-time)
-            (setq sit-for-time (* sit-for-time 1.1))))
-
-        (when (and (< ah-cleartool-ctid tid)
-                   (equal pmpos
-                          (marker-position
-                           (process-mark (tq-process ah-cleartool-tq)))))
-          ;; so our transaction is not yet complete and cleartool
-          ;; hasn't written anything for us.  Assume that cleartool is
-          ;; hung and kill it.
-          (ah-cleartool-tq-stop)
-          (ah-cleartool-tq-start)
-          (error "Cleartool timed out"))))
+            (setq received-some-data
+                  (or received-some-data
+                      ;; will return t if some data was received
+                      (accept-process-output cleartool-process 2))))
+          (when (and (not received-some-data)
+                     (< ah-cleartool-ctid tid))
+            ;; so our transaction is not yet complete and cleartool
+            ;; hasn't written anything for us.  Assume that cleartool
+            ;; is hung and kill it.
+            (ah-cleartool-tq-stop)
+            (ah-cleartool-tq-start)
+            (error "Cleartool timed out")))))
 
     ;; if we are here, the transaction is complete.
     (let ((err (assq tid ah-cleartool-terr))

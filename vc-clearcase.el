@@ -81,10 +81,6 @@
 ;; - update vc-clearcase-merge to only add merge hyperlinks instead of
 ;; doing actual merges when the prefix arg is specified.
 ;;
-;; - add the possibility to label a single file with the option to
-;; move an existing label. (vc-clearcase-create-snapshot will not move
-;; labels).  Should it provide completion for the label name?  We have
-;; over 4600 labels in MASS_Dev_Infra at the last count.
 ;;
 
 ;;; Known bugs:
@@ -117,7 +113,13 @@
 
 (defvar ah-clearcase-tmpdir
   (or (getenv "TEMP") "/tmp")
-  "The location of the temporary directory")
+  "The location of the temporary directory.")
+
+(defvar ah-clearcase-vtree-program
+  (if (eq system-type 'windows-nt)
+      "clearvtree"
+    "xlsvtree")
+  "The Vtree browser program.")
 
 ;;}}}
 
@@ -622,12 +624,12 @@ it with shorter versions.  This is probably specific to my site, so it
 should be made configurable..."
   (replace-regexp-in-string
    "\\<release\\([0-9]*\\)\\>" "rel\\1"
-  (replace-regexp-in-string
-   "\\<branch\\([0-9]*\\)\\>" "br\\1"
    (replace-regexp-in-string
-    "\\<patch\\([0-9]*\\)\\>" "pat\\1"
+    "\\<branch\\([0-9]*\\)\\>" "br\\1"
     (replace-regexp-in-string
-     "iteration\\([0-9]+\\)" "I~\\1" mode-line)))))
+     "\\<patch\\([0-9]*\\)\\>" "pat\\1"
+     (replace-regexp-in-string
+      "iteration\\([0-9]+\\)" "I~\\1" mode-line)))))
 
 
 (defun ah-clearcase-fprop-set-version (fprop version-string)
@@ -1263,7 +1265,9 @@ This method does three completely different things:
            (format "get -to \"%s\" \"%s@@%s\"" destfile file rev)))
 
       (progn
-        (when rev               ; The user should edit the config spec
+        ;; We cannot update to a specific revision, the user should
+        ;; edit the config spec.
+        (when rev
           (error "Cannot to update to a specific revision"))
         ;; Update to the configspec
         (let ((update-result
@@ -1515,7 +1519,10 @@ looking up regexps for each line in
                            'face '(:strike-through t))))))
 
 (defun vc-clearcase-create-snapshot (dir name branchp)
-  "Apply label NAME to DIR. BRANCHP is ignored.
+  "Apply label NAME to DIR. 
+
+BRANCHP is used to move an existing label.  This is not the default
+behaviour, but the default behaviour is useless for Clearcase.
 
 First, if the label NAME does not exist, if is created with mklbtype
 as an ordinary, non shared label.  Than the label is applied
@@ -1525,8 +1532,8 @@ directory.  This means that you can select this version of the sources
 with this single line in the configspec:
 
 element * NAME -nocheckout"
-  (when branchp
-    (error "Refusing to create branches this way."))
+   (when (and branchp (not (yes-or-no-p "Move existing label? ")))
+     (error "Aborted."))
   ;; let's see if the label exists
   (condition-case nil
       (ah-cleartool-ask (concat "desc lbtype:" name))
@@ -1537,7 +1544,9 @@ element * NAME -nocheckout"
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
     (condition-case nil
-        (ah-cleartool-ask (concat "mklabel -nc " (when dir? "-recurse")
+        (ah-cleartool-ask (concat "mklabel -nc " 
+                                  (when branchp "-replace")
+                                  (when dir? "-recurse")
                                   " lbtype:" name " " dir))
       (error nil))
     (when dir?                     ; apply label to parent directories
@@ -1634,7 +1643,7 @@ in this case the versions of the directory itself will be browsed)"
         (progn
           (message "Starting Vtree browser...")
           (start-process-shell-command
-           "Vtree_browser" nil "clearvtree" file))
+           "Vtree_browser" nil ah-clearcase-vtree-program file))
       (message "Not a clearcase file"))))
 
 (defconst ah-cleartool-lsco-fmt
@@ -1774,11 +1783,10 @@ to inspect the configspec of ANY view accessible from this machine."
 
   (font-lock-mode t))
 
-(defalias 'edcs-mode 'ah-clearcase-edcs-mode
-  "Provide a shorter alias for the edcs mode.
+;; Provide a shorter alias for the edcs mode.  This is usefull if you
+;; want to keep configspecs separately and have mode tags in them.
+(defalias 'edcs-mode 'ah-clearcase-edcs-mode)
 
-This is usefull if you want to keep configspecs separately and
-have mode tags in them.")
 
 (easy-mmode-defmap ah-clearcase-edcs-mode-map
                    '(("\C-c\C-s" . ah-clearcase-setcs))

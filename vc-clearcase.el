@@ -2,8 +2,9 @@
 
 ;; Author: Alexandru Harsanyi (harsanyi@bigpond.com)
 ;; Created: 28 July 2004
-;; Version: 0.9
-;; Keywords: version-control
+;; Keywords: version-control, clearcase
+;; $Id$	
+
 
 ;;; Commentary:
 ;;
@@ -783,15 +784,14 @@ If FORCE is not nil, always read the properties."
   ;; If you compile this file, these macros won't exist at runtime, so
   ;; it is safe to give them nice names.
 
-(defvar ah-clearcase-gensym-prefix "AH-CLEARCASE-"
-  "Prefix used to generate symbols in the clearcase package")
-
 (defmacro with-checkedout-dir (dir &rest forms)
   "Ensure that DIR is checked out, than execute FORMS.
 
 If DIR was checked out by us, check it back in."
-  (let ((checkout-needed-flag (gensym ah-clearcase-gensym-prefix))
-        (real-dir (gensym ah-clearcase-gensym-prefix)))
+
+  ;; NOTE: we could use make-symbol with the same effect
+  (let ((checkout-needed-flag (gensym))
+        (real-dir (gensym)))
     `(let* ((,real-dir ,dir)
             (,checkout-needed-flag
              (string=

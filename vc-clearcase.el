@@ -707,6 +707,15 @@ files.  The solution to the problem is to run an update on the
 whole view, but it is beyond the scope of this FPROP."
   (eq (ah-clearcase-fprop-status fprop) 'broken-view))
 
+(defsubst ah-clearcase-fprop-checkout-will-branch-p (fprop)
+  "Return true if a checkout will create a branch on this file.
+
+The branch creation might still fail if the branch already exists
+somewhere in the version-tree of this element.  So what we really
+check is whether ClearCase will try to branch this file at
+checkout."
+  (string-match "-mkbranch" (ah-clearcase-fprop-what-rule fprop)))
+
 (defun ah-clearcase-wash-mode-line (mode-line)
   "Make the modeline string shorter by replacing some of the words in
 it with shorter versions.  This is probably specific to my site, so it
@@ -1068,8 +1077,6 @@ version."
         (error nil)))))
 
 
-(defvar vc-clearcase-state-needs-update nil)
-
 (defun vc-clearcase-state (file)
   "Return the current version control state of FILE.
 
@@ -1084,8 +1091,9 @@ the branch.
 \"USER\" -- this is never returned, we handle this by asking for an
 unreserved checkout.
 
-'needs-patch -- an update -print command indicates that it would update
-the file.
+'needs-patch -- the file is not latest on the branch and the
+consigspec rule does not branch.  (we should check that an update
+-print command indicates that it would update the file.)
 
 'needs-merge -- file is not the latest on our branch and we checked it
 out.
@@ -1095,32 +1103,18 @@ out.
   ;; the properties.
   (ah-clearcase-maybe-set-vc-state file 'force)
 
-  (let ((fprop (ah-clearcase-fprop-file file))
-        (vc-clearcase-state-needs-update "")
-        update-tid state)
+  (let ((fprop (ah-clearcase-fprop-file file)))
 
-    (when (ah-clearcase-snapshot-view-p fprop)
-      ;; The update below will occasionally fail saying that an update
-      ;; is already in progress for this view.  We can anticipate
-      ;; that, because the rule that selects this version will be
-      ;; "Rule: <rule info unavailable>".  In that case, we exit with
-      ;; an error telling the user to update his view.
-      (when (ah-clearcase-fprop-broken-view-p fprop)
-        (error "Snapshot view is inconsistent, run an update"))
+    ;; we are about to operate on the file, so check if the view is
+    ;; consistent.  Clearcase operations will occasionally fail saying
+    ;; that an update is already in progress for this view.  We can
+    ;; anticipate that, because the rule that selects this version
+    ;; will be "Rule: <rule info unavailable>".  In that case, we exit
+    ;; with an error telling the user to update his view.
 
-      ;; Let's see if this file needs updating (only on a snapshot
-      ;; view).  We ask the question first, compute the state via
-      ;; heuristic, than check the answer later.  NOTE: the update
-      ;; -print command writes a update log, which we could check for
-      ;; a more reliable result.  For now, we just disable it.
-      (setq update-tid
-            (ah-cleartool-ask
-             (format "update -print -log NUL \"%s\"" file) 'nowait file
-             #'(lambda (file update-log)
-                 (setq vc-clearcase-state-needs-update update-log)))))
-
-    (setq state (vc-clearcase-state-heuristic file))
-    (ah-cleartool-wait-for update-tid)
+    (when (and (ah-clearcase-snapshot-view-p fprop)
+               (ah-clearcase-fprop-broken-view-p fprop))
+      (error "Snapshot view is inconsistent, run an update"))
 
     ;; We anticipate that the file's checkout comment might be needed
     ;; shortly so ask for it before we return the state
@@ -1131,19 +1125,17 @@ out.
              #'(lambda (fprop comment)
                  (setf (ah-clearcase-fprop-comment fprop) comment)))))
 
-    (if (eq state 'up-to-date)
-        (if (string-match "^Loading " vc-clearcase-state-needs-update)
-            'needs-patch
-          'up-to-date)
-      state)))
+    ;; return the state.  The heuristic already gives all the
+    ;; information we need.
+    (vc-clearcase-state-heuristic file)))
 
 
 (defun vc-clearcase-state-heuristic (file)
   "Determine the state of FILE.
 
-Use whatever 'ah-clearcase-maybe-set-vc-state' gave us.  This method
-will only return 'edited, 'needs-merge or 'up-to-date.  If 'up-to-date
-is returned, the file might still need a patch (needs-patch)."
+Use whatever 'ah-clearcase-maybe-set-vc-state' gave us.  See
+vc-clearcase-state for how states are mapped to clearcase
+information."
   (ah-clearcase-maybe-set-vc-state file)
   (let ((fprop (ah-clearcase-fprop-file file)))
     (if (ah-clearcase-fprop-hijacked-p fprop)
@@ -1153,8 +1145,11 @@ is returned, the file might still need a patch (needs-patch)."
                        (ah-clearcase-fprop-parent fprop))
               'edited
             'needs-merge)
-        'up-to-date))))
-
+        (if (or (ah-clearcase-fprop-checkout-will-branch-p fprop)
+                (string= (ah-clearcase-fprop-latest fprop)
+                         (ah-clearcase-fprop-version fprop)))
+            'up-to-date
+          'needs-patch)))))
 
 ;; NOTE: this does not work correctly, as the 'need-update state is not
 ;; detected (we need to run a cleartool update and parse the resulting
@@ -1374,8 +1369,7 @@ This method does three completely different things:
                 (cond
                  ;; if the checkout will create a branch, checkout
                  ;; reserved
-                 ((string-match
-                   "-mkbranch" (ah-clearcase-fprop-what-rule fprop))
+                 ((ah-clearcase-fprop-checkout-will-branch-p fprop)
                   'ah-clearcase-finish-checkout-reserved)
 
                  ;; if someone else has checked out this revision in

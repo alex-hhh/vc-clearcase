@@ -69,7 +69,7 @@
 ;; starts with a '/' just leave it in place.
 ;;
 ;; - reformat the annotate buffer to print a meaningful substring of
-;; the version for long version strings.  Provide a keymapping to
+;; the version for long version strings.  Provide a key mapping to
 ;; display the version at the line.
 ;;
 ;; - provide filter functions for the mode-line string to reduce its
@@ -79,11 +79,8 @@
 ;; set of replacements).
 ;;
 ;; - update vc-clearcase-merge to only add merge hyperlinks instead of
-;; doing actual merges when the prefix arg is specified.
-;;
-;; - ah-clearcase-declare-view is not necessary.  Instead we should
-;; write an ah-clearcase-guess-view that attempts to discovered a view's
-;; type and root storage directory.
+;; doing actual merges when the prefix arg is specified.  fix
+;; vc-clearcase-merge (see note)
 ;;
 ;; - add a configuration variable that specifies the default checkout
 ;; mode (reserved or unreserved) and default comment policy (comments
@@ -102,6 +99,12 @@
 ;; pops up, and vc-merge assumes the file was already checked out.  We
 ;; need to do an automatic checkout in this case, but how do we detect
 ;; it?
+;;
+;; vc-clearcase-merge and vc-clearcase-merge-news can only succeed
+;; (they signal an error if the merge is not trivial).  clearcase
+;; merge has no equivalent of the CVS conflict markers (that I know
+;; of) and also the vc package can only resolve CVS style conflicts.
+;;
 
 ;;}}}
 
@@ -235,8 +238,8 @@ Cleans up properly if cleartool exits."
     (when (not (eq system-type 'windows-nt))
       ;; on systems other than windows-nt, cleartool will print a
       ;; prompt when it starts up and tq will complain about it.  In
-      ;; these cases, we wait until the propmt is printed, and start
-      ;; the tq afterwards.
+      ;; these cases, we wait until the prompt is printed, and start
+      ;; the tq afterward.
       (with-timeout (5 (error "Timeout waiting for cleartool to start"))
         (with-current-buffer (get-buffer " *cleartool*")
           (goto-char (point-min))
@@ -377,9 +380,9 @@ if that is available."
           ;; `ah-cleartool-tq-handler' is not called to increment
           ;; `ah-cleartool-ctid'.  There's some race condition here,
           ;; but I'm not sure what it is.  Do not remove the sit-for
-          ;; call witout understanding what it does.  If you remove
+          ;; call without understanding what it does.  If you remove
           ;; it, it will work in 99% of the cases and fail
-          ;; misteriously in 1%.
+          ;; mysteriously in 1%.
           (when (< ah-cleartool-ctid tid)
             (sit-for 0.1))))
 
@@ -1115,30 +1118,30 @@ version."
     (if (ah-clearcase-fprop-initialized-p fprop)
         t
       (ignore-cleartool-errors
-       (unless fprop (setq fprop (ah-clearcase-make-fprop)))
-       (let ((ls-result (ah-cleartool-ask (format "ls \"%s\"" file))))
-         (if (string-match "Rule: \\(.*\\)$" ls-result)
-             ;; file is registered
-             (progn
-               (ah-clearcase-fprop-set-version-simple fprop ls-result)
-               ;; anticipate that the version will be needed
-               ;; shortly, so ask for it.  When a file is
-               ;; hijacked, do the desc command on the version
-               ;; extended name of the file, as cleartool will
-               ;; return nothing for the hijacked version...
-               (let ((pname
-                      (if (ah-clearcase-fprop-hijacked-p fprop)
-                          (concat file "@@"
-                                  (ah-clearcase-fprop-version fprop))
-                        file)))
-                 (setf (ah-clearcase-fprop-version-tid fprop)
-                       (ah-cleartool-ask
-                        (format "desc -fmt \"%%Sn %%PSn %%Rf\" \"%s\""
-                                pname)
-                        'nowait fprop #'ah-clearcase-fprop-set-version))
-                 (vc-file-setprop file 'vc-clearcase-fprop fprop))
-               t)                       ;file is registered
-           nil)))                       ;file is not registered
+        (unless fprop (setq fprop (ah-clearcase-make-fprop)))
+        (let ((ls-result (ah-cleartool-ask (format "ls \"%s\"" file))))
+          (if (string-match "Rule: \\(.*\\)$" ls-result)
+              ;; file is registered
+              (progn
+                (ah-clearcase-fprop-set-version-simple fprop ls-result)
+                ;; anticipate that the version will be needed
+                ;; shortly, so ask for it.  When a file is
+                ;; hijacked, do the desc command on the version
+                ;; extended name of the file, as cleartool will
+                ;; return nothing for the hijacked version...
+                (let ((pname
+                       (if (ah-clearcase-fprop-hijacked-p fprop)
+                           (concat file "@@"
+                                   (ah-clearcase-fprop-version fprop))
+                         file)))
+                  (setf (ah-clearcase-fprop-version-tid fprop)
+                        (ah-cleartool-ask
+                         (format "desc -fmt \"%%Sn %%PSn %%Rf\" \"%s\""
+                                 pname)
+                         'nowait fprop #'ah-clearcase-fprop-set-version))
+                  (vc-file-setprop file 'vc-clearcase-fprop fprop))
+                t)                      ;file is registered
+            nil)))                      ;file is not registered
       )))
 
 
@@ -1283,7 +1286,7 @@ This is always locking, for every FILE."
   'locking)
 
 (defun vc-clearcase-workfile-unchanged-p (file)
-  "Is FILE un-changned?"
+  "Is FILE un-changed?"
 
   (let ((diff
          (ah-cleartool-ask
@@ -1433,6 +1436,16 @@ This method does three completely different things:
         (let* ((fprop (ah-clearcase-fprop-file file))
                (checkout-mode
                 (cond
+                 ;; if we are not latest on branch and we are asked to
+                 ;; checkout this version (eq rev nil), we checkout
+                 ;; unseserved.
+                 ((and (null rev)
+                       (not (string= (ah-clearcase-fprop-latest fprop)
+                                     (ah-clearcase-fprop-version fprop))))
+                  ;; patch rev first
+                  (setq rev (ah-clearcase-fprop-version fprop))
+                  'ah-clearcase-finish-checkout-unreserved)
+
                  ;; if the checkout will create a branch, checkout
                  ;; reserved
                  ((ah-clearcase-fprop-checkout-will-branch-p fprop)
@@ -1508,7 +1521,8 @@ do an automatic checkout in this case, but how do we detect it?"
       (let ((inhibit-read-only t))
         (insert merge-status)
         (switch-to-buffer-other-window (current-buffer) 'norecord)
-        (shrink-window-if-larger-than-buffer)))))
+        (shrink-window-if-larger-than-buffer)))
+    0))                                 ; return success
 
 (defun vc-clearcase-merge-news (file)
   "Merge the new changes in FILE."
@@ -1516,7 +1530,10 @@ do an automatic checkout in this case, but how do we detect it?"
                         (ah-clearcase-fprop-latest-sel
                          (ah-clearcase-fprop-file file)))))
     (message "Merging LATEST into this version")
-    ;; NOTE: we abort if anything goes wrong with the merge.
+    ;; NOTE: we abort if anything goes wrong with the merge.  Let the
+    ;; error propagate to the vc package.  If we just return 1, it
+    ;; will try to invoke smerge-mode or ediff, expecting CVS-like
+    ;; conflict markers.
     (let ((merge-status
            (ah-cleartool-ask (format "merge -abort -to \"%s\" \"%s\""
                                      file latest))))
@@ -1524,7 +1541,8 @@ do an automatic checkout in this case, but how do we detect it?"
         (let ((inhibit-read-only t))
           (insert merge-status)
           (switch-to-buffer-other-window (current-buffer) 'norecord)
-          (shrink-window-if-larger-than-buffer))))))
+          (shrink-window-if-larger-than-buffer)))
+      0)))                              ; return success
 
 ;;;; steal-lock -- if we have a hijacked file, check-it out and use
 ;;;; the contents of the hijacked file as the checked out contents
@@ -1778,12 +1796,12 @@ element * NAME -nocheckout"
     (when dir?                     ; apply label to parent directories
       (message "Applying label to parent directories...")
       (ignore-cleartool-errors
-       (while t                  ; until cleartool will throw an error
-         (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-         (setq dir (file-name-directory dir))
-         (ah-cleartool-ask
-          (format "mklabel -nc %s lbtype:%s \"%s\""
-                  (if branchp "-replace" "") name dir))))))
+        (while t                 ; until cleartool will throw an error
+          (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+          (setq dir (file-name-directory dir))
+          (ah-cleartool-ask
+           (format "mklabel -nc %s lbtype:%s \"%s\""
+                   (if branchp "-replace" "") name dir))))))
   (message "Finished applying label"))
 
 ;;;; assign-name
@@ -1966,7 +1984,7 @@ LABEL-2."
        "find" (list dir "-version" (format "lbtype(%s)" label-1) "-print")
        buf1))
 
-    ;; Start a cleartoo find for label-2
+    ;; Start a cleartool find for label-2
     (with-current-buffer buf2
       (buffer-disable-undo)
       (erase-buffer)

@@ -1,3 +1,14 @@
+2004-10-16  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-idle-timeout): 1.22 new variable.
+	(ah-cleartool-last-command-timestamp): 1.22 new variable
+	(ah-cleartool-tq-start): 1.22 initialize
+	ah-cleartool-last-command-timestamp to current time
+	(ah-cleartool-tq-stop): 1.22 really insert a form feed this time;
+	insert the value of ah-cleartool-ntid as well.
+	(ah-cleartool-ask): 1.22 restart cleartool if it was idle for more
+	than ah-cleartool-idle-timeout seconds.
+
 2004-10-08  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-save-stop-data): 1.21 new

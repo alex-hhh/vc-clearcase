@@ -626,6 +626,8 @@ returned."
   "Re-run the cleartool command that generated this log."
   (interactive)
   (when (and (boundp 'ah-cleartool-last-command) ah-cleartool-last-command)
+    (let ((inhibit-read-only t))
+      (erase-buffer))
     (ah-cleartool-do (car ah-cleartool-last-command)
                      (cdr ah-cleartool-last-command)
                      (current-buffer))))

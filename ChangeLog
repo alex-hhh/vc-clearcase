@@ -1,3 +1,30 @@
+2004-09-29  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-wait-for): 1.19 comment update.
+	(ah-clearcase-vprop-prepare): 1.19 use the extended semantics of
+	ah-clearcase-vprop-get
+	(ah-clearcase-finish-checkout): 1.19 use a format string for the
+	checkout command, plus increase the cleartool timeout by 50% when
+	running it.
+	(vc-clearcase-create-snapshot): 1.19 change to the snapshot
+	directory before running the command to avoid a complaint from
+	cleartool that the pathname is not within a VOB.
+
+2004-09-21  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-label-diff-report): 1.18 variables
+	from the ps-print package are declared special, to avoid a
+	compiler warning.  Also set them using set on the result of
+	make-local-variable (code is more compact this way).
+
+2004-09-20  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-status-rx): 1.17 don't match the
+	end of line $ as we might have two answers in the buffer and it
+	will match the later.
+	(ah-cleartool-wait-for): 1.17 re-written to use a with-timeout
+	form when waiting for the transaction to complete.
+
 2004-09-19  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-fprop): 1.15 add a 'broken-view
@@ -9,6 +36,17 @@
 	view.
 	(ah-clearcase-fprop-set-version-simple): 1.15 check for a broken
 	view as well.
+	(ah-clearcase-fprop): 1.16 checkout slot renamed to status
+	(ah-clearcase-fprop-hijacked-p, ah-clearcase-fprop-checkedout-p,
+	ah-clearcase-fprop-broken-view-p, ah-clearcase-fprop-set-version,
+	ah-clearcase-fprop-set-version-simple, vc-clearcase-what-version):
+	1.16 use ah-clearcase-fprop-status
+	(ah-clearcase-vprop-get): 1.16 rewritten to accept a vprop, a
+	fprop or a string as an argument, and find the correct vprop from
+	any of these.
+	(ah-clearcase-snapshot-view-p, ah-clearcase-dynamic-view-p): 1.16
+	made it a defsubst, ah-clearcase-vprop-get is smarter now.
+	(vc-clearcase-what-version): 1.16 added info about a broken view.
 
 2004-09-17  Alexandru Harsanyi  <harsanyi@mac.com>
 
@@ -49,7 +87,7 @@
 	configspec, re-enable it afterwards.
 	(clearcase-global-menu): 1.13 add ah-clearcase-label-diff-report
 	to the Clearcase menu.
-	
+
 2004-09-10  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-fprop-initialized-p): 1.12 made it

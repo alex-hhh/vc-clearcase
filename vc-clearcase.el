@@ -1910,8 +1910,8 @@ LABEL-2."
     (with-timeout (30 (error "Cleartool takes too long to complete"))
       ;; we use ignore-errors because the cleartool sentinel deletes
       ;; the process on exit.
-      (while (and (ignore-errors (eq (process-status buf1) 'run))
-                  (ignore-errors (eq (process-status buf2) 'run)))
+      (while (or (ignore-errors (eq (process-status buf1) 'run))
+                 (ignore-errors (eq (process-status buf2) 'run)))
         (sit-for 1)))
 
     ;; Process the listed files for label-1.  For each line in the

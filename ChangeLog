@@ -1,3 +1,39 @@
+2004-09-10  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-fprop-initialized-p): 1.12 made it
+	a defsubst
+	(vc-clearcase-checkout): 1.12 if the checkout will create a
+	branch, don't check if someone else has a reserved checkout on the
+	version.
+	(vc-clearcase-diff): 1.12 determine whether the diff is empty
+	depends on the diff type: serial or diff
+
+2004-09-05  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-tq-maybe-start,
+	ah-clearcase-fprop-file, ah-clearcase-fprop-hijacked-p,
+	ah-clearcase-fprop-checkedout-p): 1.11 made them a defsubst
+
+2004-09-03  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-vtree-program): 1.10 new variable
+	(vc-clearcase-create-snapshot): reuse BRANCHP to signify that the
+	label should be moved.
+	(vc-clearcase-gui-vtree-browser): 1.10 use
+	ah-clearcase-vtree-program
+
+2004-08-30  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-declare-view,
+	ah-clearcase-refresh-files-in-view): 1.9 use the same name in the
+	body as in the parameter declaration (for some reason, the CVS
+	Emacs byte compiler didn't pick this)
+
+2004-08-29  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-checkout): 1.8 use format to
+	construct the checkout command
+
 2004-08-24  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.7 commentary moved inside a fold, some

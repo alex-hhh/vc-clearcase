@@ -282,8 +282,7 @@ NOTE: a succesfull transaction might not have a result associated, as
 if that is available."
   (when tid
     (with-timeout (ah-cleartool-timeout
-                   ;; Restart cleartool on a timeout, as we might
-                   ;; loose synchronisation with the old one.
+                   ;; restart cleartool on timeout and signal an error
                    (ah-cleartool-tq-stop)
                    (ah-cleartool-tq-start)
                    (error "Cleartool timed out"))
@@ -741,7 +740,7 @@ a new vprop for it."
               '(lambda (fprop view-tag)
                  (setf (ah-clearcase-fprop-view-tag fprop)
                        (replace-regexp-in-string "[\n\r]+" "" view-tag))))
-  (let ((vprop (ah-clearcase-vprop-get (ah-clearcase-fprop-view-tag fprop))))
+  (let ((vprop (ah-clearcase-vprop-get fprop)))
     (unless (ah-clearcase-vprop-type vprop)
       ;; This is the first time we see this view, colect some info on it
       (let ((lsview (ah-cleartool-ask
@@ -1211,10 +1210,13 @@ FILE, REV and COMMENT are the same as the one from
   (with-comment-file comment
     (let ((pname (if rev (concat file "@@" rev) file))
           (options (concat "-cfile " comment-file " " (when rev "-version ")))
-          (co-mode (if (eq mode 'reserved) "-reserved " "-unreserved ")))
-      ;; NOTE: if this fails, we should prompt the user to
-      ;; checkout unreserved.
-      (ah-cleartool-ask (concat "checkout " co-mode options " \"" pname "\"")))
+          (co-mode (if (eq mode 'reserved) "-reserved " "-unreserved "))
+          ;; increase the cleartool timeout for the checkout operation
+          (ah-cleartool-timeout (* 1.5 ah-cleartool-timeout)))
+      ;; NOTE: if this fails, we should prompt the user to checkout
+      ;; unreserved.
+      (ah-cleartool-ask 
+       (format "checkout %s %s \"%s\"" co-mode options pname)))
     (ah-clearcase-maybe-set-vc-state file 'force)
     (vc-resynch-buffer file t t)))
 
@@ -1603,6 +1605,7 @@ with this single line in the configspec:
 element * NAME -nocheckout"
    (when (and branchp (not (yes-or-no-p "Move existing label? ")))
      (error "Aborted."))
+  (ah-cleartool-ask (format "cd \"%s\"" dir))
   ;; let's see if the label exists
   (condition-case nil
       (ah-cleartool-ask (concat "desc lbtype:" name))
@@ -1888,7 +1891,7 @@ LABEL-2."
       (with-current-buffer (get-buffer-create "*label-diff-report*")
         ;; these are declared in ps-print.el, but I want to avoid an
         ;; (eval-when-compile (require 'ps-print))
-        (declare 
+        (declare
          (special ps-landscape-mode ps-number-of-columns ps-zebra-stripes))
         (set (make-local-variable 'ps-landscape-mode) 'landscape)
         (set (make-local-variable 'ps-number-of-columns) 1)

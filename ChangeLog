@@ -1,3 +1,8 @@
+2004-11-17  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-annotate-show-color-map): 1.25 removed, as
+	it is not a clearcase specific function.
+
 2004-11-12  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-list-view-private-files): 1.24 new

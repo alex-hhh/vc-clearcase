@@ -140,9 +140,7 @@ two commands were sent in one go (eg \"cd\nls\n\")")
           ;; pipes (instead of PTY's, and cleartool won't output a
           ;; prompt...
           (unless (eq system-type 'windows-nt)
-            "cleartool \\([0-9]+\\)+>[ \t\r\n]+")
-
-          "$")
+            "cleartool \\([0-9]+\\)+>[ \t\r\n]+"))
   "Regexp to match the end of each cleartool result.
 
 If it does not match properly, tq will neved pass back the answer to
@@ -283,27 +281,23 @@ NOTE: a succesfull transaction might not have a result associated, as
 'ah-cleartool-tq-handler' passes the result to the callback function
 if that is available."
   (when tid
-    (let ((start (float-time))
-          (to (if timeout timeout ah-cleartool-timeout)))
-      ;; busy wait for our transaction to complete
-      (while (and (< ah-cleartool-ctid tid)
-                  (< (- (float-time) start) to))
+    (with-timeout (ah-cleartool-timeout
+                   ;; Restart cleartool on a timeout, as we might
+                   ;; loose synchronisation with the old one.
+                   (ah-cleartool-tq-stop)
+                   (ah-cleartool-tq-start)
+                   (error "Cleartool timed out"))
+      (while (< ah-cleartool-ctid tid)
         (sit-for 0.1)))
-    (if (>= ah-cleartool-ctid tid)
-        (let ((err (assq tid ah-cleartool-terr))
-              (result (assq tid ah-cleartool-tresults)))
-          (when err
-            (setq ah-cleartool-terr (assq-delete-all tid ah-cleartool-terr)))
-          (when result
-            (setq ah-cleartool-tresults
-                  (assq-delete-all tid ah-cleartool-tresults)))
-          (if err (error (cdr err)) (if result (cdr result) t)))
-      ;; Restart cleartool on a timeout, as we might loose
-      ;; synchronisation with the old one.
-      (ah-cleartool-tq-stop)
-      (ah-cleartool-tq-start)
-      (error "Cleartool timed out"))))
-
+    ;; if we are here, (>= ah-cleartool-ctid tid)
+    (let ((err (assq tid ah-cleartool-terr))
+          (result (assq tid ah-cleartool-tresults)))
+      (when err
+        (setq ah-cleartool-terr (assq-delete-all tid ah-cleartool-terr)))
+      (when result
+        (setq ah-cleartool-tresults
+              (assq-delete-all tid ah-cleartool-tresults)))
+      (if err (error (cdr err)) (if result (cdr result) t)))))
 
 (defun ah-cleartool-ask (question &optional wait closure fn)
   "Enqueue QUESTION to the cleartool-tq.

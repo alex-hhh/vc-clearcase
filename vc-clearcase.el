@@ -140,11 +140,21 @@ two commands were sent in one go (eg \"cd\nls\n\")")
           ;; pipes (instead of PTY's, and cleartool won't output a
           ;; prompt...
           (unless (eq system-type 'windows-nt)
-            "cleartool \\([0-9]+\\)+>[ \t\r\n]+"))
+            "cleartool \\([0-9]+\\)+>[ \t\r\n]+")
+
+          "$")
   "Regexp to match the end of each cleartool result.
 
 If it does not match properly, tq will neved pass back the answer to
 us." )
+
+(defconst ah-cleartool-question-rx
+  "\\(\\[yes\\]\\|\\[no\\]\\)[ \t\r\n]*$"
+  "A regexp that matches a question asked by cleartool")
+
+(defconst ah-cleartool-tq-rx
+  (concat "\\(" ah-cleartool-status-rx 
+          "\\)\\|\\(" ah-cleartool-question-rx "\\)"))
 
 (defvar ah-cleartool-timeout 20
   "Timeout (in seconds) for cleartool commands.")
@@ -232,8 +242,12 @@ and either stores the answer in `ah-cleartool-terr' or
 `ah-cleartool-tresults' for later retrieval by `ah-cleartool-wait-for', or
 calls the function callback with the answer."
 
-  (save-match-data
-    (if (string-match ah-cleartool-status-rx answer)
+  ;; NOTE: emacs will save the match data, so we can do regexps
+  ;; without the need of a save-match-data form.
+  (let ((tid (aref closure 0))
+        (cb-closure (aref closure 1))
+        (cb (aref closure 2)))
+    (cond ((string-match ah-cleartool-status-rx answer)
         (let ((cmd (string-to-int (match-string 1 answer)))
               (status (string-to-int (match-string 2 answer))))
           (unless (= ah-cleartool-next-command cmd)
@@ -242,18 +256,19 @@ calls the function callback with the answer."
             (error "Unexpected command index received"))
           ;; it's the command we're expecting
           (incf ah-cleartool-next-command)
-          (let ((result (replace-match "" t t answer))
-                (tid (aref closure 0))
-                (cb-closure (aref closure 1))
-                (cb (aref closure 2)))
+             (let ((result (replace-match "" t t answer)))
             (setq ah-cleartool-ctid tid) ; assume tid's always grow
             (cond ((> status 0)
                    (push (cons tid result) ah-cleartool-terr))
                   (cb                ; do we have a callback function?
                    (funcall cb cb-closure result))
                   (t
-                   (push (cons tid result) ah-cleartool-tresults)))))
-      (error "Ah-cleartool-tq-handler: answer does not have a status"))))
+                      (push (cons tid result) ah-cleartool-tresults))))))
+          ((string-match ah-cleartool-question-rx answer)
+           (push (cons tid answer) ah-cleartool-terr))
+          (t 
+           (error 
+            "Ah-cleartool-tq-handler: answer does not have a status")))))
 
 (defun ah-cleartool-wait-for (tid &optional timeout)
   "Wait for TID to be completed, but no more than TIMEOUT seconds.
@@ -303,7 +318,7 @@ answer)."
   (let ((tid ah-cleartool-ntid)
         (command (concat question "\n")))
     (incf ah-cleartool-ntid)
-    (tq-enqueue ah-cleartool-tq command ah-cleartool-status-rx
+    (tq-enqueue ah-cleartool-tq command ah-cleartool-tq-rx
                 (vector tid closure fn) #'ah-cleartool-tq-handler)
     (if (eq wait 'nowait)
         tid
@@ -617,6 +632,16 @@ first that it exists."
   "Return the checked out mode for FPROP or nil."
   (memq (ah-clearcase-fprop-checkout fprop) '(reserved unreserved)))
 
+(defsubst ah-clearcase-fprop-broken-view-p (fprop)
+  "Return true if the there's a problem with this FPROP in the view.
+
+This can happen in snapshot views, occasionally cleartool reports
+that another process does an update and refuses to operate on the
+files.  The solution to the problem is to run an update on the
+whole view, but it is beyond the scope of this FPROP."
+  (if (string-match "rule info unavailable" (ah-clearcase-fprop-what-rule fprop))
+      t
+    nil))
 
 (defun ah-clearcase-wash-mode-line (mode-line)
   "Make the modeline string shorter by replacing some of the words in
@@ -715,24 +740,23 @@ a new vprop for it."
   (ah-cleartool-ask "pwv -short" 'wait fprop
               '(lambda (fprop view-tag)
                  (setf (ah-clearcase-fprop-view-tag fprop)
-                             (replace-regexp-in-string "[\n\r]+" "" view-tag))))
+                       (replace-regexp-in-string "[\n\r]+" "" view-tag))))
   (let ((vprop (ah-clearcase-vprop-get (ah-clearcase-fprop-view-tag fprop))))
     (unless (ah-clearcase-vprop-type vprop)
       ;; This is the first time we see this view, colect some info on it
       (let ((lsview (ah-cleartool-ask
                   (format "lsview %s" (ah-clearcase-vprop-name vprop)))))
     (setf (ah-clearcase-vprop-type vprop)
-              ;; the first char in a lsview listing is '*'.  At least
-              ;; at our site...  I think the '*' means the view is
-              ;; started, but that's the same thing for us... (since
-              ;; we are visiting a file in this view, it must be
-              ;; started)
+          ;; the first char in a lsview listing is '*'.  At least at
+          ;; our site...  I think the '*' means the view is started,
+          ;; but that's the same thing for us... (since we are
+          ;; visiting a file in this view, it must be started)
           (if (char-equal ?* (aref lsview 0)) 'dynamic 'snapshot)))
       (when (ah-clearcase-snapshot-view-p vprop)
-  (ah-cleartool-ask
+        (ah-cleartool-ask
          "pwv -root" 'nowait vprop
          '(lambda (vprop root-dir)
-        (let ((root (replace-regexp-in-string "[\n\r]+" "" root-dir)))
+            (let ((root (replace-regexp-in-string "[\n\r]+" "" root-dir)))
               (setf (ah-clearcase-vprop-root vprop) root))))))))
 
 (defun ah-clearcase-vprop-get (view-tag)
@@ -763,20 +787,28 @@ that view first."
     (setf (ah-clearcase-vprop-type vprop) type)
     (setf (ah-clearcase-vprop-root vprop) root)))
 
-(defun ah-clearcase-snapshot-view-p (view)
-  "Return t if VIEW is a snapshot view.
+(defun ah-clearcase-snapshot-view-p (view-or-fprop)
+  "Return t if VIEW-OR-FPROP is a snapshot view.
 
-View can be either a view name (a string) or a vprop"
-  (let ((vprop (if (ah-clearcase-vprop-p view) view
-                 (ah-clearcase-vprop-get view))))
+View can be either a view name (a string) a vprop or a fprop"
+  (let ((vprop (cond ((ah-clearcase-vprop-p view-or-fprop) view-or-fprop)
+                     ((stringp view-or-fprop) (ah-clearcase-vprop-get view))
+                     ((ah-clearcase-fprop-p view-or-fprop)
+                      (ah-clearcase-vprop-get
+                       (ah-clearcase-fprop-view-tag view-or-fprop)))
+                     (t (error "Unknown type for VIEW-OR-FPROP")))))
     (eq (ah-clearcase-vprop-type vprop) 'snapshot)))
 
-(defun ah-clearcase-dynamic-view-p (view)
-  "Return t if VIEW is a dynamic  view.
+(defun ah-clearcase-dynamic-view-p (view-or-fprop)
+  "Return t if VIEW-OR-FPROP is a dynamic  view.
 
-View can be either a view name (a string) or a vprop"
-  (let ((vprop (if (ah-clearcase-vprop-p view) view
-                 (ah-clearcase-vprop-get view))))
+View can be either a view name (a string) a vprop or a fprop"
+  (let ((vprop (cond ((ah-clearcase-vprop-p view-or-fprop) view-or-fprop)
+                     ((stringp view-or-fprop) (ah-clearcase-vprop-get view))
+                     ((ah-clearcase-fprop-p view-or-fprop)
+                      (ah-clearcase-vprop-get
+                       (ah-clearcase-fprop-view-tag view-or-fprop)))
+                     (t (error "Unknown type for VIEW-OR-FPROP")))))
     (eq (ah-clearcase-vprop-type vprop) 'dynamic)))
 
 (defun ah-clearcase-refresh-files-in-view (view-tag)
@@ -991,13 +1023,21 @@ out.
   (let ((fprop (ah-clearcase-fprop-file file))
         (vc-clearcase-state-needs-update "")
         update-tid state)
-    ;; let's see if this file needs updating (only on a snapshot
-    ;; view).  We ask the question first, compute the state via
-    ;; heuristic, than check the answer later.
-    (when (ah-clearcase-snapshot-view-p (ah-clearcase-fprop-view-tag fprop))
-      ;; NOTE: the update -print command writes a update log, which we
-      ;; could check for a more reliable result.  For now, we just
-      ;; disable it.
+
+    (when (ah-clearcase-snapshot-view-p fprop)
+      ;; The update below will ocasionally fail saying that an update
+      ;; is already in progress for this view.  We can anticipate
+      ;; that, because the rule that selects this versin will be
+      ;; "Rule: <rule info unavailable>".  In that case, we exit with
+      ;; an error telling the user to update his view.
+      (when (ah-clearcase-fprop-broken-view-p fprop)
+        (error "Snapshot view is inconsistent, run an update"))
+
+      ;; Let's see if this file needs updating (only on a snapshot
+      ;; view).  We ask the question first, compute the state via
+      ;; heuristic, than check the answer later.  NOTE: the update
+      ;; -print command writes a update log, which we could check for
+      ;; a more reliable result.  For now, we just disable it.
       (setq update-tid
             (ah-cleartool-ask
              (format "update -print -log NUL \"%s\"" file) 'nowait file
@@ -1058,9 +1098,7 @@ is returned, the file might still need a patch (needs-patch)."
            (split-string (ah-cleartool-ask (format "ls \"%s\"" dir))
                          "[\n\r]+"))
           (static-view?
-           (ah-clearcase-snapshot-view-p
-            (ah-clearcase-fprop-view-tag
-             (ah-clearcase-fprop-file dir)))))
+           (ah-clearcase-snapshot-view-p (ah-clearcase-fprop-file dir))))
       (dolist (entry ls-result)
         (ignore-errors
           (when (string-match "Rule: \\(.*\\)$" entry)

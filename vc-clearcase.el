@@ -204,9 +204,29 @@ Cleans up properly if cleartool exits."
     (setq ah-cleartool-tq (tq-create process)
           ah-cleartool-next-command 1)))
 
+(defun ah-cleartool-save-stop-data nil
+  "If t, when cleartool is stopped, a report will be output into the
+*cleartool-aborts* buffer.")
+
 (defun ah-cleartool-tq-stop ()
   "Stop the transaction queue to cleartool and kill cleartool."
   (when ah-cleartool-tq
+    (when (ah-cleartool-save-stop-data)
+      (with-current-buffer (get-buffer-create "*cleartool-aborts*")
+        (insert "\l" (current-time-string) "\n"
+                (format "ah-cleartool-ctid: %d\n" ah-cleartool-ctid)
+                (format "ah-cleartool-next-command: %d\n"
+                        ah-cleartool-next-command))
+        (insert "ah-cleartool-terr:\n")
+        (dolist (x ah-cleartool-terr)
+          (insert (format "    %d    %s\n" (car x) (cdr x))))
+        (insert "\nah-cleartool-tresults:\n")
+        (dolist (x ah-cleartool-tresults)
+          (insert (format "    %d    %s\n" (car x) (cdr x))))
+        (insert "\ntq-buffer:")
+        (insert
+         (with-current-buffer (tq-buffer ah-cleartool-tq)
+           (buffer-substring-no-properties (point-min) (point-max))))))
     (tq-close ah-cleartool-tq)
     ;; (kill-buffer (process-buffer (tq-process ah-cleartool-tq)))
     ;; (kill-buffer (tq-buffer ah-cleartool-tq))
@@ -269,26 +289,48 @@ calls the function callback with the answer."
             "Ah-cleartool-tq-handler: answer does not have a status")))))
 
 (defun ah-cleartool-wait-for (tid &optional timeout)
-  "Wait for TID to be completed, but no more than TIMEOUT seconds.
+  "Wait for TID to complete, return the result or signal an error.
 
-If timeout is nil, wait 'ah-cleartool-to' seconds.  If transaction-id
-has completed, searches 'ah-cleartool-terr' for an error message
-associated with that transaction, and if found, signals an error.
-Otherwise looks in 'ah-cleartool-tresults' for a result for the
-transaction and returns that.  Else returns t.
+Wait in TIMEOUT seconds intervals, or, if TIMEOUT is nil, wait
+'ah-cleartool-to' seconds.  If during this time, cleartool has written
+something to the output, we wait another interval.  That is, if a
+transaction takes a very long time to complete, but cleartool apears
+to be working, we don't stop it.
+
+If transaction-id has completed, search 'ah-cleartool-terr' for an
+error message associated with that transaction, and if found, signals
+an error.  Otherwise look in 'ah-cleartool-tresults' for a result for
+the transaction and returns that.  Else return t.
 
 NOTE: a succesfull transaction might not have a result associated, as
 'ah-cleartool-tq-handler' passes the result to the callback function
 if that is available."
   (when tid
-    (with-timeout (ah-cleartool-timeout
-                   ;; restart cleartool on timeout and signal an error
+
+    (while (< ah-cleartool-ctid tid)
+      (let ((pmpos
+             (marker-position (process-mark (tq-process ah-cleartool-tq))))
+            (sit-for-time 0.1))
+
+        ;; wait for the transaction to complete.  We increase the
+        ;; sit-for-time by 10% in each loop.
+        (with-timeout ((or timeout ah-cleartool-timeout))
+          (while (< ah-cleartool-ctid tid)
+            (sit-for sit-for-time)
+            (setq sit-for-time (* sit-for-time 1.1))))
+
+        (when (and (< ah-cleartool-ctid tid)
+                   (equal pmpos
+                          (marker-position
+                           (process-mark (tq-process ah-cleartool-tq)))))
+          ;; so our transaction is not yet complete and cleartool
+          ;; hasn't written anything for us.  Assume that cleartool is
+          ;; hung and kill it.
                    (ah-cleartool-tq-stop)
                    (ah-cleartool-tq-start)
-                   (error "Cleartool timed out"))
-      (while (< ah-cleartool-ctid tid)
-        (sit-for 0.1)))
-    ;; if we are here, (>= ah-cleartool-ctid tid)
+          (error "Cleartool timed out"))))
+
+    ;; if we are here, the transaction is complete.
     (let ((err (assq tid ah-cleartool-terr))
           (result (assq tid ah-cleartool-tresults)))
       (when err
@@ -1151,7 +1193,12 @@ This is always locking, for every FILE."
 
 (defun vc-clearcase-workfile-unchanged-p (file)
   "Is FILE unchangned?"
-  (not (vc-clearcase-diff file)))
+  (condition-case nil
+      (progn
+        (ah-cleartool-ask
+         (format "diff -predecesor -options -status_only \"%s\"" file))
+        t)
+    (error nil)))
 
 (defun vc-clearcase-mode-line-string (file)
   "Return the mode line string for FILE."

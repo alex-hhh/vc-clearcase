@@ -1,3 +1,9 @@
+2004-12-01  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-label-diff-report): 1.27 bugfix:
+	wait until both cleartool processes finished (used to wait until
+	one of them finished, an 'and' was replaced by an 'or')
+
 2004-11-28  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-fprop-checkout-will-branch-p):

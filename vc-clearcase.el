@@ -1037,6 +1037,13 @@ is returned, the file might still need a patch (needs-patch)."
             'needs-merge)
         'up-to-date))))
 
+
+;; NOTE: this does not work corectly, as the 'need-update state is not
+;; detected (we need to run a cleartool update and parse the resulting
+;; file).  The vc's dir-state is also inefficient for clearcase, as it
+;; calls this function for each sub-directory when we could get the
+;; state more efficiently for the entire sub-directory tree.
+
 (defun vc-clearcase-dir-state (dir)
   "Retrieve version state in DIR.  Fast."
   (when (string-match "\\(\\\\\\|/\\)$" dir)
@@ -1199,6 +1206,17 @@ otherwise return nil."
             (cons (nth 3 elements) (nth 2 elements)))
         nil))))
 
+;; TODO: We should accept several checkout modes:
+;;
+;; 1/ Do we want a checkout comment (-cfile) or not (-nc)
+;;
+;; 2/ Do we want to go exclusive reserved, exclusive unreserved or try
+;; reserved than unreserved
+;;
+;; Since the VC code might call this function and assumes we won't
+;; bother the user, only -nc -unreserved can provide that.
+;;
+
 (defun vc-clearcase-checkout (file &optional editable rev destfile)
   "Checkout FILE.
 
@@ -1230,6 +1248,9 @@ This method does three completely different things:
                                 "Enter a checkout comment"
                                 #'ah-clearcase-finish-checkout-unreserved)
               (message "Aborted")))))
+
+    ;; This will go in vc-clearcase-find-version when the next emacs
+    ;; version comes out.
     (if destfile
         ;; Check out an arbitrary version to the specified file
         (progn
@@ -1238,13 +1259,13 @@ This method does three completely different things:
                        (ah-clearcase-fprop-file file))))
           (when (string= rev "")
             (error "Refusing to checkout head of trunk"))
-          (ah-cleartool-ask (concat "get -to \"" destfile "\" \""
-                                    file "@@" rev "\"")))
+          (ah-cleartool-ask
+           (format "get -to \"%s\" \"%s@@%s\"" destfile file rev)))
 
-      ;; Update the file to the config spec
       (progn
         (when rev               ; The user should edit the config spec
           (error "Cannot to update to a specific revision"))
+        ;; Update to the configspec
         (let ((update-result
                (ah-cleartool-ask (format "update -rename \"%s\"" file))))
           (when (string-match
@@ -1889,7 +1910,8 @@ it."
 (define-key-after vc-menu-map [vc-clearcase-gui-vtree-browser]
   '("Browse version tree (GUI)" . vc-clearcase-gui-vtree-browser) 'separator2)
 
-;; 'borrowed' from pcvs-defs.el
+;; 'borrowed' from pcvs-defs.el, Clearcase commands that are not file
+;; related will go in a Clearcase menu under Tools.
 (defvar clearcase-global-menu
   (let ((m (make-sparse-keymap "Clearcase")))
     (define-key m [vc-clearcase-list-checkouts]

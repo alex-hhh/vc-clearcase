@@ -1,0 +1,39 @@
+2004-08-14  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.3 all packages are required at runtime
+	(ah-clearcase-fprop-initialized-p): 1.3 doc update
+	(ah-clearcase-fprop-reset): 1.3 accepts a NIL fprop, doc update
+	(ah-clearcase-fprop-set-version): 1.3 set version info for
+	hijacked files as well but omit the checkout mode and mode line
+	(ah-clearcase-fprop-set-version-simple): 1.3 set basic information
+	even for hijacked files.
+	(ah-clearcase-snapshot-view-p): 1.3 reorganized
+	(ah-clearcase-dynamic-view-p): 1.3 new function
+	(ah-clearcase-vprop-prepare, ah-clearcase-maybe-set-vc-state,
+	vc-clearcase-registered, vc-clearcase-state,
+	vc-clearcase-dir-state, vc-clearcase-responsible-p,
+	vc-clearcase-checkin, ah-clearcase-revision-reserved-p,
+	vc-clearcase-checkout, vc-clearcase-revert, vc-clearcase-merge,
+	vc-clearcase-merge-news, vc-clearcase-diff): 1.3 the cleartool
+	command is constructed using a format string.  Accepts filenames
+	containing spaces.
+	(ah-clearcase-vprop-prepare): 1.3 fix test for view type (snapshot
+	or dynamic)
+	(ah-clearcase-gensym-prefix): 1.3 new variable
+	(with-checkedout-dir): 1.3 new macro
+	(with-comment-file): 1.3 new macro
+	(vc-clearcase-registered): 1.3 when the file is hijacked, ask
+	cleartool for information using the version extended pathname.
+	(vc-clearcase-register, vc-clearcase-rename-file): 1.3 use
+	with-checkedout-dir
+	(ah-clearcase-finish-checkout): 1.3 quote pname
+	(vc-clearcase-rename-file): 1.3 use
+	ah-clearcase-with-checked-out-dir
+	(ah-clearcase-edcs-mode): 1.3 fix typo in name
+	(vc-clearcase-edcs): 1.3 don't wait for the previous lsview
+	transaction.
+	(ah-clearcase-tmpdir): 1.3 new variable
+	(vc-clearcase-checkin, ah-clearcase-finish-checkout,
+	vc-clearcase-rename-file): 1.3 use with-comment-file
+
+

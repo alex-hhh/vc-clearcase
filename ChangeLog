@@ -1,3 +1,14 @@
+2005-01-17  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-fprop-set-version): 1.31 use the
+	case form
+	(ah-clearcase-vprop-get): 1.31 try to determine if the view is
+	dynamic.  For dynamic views ah-clearcase-declare-view is no longer
+	needed.
+	(vc-clearcase-diff): 1.31 use the ecase form.
+	(vc-clearcase-what-version): 1.31 use the case form
+	(ah-clearcase-setcs): 1.31 use the case form
+
 2004-12-29  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-tq-start): 1.30 on non windows

@@ -1,3 +1,13 @@
+2004-08-24  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.7 commentary moved inside a fold, some
+	functions moved around for better code structure
+	(ah-clearcase-refresh-files-in-view): 1.7 renamed from
+	ah-clearcase-after-setcs
+	(edcs-mode): 1.7 defined as an alias for ah-clearcase-edcs-mode.
+	(clearcase-global-menu): 1.7 Non file Clearcase commands go in
+	here instead of the Version Control menu.
+
 2004-08-22  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.6 TODO list update

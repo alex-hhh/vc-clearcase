@@ -1,3 +1,17 @@
+2005-03-31  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase): 1.37 toplevel customize group
+	added.
+	(ah-clearcase-cleartool-program): 1.37 new customize variable.
+	(ah-clearcase-vtree-program, ah-cleartool-timeout,
+	ah-cleartool-idle-timeout, ah-clearcase-diff-format,
+	ah-clearcase-diff-cleanup-flag): 1.37 changed to customize
+	variables.
+	(ah-cleartool-tq-start, ah-cleartool-do): 1.37 use
+	ah-clearcase-cleartool-program instead of the hardcoded
+	"cleartool"
+	(ah-clearcase-diff-cleanup-flag): 1.37
+
 2005-03-21  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-checkout): 1.36 bugfix: checking

@@ -1,3 +1,23 @@
+2004-11-04  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.23 checked spelling of all comments
+	(ah-cleartool-save-stop-data): 1.23 make it a defvar.  Not sure
+	why it was defined as a function.
+	(ah-cleartool-tq-stop): 1.23 ah-cleartool-save-stop-data is no
+	longer a function.
+	(ah-cleartool-ask): 1.23 don't print abort information when
+	clearool is timed out.
+	(vc-clearcase-workfile-unchanged-p): 1.23 different
+	implementation, as the -status_only option to cleardiff does not
+	work.
+	(vc-clearcase-register): 1.23 double the timeout for the mkelem
+	command.  It seems to fail all the time.
+	(vc-clearcase-checkout): 1.23 accept (eq rev t) as a request to
+	uptate to latest version.  Update version info when we've updated
+	the file.
+	(vc-clearcase-diff): 1.23 don't use replace-regexp, its
+	documentation said it is not designed for lisp programs.
+
 2004-10-16  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-idle-timeout): 1.22 new variable.
@@ -224,5 +244,3 @@
 	(ah-clearcase-tmpdir): 1.3 new variable
 	(vc-clearcase-checkin, ah-clearcase-finish-checkout,
 	vc-clearcase-rename-file): 1.3 use with-comment-file
-
-

@@ -102,10 +102,6 @@
 ;; pops up, and vc-merge assumes the file was already checked out.  We
 ;; need to do an automatic checkout in this case, but how do we detect
 ;; it?
-;;
-;; On solaris, when cleartool starts up it prints out the prompt,
-;; causing an error from tq.  The error can be safely ignored, but it
-;; is annoying.
 
 ;;}}}
 
@@ -220,6 +216,18 @@ Cleans up properly if cleartool exits."
   "Start the transaction queue to cleartool."
   (let ((process
          (start-process "cleartool" " *cleartool*" "cleartool" "-status")))
+    (when (not (eq system-type 'windows-nt))
+      ;; on systems other than windows-nt, cleartool will print a
+      ;; prompt when it starts up and tq will complain about it.  In
+      ;; these cases, we wait until the propmt is printed, and start
+      ;; the tq afterwards.
+      (with-timeout (5 (error "Timeout waiting for cleartool to start"))
+        (with-current-buffer (get-buffer " *cleartool*")
+          (goto-char (point-min))
+          (while (not (looking-at "cleartool 1> $"))
+            (accept-process-output process 2)
+            (goto-char (point-min)))
+          (erase-buffer))))
     (set-process-sentinel process #'ah-cleartool-tq-sentinel)
     (process-kill-without-query process nil)
     (setq ah-cleartool-tq (tq-create process)
@@ -332,50 +340,61 @@ if that is available."
 
   (assert tid nil "nil `tid' passed to ah-cleartool-wait-for")
 
-    ;; we use an external loop so that if the with-timeout form exits
-    ;; but the process has sent some data we can start the wait again.
-    ;; We don't want to abort a cleartool command that is sending us
-    ;; lots of data and takes longer than our timeout.
-    (while (< ah-cleartool-ctid tid)
-      (let (received-some-data
-            (cleartool-process (tq-process ah-cleartool-tq)))
-        (with-timeout ((or timeout ah-cleartool-timeout))
-          (while (< ah-cleartool-ctid tid)
-            (setq received-some-data
-                  (or received-some-data
-                      ;; will return t if some data was received
-                      (accept-process-output cleartool-process 2)))
+  ;; we use an external loop so that if the with-timeout form exits
+  ;; but the process has sent some data we can start the wait again.
+  ;; We don't want to abort a cleartool command that is sending us
+  ;; lots of data and takes longer than our timeout.
+  (while (< ah-cleartool-ctid tid)
+    (let (received-some-data
+          (cleartool-process (tq-process ah-cleartool-tq)))
+      (with-timeout ((or timeout ah-cleartool-timeout))
+        (while (< ah-cleartool-ctid tid)
+          (setq received-some-data
+                (or received-some-data
+                    ;; will return t if some data was received
+                    (accept-process-output cleartool-process 2)))
 
-            ;; Hmm, sometimes the input from cleartool is not
-            ;; processed in accept-process-output and we need to call
-            ;; sit-for with a non zero argument.  This occurs when we
-            ;; 'uncheckout' a revision.  It will loop forever (outer
-            ;; while) since `ah-cleartool-tq-handler' is not called to
-            ;; increment `ah-cleartool-ctid'.  There's some race
-            ;; condition here, but I'm not sure what it is.  Do not
-            ;; remove the sit-for call witout understanding what it
-            ;; does.  If you remove it, it will work in 99% of the
-            ;; cases and fail misteriously in 1%.
-            (sit-for 0.1)))
+          ;; Hmm, sometimes the input from cleartool is not processed
+          ;; in accept-process-output and we need to call sit-for with
+          ;; a non zero argument.  This occurs when we 'uncheckout' a
+          ;; revision.  It will loop forever (outer while) since
+          ;; `ah-cleartool-tq-handler' is not called to increment
+          ;; `ah-cleartool-ctid'.  There's some race condition here,
+          ;; but I'm not sure what it is.  Do not remove the sit-for
+          ;; call witout understanding what it does.  If you remove
+          ;; it, it will work in 99% of the cases and fail
+          ;; misteriously in 1%.
+          (when (< ah-cleartool-ctid tid)
+            (sit-for 0.1))))
 
-        (when (and (not received-some-data)
-                   (< ah-cleartool-ctid tid))
-          ;; so our transaction is not yet complete and cleartool
-          ;; hasn't written anything for us.  Assume that cleartool
-          ;; is hung and kill it.
-          (ah-cleartool-tq-stop)
-          (ah-cleartool-tq-start)
-          (error "Cleartool timed out"))))
+      (when (and (not received-some-data)
+                 (< ah-cleartool-ctid tid))
+        ;; so our transaction is not yet complete and cleartool
+        ;; hasn't written anything for us.  Assume that cleartool
+        ;; is hung and kill it.
+        (ah-cleartool-tq-stop)
+        (ah-cleartool-tq-start)
+        (error "Cleartool timed out"))))
 
-    ;; if we are here, the transaction is complete.
-    (let ((err (assq tid ah-cleartool-terr))
-          (result (assq tid ah-cleartool-tresults)))
-      (when err
-        (setq ah-cleartool-terr (assq-delete-all tid ah-cleartool-terr)))
-      (when result
-        (setq ah-cleartool-tresults
-              (assq-delete-all tid ah-cleartool-tresults)))
-      (if err (error (cdr err)) (if result (cdr result) t))))
+  ;; if we are here, the transaction is complete.
+
+  ;; see if we have an error and signal it
+  (let ((err (assq tid ah-cleartool-terr)))
+    (when err
+      (setq ah-cleartool-terr (assq-delete-all tid ah-cleartool-terr))
+      (error (cdr err))))
+
+  ;; else search for a result
+  (let ((result (assq tid ah-cleartool-tresults)))
+    (if result
+        ;; if we have a result, delete it from the list and return it
+        (progn
+          (setq ah-cleartool-tresults
+                (assq-delete-all tid ah-cleartool-tresults))
+          (cdr result))
+      ;; else return t, meaning that the transaction is complete but
+      ;; it returned no data.
+      t)))
 
 (defun ah-cleartool-ask (question &optional wait closure fn)
   "Enqueue QUESTION to the cleartool-tq.
@@ -1024,9 +1043,6 @@ When all is finished, COMMENT-FILE is removed."
          (delete-file comment-file))))
 
   )                                     ; eval-when-compile
-
-(put 'with-checkedout-dir 'lisp-indent-function 1)
-(put 'with-comment-file 'lisp-indent-function 1)
 
 
 
@@ -2296,5 +2312,11 @@ it."
 (ah-cleartool-tq-maybe-start)
 
 (provide 'vc-clearcase)
+
+;;; Local Variables:
+;;; eval: (progn
+;;;         (put 'with-checkedout-dir 'lisp-indent-function 1)
+;;;         (put 'with-comment-file 'lisp-indent-function 1))
+;;; End:
 
 ;;; vc-clearcase.el ends here

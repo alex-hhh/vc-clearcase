@@ -1,3 +1,17 @@
+2004-12-29  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-tq-start): 1.30 on non windows
+	systems, wait for the cleartool prompt, erase it from the process
+	buffer and only than start the transaction queue.  This avoids a
+	'spurious' error from the tq package when we start it.
+	(ah-cleartool-wait-for): 1.30 only call sit-for when the
+	transaction is not complete -- response time is much improved this
+	way.  Also the code for processing the resut has been rewriten to
+	avoid unnecessary operations.
+	Indentation information for the with-checkedout-dir and
+	with-comment-file is now at the end of the file, to be eval-ed
+	when the file is loaded.
+
 2004-12-26  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-idle-timeout): 1.29 increased to

@@ -153,7 +153,7 @@ us." )
   "A regexp that matches a question asked by cleartool")
 
 (defconst ah-cleartool-tq-rx
-  (concat "\\(" ah-cleartool-status-rx 
+  (concat "\\(" ah-cleartool-status-rx
           "\\)\\|\\(" ah-cleartool-question-rx "\\)"))
 
 (defvar ah-cleartool-timeout 20
@@ -266,8 +266,8 @@ calls the function callback with the answer."
                       (push (cons tid result) ah-cleartool-tresults))))))
           ((string-match ah-cleartool-question-rx answer)
            (push (cons tid answer) ah-cleartool-terr))
-          (t 
-           (error 
+          (t
+           (error
             "Ah-cleartool-tq-handler: answer does not have a status")))))
 
 (defun ah-cleartool-wait-for (tid &optional timeout)
@@ -584,7 +584,7 @@ Return the number of records actually moved."
   parent
   latest
   latest-sel                            ; latest selector (LATEST)
-  checkout                    ; nil, 'reserved, 'unreserved, 'hijacked
+  checkout      ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
   mode-line
   base
   branch
@@ -639,9 +639,7 @@ This can happen in snapshot views, occasionally cleartool reports
 that another process does an update and refuses to operate on the
 files.  The solution to the problem is to run an update on the
 whole view, but it is beyond the scope of this FPROP."
-  (if (string-match "rule info unavailable" (ah-clearcase-fprop-what-rule fprop))
-      t
-    nil))
+  (eq (ah-clearcase-fprop-checkout fprop) 'broken-view))
 
 (defun ah-clearcase-wash-mode-line (mode-line)
   "Make the modeline string shorter by replacing some of the words in
@@ -682,7 +680,8 @@ file' command."
         (setf (ah-clearcase-fprop-parent fprop) pver)
         ;; a hijacked file should keep its existing checkout status
         ;; and modeline (set by ah-clearcase-fprop-set-version-simple)
-        (unless (ah-clearcase-fprop-hijacked-p fprop)
+        (unless (or (ah-clearcase-fprop-hijacked-p fprop)
+                    (ah-clearcase-fprop-broken-view-p fprop))
           (setf (ah-clearcase-fprop-checkout fprop) co-mode)
           (setf (ah-clearcase-fprop-mode-line fprop)
                 (ah-clearcase-wash-mode-line
@@ -710,9 +709,16 @@ Ls-string is returned by a 'cleartool ls file' command."
       ;; do we need to set these here?
       (setf (ah-clearcase-fprop-base fprop) base)
       (setf (ah-clearcase-fprop-branch fprop) branch)))
-  (when (string-match "hijacked" ls-string)
-    (setf (ah-clearcase-fprop-checkout fprop) 'hijacked)
-    (setf (ah-clearcase-fprop-mode-line fprop) "Cc:HIJACKED")))
+
+  ;; The ls string will also tell us when something is wrong with the
+  ;; file.
+  (cond ((string-match "hijacked" ls-string)
+         (setf (ah-clearcase-fprop-checkout fprop) 'hijacked)
+         (setf (ah-clearcase-fprop-mode-line fprop) "Cc:HIJACKED"))
+
+        ((string-match "rule info unavailable" ls-string)
+         (setf (ah-clearcase-fprop-checkout fprop) 'broken-view)
+         (setf (ah-clearcase-fprop-mode-line fprop) "Cc:BROKEN-VIEW"))))
 
 ;;}}}
 
@@ -912,7 +918,7 @@ If DIR was checked out by us, check it back in."
 
 Binds the name of the temporary file to the variable COMMENT-FILE.
 When alll is finished, COMMENT-FILE is removed."
-  `(let ((comment-file 
+  `(let ((comment-file
           (make-temp-name (concat ah-clearcase-tmpdir "/clearcase-")))
          (comment-text ,comment-text))
      (unwind-protect
@@ -1279,10 +1285,10 @@ This method does three completely different things:
                 (cond
                  ;; if the checkout will create a branch, checkout
                  ;; reserved
-                 ((string-match 
+                 ((string-match
                    "-mkbranch" (ah-clearcase-fprop-what-rule fprop))
                   'ah-clearcase-finish-checkout-reserved)
-                
+
                  ;; if someone else has checked out this revision in
                  ;; reserved mode, ask the user if he wants an
                  ;; unreserved checkout.
@@ -1301,7 +1307,7 @@ This method does three completely different things:
                       ;; reserved.
                       'ah-clearcase-finish-checkout-reserved))))))
           (if checkout-mode
-              (vc-start-entry 
+              (vc-start-entry
                file rev nil nil "Enter a checkout comment" checkout-mode)
             (message "Aborted."))))
 
@@ -1609,7 +1615,7 @@ element * NAME -nocheckout"
              (message nil))))
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
-    (ah-cleartool-ask 
+    (ah-cleartool-ask
      (format "mklabel -nc %s %s lbtype:%s \"%s\""
              (if branchp "-replace" "")
              (if dir? "-recurse" "")
@@ -1620,8 +1626,8 @@ element * NAME -nocheckout"
           (while t               ; until cleartool will throw an error
             (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
             (setq dir (file-name-directory dir))
-            (ah-cleartool-ask 
-             (format "mklabel -nc %s lbtype:%s \"%s\"" 
+            (ah-cleartool-ask
+             (format "mklabel -nc %s lbtype:%s \"%s\""
                      (if branchp "-replace" "") name dir)))
         (error nil))))
     (message "Finished applying label"))

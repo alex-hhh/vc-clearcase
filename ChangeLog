@@ -1,3 +1,16 @@
+2004-11-28  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-fprop-checkout-will-branch-p):
+	1.26 new function.
+	(vc-clearcase-state-needs-update): no longer needed.
+	(vc-clearcase-state): 1.26 vc-clearcase-state-heuristic now
+	returns full state info, no longer need to run a cleartool update.
+	(vc-clearcase-state-heuristic): 1.26 now computes the full
+	clearcase state (for the purposes of vc-clearcase.el).  In
+	particular, the needs-patch case is also detected.
+	(vc-clearcase-checkout): 1.26 use
+	ah-clearcase-fprop-checkout-will-branch-p
+
 2004-11-17  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-annotate-show-color-map): 1.25 removed, as

@@ -2271,59 +2271,6 @@ it."
 
 ;;}}}
 
-;;{{{ ah-annotate-show-color-map
-
-(defun ah-annotate-show-color-map ()
-  "Display a color map as a guide for the annotate colors.
-
-This function mimics vc.el from Emacs 21.3.1 and will need to be
-updated for later versions."
-  (interactive)
-  (let ((days-code
-         (apply #'mapcar* #'list
-                (mapcar (lambda (x)
-                          (vc-annotate-time-span vc-annotate-color-map x))
-                        (cons 1 vc-annotate-menu-elements))))
-        (code-name
-         (cons "Default"
-               (let ((max-days (caar (reverse vc-annotate-color-map))))
-                 (mapcar (lambda (x)
-                           (format "%d days" (round (* max-days x 0.7585))))
-                         vc-annotate-menu-elements))))
-        (code-faces
-         (mapcar (lambda (x)
-                   (let ((face-name
-                          (concat "ah-annotate-face-" (substring (cdr x) 1))))
-                     (or (intern-soft face-name)
-                         (let ((tmp-face (make-face (intern face-name))))
-                           (set-face-foreground tmp-face (cdr x))
-                           (if vc-annotate-background
-                               (set-face-background tmp-face
-                                                    vc-annotate-background))
-                           tmp-face))))
-                 vc-annotate-color-map)))
-
-    (with-current-buffer (get-buffer-create "*Annotate Color Map*")
-      (setq buffer-read-only t)
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (goto-char (point-min))
-        (insert "\nTime span: ")
-        (mapcar (lambda (x) (insert (format "%10s  " x))) code-name)
-        (insert "\n\n")
-        (mapcar* (lambda (x y)
-                   (let ((beg (point)))
-                     (insert "           ")
-                     (mapcar (lambda (y)
-                               (insert (format "%10.2f  " (car y))))
-                             x)
-                     (put-text-property beg (point) 'face y)
-                     (insert "\n")))
-                 days-code code-faces)
-        (pop-to-buffer (current-buffer))))))
-
-;;}}}
-
 ;;{{{ Debugging aids
 
 (defun ah-clearcase-trace-cleartool-tq ()

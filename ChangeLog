@@ -1,3 +1,8 @@
+2005-04-02  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-log-view-again): 1.38 erase the
+	buffer before running the cleartool command.
+
 2005-03-31  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase): 1.37 toplevel customize group

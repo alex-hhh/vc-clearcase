@@ -79,9 +79,9 @@
 
 (require 'tq)
 (eval-when-compile
-  (require 'cl)
   (require 'vc-hooks)
   (require 'vc))
+(require 'cl) ; we ask for this at runtime because we use find-if, remove-if-not, etc
 
 
 ;;{{{ Cleartool transaction queue interface
@@ -187,23 +187,20 @@ and either stores the answer in `ah-cleartool-terr' or
 `ah-cleartool-tresults' for later retrieval by `ah-cleartool-wait-for', or
 calls the function callback with the answer."
 
-  ;; NOTE: we use let* instead of let because they are slightly faster
-  ;; in emacs
-
   (save-match-data
     (if (string-match ah-cleartool-status-rx answer)
-        (let* ((cmd (string-to-int (match-string 1 answer)))
-               (status (string-to-int (match-string 2 answer))))
+        (let ((cmd (string-to-int (match-string 1 answer)))
+              (status (string-to-int (match-string 2 answer))))
           (unless (eq ah-cleartool-next-command cmd)
             ;; transaction queue is out of sync, stop it
             (ah-cleartool-tq-stop)
             (error "Unexpected command index received"))
           ;; it's the command we're expecting
           (incf ah-cleartool-next-command)
-          (let* ((result (replace-match "" t t answer))
-                 (tid (aref closure 0))
-                 (cb-closure (aref closure 1))
-                 (cb (aref closure 2)))
+          (let ((result (replace-match "" t t answer))
+                (tid (aref closure 0))
+                (cb-closure (aref closure 1))
+                (cb (aref closure 2)))
             (setq ah-cleartool-ctid tid) ; assume tid's always grow
             (cond ((> status 0)
                    (push (cons tid result) ah-cleartool-terr))
@@ -1390,20 +1387,17 @@ element * NAME -nocheckout"
   "Rename file OLD to NEW, both in the working area and in the
 repository."
   (let* ((comment (format "*renamed from %s to %s*" old new))
-         (cfile (make-temp-name
-                 (concat (or (getenv "TEMP") "/tmp") "/clearcase-")))
+         (cfile (make-temp-name (concat (or (getenv "TEMP") "/tmp") "/clearcase-")))
          (old-dir (file-name-directory old))
          (new-dir (file-name-directory new))
 
          (old-needs-checkout?
-          (string= "" (ah-cleartool-ask
-                       (concat "desc -fmt \"%Rf\" " old-dir))))
+          (string= "" (ah-cleartool-ask (concat "desc -fmt \"%Rf\" " old-dir))))
 
          ;; if old-dir is the same as new-dir, it will not need a checkout
          (new-needs-checkout?
           (and (not (string= old-dir new-dir))
-               (string= "" (ah-cleartool-ask
-                            (concat "desc -fmt \"%Rf\" " new-dir))))))
+               (string= "" (ah-cleartool-ask (concat "desc -fmt \"%Rf\" " new-dir))))))
     (unwind-protect
         (progn
           (when old-needs-checkout?

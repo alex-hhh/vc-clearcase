@@ -199,6 +199,26 @@ signal an error with the error message." )
 Transactions that don't have a callback function attached, will have
 their answer stored here for retrieval by 'ah-cleartool-wait-for'.")
 
+;; Create an error that will be signaled when Cleartool reports an
+;; error.  We need it so we can filter errors that come from cleartool
+;; itself (which we might want to ignore) and other errors.
+(put 'ah-cleartool-error 'error-conditions '(error ah-cleartool-error))
+(put 'ah-cleartool-error 'error-message "cleartool")
+
+(defun ah-cleartool-signal-error (message)
+  "Signal an error from cleartool.  
+MESSAGE is searched for an error from cleartool and that error is
+signaled as an `ah-cleartool-error' error.  If MESSAGE does not
+contain a cleartool error, the entire MESSAGE is signaled.  If
+multiple cleartool errors are found, the first one is signaled, but
+the string \"(multiple)\" is prepended to it."
+  (let* ((tag "cleartool: Error: \\(.*\\)")
+         (pos (string-match tag message))
+         (str (if pos (match-string 1 message) message)))
+    (when (string-match tag message (1+ pos))
+      (setq str (concat "(multiple) " str)))
+    (while t (signal 'ah-cleartool-error (list str)))))
+
 (defun ah-cleartool-tq-sentinel (process event)
   "Sentinel for the cleartool command.
 
@@ -382,7 +402,7 @@ if that is available."
   (let ((err (assq tid ah-cleartool-terr)))
     (when err
       (setq ah-cleartool-terr (assq-delete-all tid ah-cleartool-terr))
-      (error (cdr err))))
+      (ah-cleartool-signal-error (cdr err))))
 
   ;; else search for a result
   (let ((result (assq tid ah-cleartool-tresults)))
@@ -841,8 +861,7 @@ Ls-string is returned by a 'cleartool ls file' command."
   type                                  ; (nil 'snapshot 'dynamic)
   )
 
-(defvar ah-clearcase-all-vprops
-  (make-hash-table :test 'equal))
+(defvar ah-clearcase-all-vprops '())
 
 (defsubst ah-clearcase-snapshot-view-p (view)
   "Return t if VIEW is a snapshot view.
@@ -906,10 +925,12 @@ returned (if no such vprop exists, it is created first)
                            ((ah-clearcase-fprop-p view-tag)
                             (ah-clearcase-fprop-view-tag view-tag))
                            (t (error "Unknown type for VIEW-TAG")))))
-      (let ((vprop (gethash vtag-name ah-clearcase-all-vprops)))
+      (let ((vprop (find-if (lambda (x)
+                              (string= vtag-name (ah-clearcase-vprop-name x)))
+                            ah-clearcase-all-vprops)))
         (unless vprop
           (setq vprop (ah-clearcase-make-vprop :name vtag-name))
-          (puthash vtag-name vprop ah-clearcase-all-vprops)
+          (push vprop ah-clearcase-all-vprops)
 
           ;; find out if this is a started dynamic view.  This allows
           ;; to set configspec in dynamic views without having to
@@ -1055,6 +1076,12 @@ When all is finished, COMMENT-FILE is removed."
              ,@forms)
          (delete-file comment-file))))
 
+  (defmacro ignore-cleartool-errors (&rest forms)
+    "Execute forms, trapping any cleartool errors and ignoring them"
+    `(condition-case nil
+         (progn ,@forms)
+       (ah-cleartool-error nil)))
+
   )                                     ; eval-when-compile
 
 
@@ -1091,33 +1118,32 @@ version."
   (let ((fprop (ah-clearcase-fprop-file file)))
     (if (ah-clearcase-fprop-initialized-p fprop)
         t
-      (condition-case nil
-          (progn
-            (unless fprop (setq fprop (ah-clearcase-make-fprop)))
-            (let ((ls-result (ah-cleartool-ask (format "ls \"%s\"" file))))
-              (if (string-match "Rule: \\(.*\\)$" ls-result)
-                  ;; file is registered
-                  (progn
-                    (ah-clearcase-fprop-set-version-simple fprop ls-result)
-                    ;; anticipate that the version will be needed
-                    ;; shortly, so ask for it.  When a file is
-                    ;; hijacked, do the desc command on the version
-                    ;; extended name of the file, as cleartool will
-                    ;; return nothing for the hijacked version...
-                    (let ((pname
-                           (if (ah-clearcase-fprop-hijacked-p fprop)
-                               (concat file "@@"
-                                       (ah-clearcase-fprop-version fprop))
-                             file)))
-                      (setf (ah-clearcase-fprop-version-tid fprop)
-                            (ah-cleartool-ask
-                             (format "desc -fmt \"%%Sn %%PSn %%Rf\" \"%s\""
-                                     pname)
-                             'nowait fprop #'ah-clearcase-fprop-set-version))
-                      (vc-file-setprop file 'vc-clearcase-fprop fprop))
-                    t)                  ;file is registered
-                nil)))                  ;file is not registered
-        (error nil)))))
+      (ignore-cleartool-errors
+       (unless fprop (setq fprop (ah-clearcase-make-fprop)))
+       (let ((ls-result (ah-cleartool-ask (format "ls \"%s\"" file))))
+         (if (string-match "Rule: \\(.*\\)$" ls-result)
+             ;; file is registered
+             (progn
+               (ah-clearcase-fprop-set-version-simple fprop ls-result)
+               ;; anticipate that the version will be needed
+               ;; shortly, so ask for it.  When a file is
+               ;; hijacked, do the desc command on the version
+               ;; extended name of the file, as cleartool will
+               ;; return nothing for the hijacked version...
+               (let ((pname
+                      (if (ah-clearcase-fprop-hijacked-p fprop)
+                          (concat file "@@"
+                                  (ah-clearcase-fprop-version fprop))
+                        file)))
+                 (setf (ah-clearcase-fprop-version-tid fprop)
+                       (ah-cleartool-ask
+                        (format "desc -fmt \"%%Sn %%PSn %%Rf\" \"%s\""
+                                pname)
+                        'nowait fprop #'ah-clearcase-fprop-set-version))
+                 (vc-file-setprop file 'vc-clearcase-fprop fprop))
+               t)                       ;file is registered
+           nil)))                       ;file is not registered
+      )))
 
 
 (defun vc-clearcase-state (file)
@@ -1316,9 +1342,10 @@ returns a 'pathname not within a VOB' error message."
             (if (ah-cleartool-ask (format "ls \"%s\"" file))
                 t
               nil)                      ; never reached
-          (error (if (string-match "Pathname is not within a VOB:" (cadr msg))
-                     nil
-                   t))))))
+          (ah-cleartool-error
+           (if (string-match "Pathname is not within a VOB:" (cadr msg))
+               nil
+             t))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE with COMMENT.  REV is ignored."
@@ -1738,12 +1765,15 @@ element * NAME -nocheckout"
   ;; let's see if the label exists
   (condition-case nil
       (ah-cleartool-ask (concat "desc lbtype:" name))
-    (error (progn
-             (message "Creating label %s" name)
-             (ah-cleartool-ask (concat "mklbtype -ordinary -nc lbtype:" name))
-             (message nil))))
+    (ah-cleartool-error
+     (progn
+       (message "Creating label %s" name)
+       (ah-cleartool-ask (concat "mklbtype -ordinary -nc lbtype:" name))
+       (message nil))))
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
+    ;; NOTE: the mklabel command might fail if some files are
+    ;; hijacked... The rest of the files will be labeled though...
     (ah-cleartool-ask
      (format "mklabel -nc %s %s lbtype:%s \"%s\""
              (if branchp "-replace" "")
@@ -1751,14 +1781,13 @@ element * NAME -nocheckout"
              name dir))
     (when dir?                     ; apply label to parent directories
       (message "Applying label to parent directories...")
-      (condition-case nil
-          (while t               ; until cleartool will throw an error
-            (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-            (setq dir (file-name-directory dir))
-            (ah-cleartool-ask
-             (format "mklabel -nc %s lbtype:%s \"%s\""
-                     (if branchp "-replace" "") name dir)))
-        (error nil))))
+      (ignore-cleartool-errors
+       (while t                  ; until cleartool will throw an error
+         (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+         (setq dir (file-name-directory dir))
+         (ah-cleartool-ask
+          (format "mklabel -nc %s lbtype:%s \"%s\""
+                  (if branchp "-replace" "") name dir))))))
   (message "Finished applying label"))
 
 ;;;; assign-name
@@ -2326,7 +2355,8 @@ it."
 ;;; Local Variables:
 ;;; eval: (progn
 ;;;         (put 'with-checkedout-dir 'lisp-indent-function 1)
-;;;         (put 'with-comment-file 'lisp-indent-function 1))
+;;;         (put 'with-comment-file 'lisp-indent-function 1)
+;;;         (put 'ignore-cleartool-errors 'lisp-indent-function 0))
 ;;; End:
 
 ;;; vc-clearcase.el ends here

@@ -585,7 +585,7 @@ Return the number of records actually moved."
   "Return the fprop structure associated with FILE."
   (vc-file-getprop file 'vc-clearcase-fprop))
 
-(defun ah-clearcase-fprop-initialized-p (fprop)
+(defsubst ah-clearcase-fprop-initialized-p (fprop)
   "Return true if FPROP is initialized.
 
 FPROP can be nil, meaning it is not initialized."
@@ -880,7 +880,8 @@ If DIR was checked out by us, check it back in."
 
 Binds the name of the temporary file to the variable COMMENT-FILE.
 When alll is finished, COMMENT-FILE is removed."
-  `(let ((comment-file (make-temp-name (concat ah-clearcase-tmpdir "/clearcase-")))
+  `(let ((comment-file 
+          (make-temp-name (concat ah-clearcase-tmpdir "/clearcase-")))
          (comment-text ,comment-text))
      (unwind-protect
          (progn
@@ -1234,22 +1235,37 @@ This method does three completely different things:
           ;; Technically, we can use the -out option, but I'm not sure
           ;; of all its implications.
           (error "Cannot checkout to a specific file"))
-        ;; let's find out if someone else has a reserved checkout on
-        ;; this revision
-        (let ((user-and-view (ah-clearcase-revision-reserved-p file)))
-          (if (eq user-and-view nil)
-              (vc-start-entry file rev nil nil
-                              "Enter a checkout comment"
-                              #'ah-clearcase-finish-checkout-reserved)
+
+        (let* ((fprop (ah-clearcase-fprop-file file))
+               (checkout-mode
+                (cond
+                 ;; if the checkout will create a branch, checkout
+                 ;; reserved
+                 ((string-match 
+                   "-mkbranch" (ah-clearcase-fprop-what-rule fprop))
+                  'ah-clearcase-finish-checkout-reserved)
+                
+                 ;; if someone else has checked out this revision in
+                 ;; reserved mode, ask the user if he wants an
+                 ;; unreserved checkout.
+                 ((let ((user-and-view
+                         (ah-clearcase-revision-reserved-p file)))
+                    (if user-and-view
             (if (yes-or-no-p
                  (format
                   "This revision is checked out reserved by %s in %s.  %s"
                   (car user-and-view) (cdr user-and-view)
                   "Checkout unreserved? "))
-                (vc-start-entry file rev nil nil
-                                "Enter a checkout comment"
-                                #'ah-clearcase-finish-checkout-unreserved)
-              (message "Aborted")))))
+                            'ah-clearcase-finish-checkout-unreserved
+                          ;; will abort the checkout
+                          nil)
+                      ;; no one has this version checked out, checkout
+                      ;; reserved.
+                      'ah-clearcase-finish-checkout-reserved))))))
+          (if checkout-mode
+              (vc-start-entry 
+               file rev nil nil "Enter a checkout comment" checkout-mode)
+            (message "Aborted."))))
 
     ;; This will go in vc-clearcase-find-version when the next emacs
     ;; version comes out.
@@ -1415,7 +1431,19 @@ Only works for the clearcase log format defined in
             (when ah-clearcase-diff-cleanup-flag
               (replace-regexp "\r$" "" nil (point-min) (point-max)))
             (goto-char (point-min))
-            (not (looking-at "Files are identical"))))))))
+
+            (not
+             ;; the way we determine whether the files are identical
+             ;; depends on the diff format we use.
+             (cond ((eq ah-clearcase-diff-format 'diff)
+                    ;; diff format has an empty buffer
+                    (equal (point-min) (point-max)))
+                   ((eq ah-clearcase-diff-format 'serial)
+                    ;; serial format prints "Files are identical", so
+                    ;; we look for that.
+                    (looking-at "Files are identical"))
+                   (t (error "Unknown diff format"))))))))))
+
 
 ;;;; diff-tree
 
@@ -1712,6 +1740,9 @@ made to the views)."
 
 (defvar ah-clearcase-edcs-view-tag nil
   "The name of the view whose configspec we are editing.")
+
+;; NOTE: for some configspecs cleartool will want to ask questions, I
+;; didn't find a way to turn that off.
 
 (defun ah-clearcase-setcs (&optional buffer view-tag)
   "Set the configspec found in BUFFER to the VIEW-TAG.

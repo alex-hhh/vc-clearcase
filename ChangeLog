@@ -1,3 +1,27 @@
+2004-08-22  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.6 TODO list update
+	(ah-clearcase-wash-mode-line): 1.6 new function
+	(ah-clearcase-fprop-set-version): 1.6 use
+	ah-clearcase-wash-mode-line, don't add '.../' to the mode-line
+	string
+	(ah-clearcase-vprop-prepare): 1.6 rewritten
+	(ah-clearcase-diff-format, ah-clearcase-diff-cleanup-flag): 1.6
+	new variables
+	(vc-clearcase-diff): 1.6 use ah-clearcase-diff-format and
+	ah-clearcase-diff-cleanup-flag
+	(vc-clearcase-what-version): 1.6 new function
+	(ah-clearcase-view-tag-complete): 1.6 use compare-string instead
+	of string= and substring
+	(vc-clearcase-edcs): 1.6 don't remove the old view-tag list
+
+2004-08-15  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (with-checkedout-dir, with-comment-file): 1.5
+	found out about ,@
+	(ah-clearcase-edcs-mode): 1.5 add syntax codes for the comment
+	character and setup comment-start & co
+
 2004-08-14  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.3 all packages are required at runtime

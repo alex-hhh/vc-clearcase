@@ -1456,6 +1456,11 @@ This method does three completely different things:
         (let* ((fprop (ah-clearcase-fprop-file file))
                (checkout-mode
                 (cond
+                 ;; if the checkout will create a branch, checkout
+                 ;; reserved
+                 ((ah-clearcase-fprop-checkout-will-branch-p fprop)
+                  'ah-clearcase-finish-checkout-reserved)
+
                  ;; if we are not latest on branch and we are asked to
                  ;; checkout this version (eq rev nil), we checkout
                  ;; unseserved.
@@ -1465,11 +1470,6 @@ This method does three completely different things:
                   ;; patch rev first
                   (setq rev (ah-clearcase-fprop-version fprop))
                   'ah-clearcase-finish-checkout-unreserved)
-
-                 ;; if the checkout will create a branch, checkout
-                 ;; reserved
-                 ((ah-clearcase-fprop-checkout-will-branch-p fprop)
-                  'ah-clearcase-finish-checkout-reserved)
 
                  ;; if someone else has checked out this revision in
                  ;; reserved mode, ask the user if he wants an

@@ -1,3 +1,8 @@
+2005-07-12  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-finish-checkout): 1.40 pass -ptime
+	parameter to the checkout command.
+
 2005-04-02  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-log-view-again): 1.38 erase the

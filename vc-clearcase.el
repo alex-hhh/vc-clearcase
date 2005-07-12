@@ -250,7 +250,7 @@ Cleans up properly if cleartool exits."
 (defun ah-cleartool-tq-start ()
   "Start the transaction queue to cleartool."
   (let ((process
-         (start-process "cleartool" " *cleartool*" 
+         (start-process "cleartool" " *cleartool*"
                         ah-clearcase-cleartool-program "-status")))
     (when (not (eq system-type 'windows-nt))
       ;; on systems other than windows-nt, cleartool will print a
@@ -1380,10 +1380,18 @@ returns a 'pathname not within a VOB' error message."
 
 FILE, REV and COMMENT are the same as the one from
 `vc-clearcase-checkout', MODE selects the checkout mode and can be
-'reserved or 'unreserved"
+'reserved or 'unreserved."
+
+  ;; NOTE: we pass the -ptime to checkout to preserve the modification
+  ;; time of the file in a dynamic view (cleartool preserves it
+  ;; automatically in a static view).  If we don't do that, vc.el will
+  ;; be confused and will try to ckeck-in an unmodified file (without
+  ;; bothering to do a difff) instead of reverting the checkout.
   (with-comment-file comment
     (let ((pname (if rev (concat file "@@" rev) file))
-          (options (concat "-cfile " comment-file " " (when rev "-version ")))
+          (options (concat "-ptime "
+                           "-cfile " comment-file
+                           " " (when rev "-version ")))
           (co-mode (if (eq mode 'reserved) "-reserved " "-unreserved "))
           ;; increase the cleartool timeout for the checkout operation
           (ah-cleartool-timeout (* 1.5 ah-cleartool-timeout)))

@@ -119,6 +119,7 @@
 ;; we ask for this at runtime because we use find-if, remove-if-not,
 ;; etc
 (require 'cl)
+(require 'cc-defs)                      ; for c-point
 
 (defgroup vc-clearcase nil
   "Support for the ClearCase version control system."
@@ -177,7 +178,7 @@ when receiving data from it, not the total transaction time."
   :type 'integer
   :group 'vc-clearcase)
 
-(defcustom ah-cleartool-idle-timeout 900   ; 15 minutes
+(defcustom ah-cleartool-idle-timeout 900 ; 15 minutes
   "If cleartool is idle for this many seconds, we kill it at the next
 command.  The reason for this is that cleartool seems unresponsive
 after long periods of inactivity."
@@ -334,8 +335,8 @@ answer."
         (cb-closure (aref closure 1))
         (cb (aref closure 2)))
     (cond ((string-match ah-cleartool-status-rx answer)
-           (let ((cmd (string-to-int (match-string 1 answer)))
-                 (status (string-to-int (match-string 2 answer))))
+           (let ((cmd (string-to-number (match-string 1 answer)))
+                 (status (string-to-number (match-string 2 answer))))
              (unless (= ah-cleartool-next-command cmd)
                ;; transaction queue is out of sync, stop it
                (ah-cleartool-tq-stop)
@@ -1077,21 +1078,19 @@ If DIR was checked out by us, check it back in."
              (message "Checking in %s" ,real-dir)
              (ah-cleartool-ask (format "checkin -nc \"%s\"" ,real-dir)))))))
 
-  (defmacro with-comment-file (comment-text &rest forms)
-    "Save COMMENT-TEXT in a temporary file, than execute FORMS.
+  (defmacro with-comment-file (comment-vars &rest forms)
+    "Save a comment in a temporary file, than execute `FORMS'.
 
-Binds the name of the temporary file to the variable COMMENT-FILE.
-When all is finished, COMMENT-FILE is removed."
-    `(let ((comment-file
-            (make-temp-name (concat temporary-file-directory "/clearcase-")))
-           (comment-text ,comment-text))
+`COMMENT-VARS' is a list of (comment-file comment-text),
+commant-file will be bound to a temporary file name and
+comment-text will be saved into it.  When all is finished, the
+comment file is removed."
+    `(let ((,(car comment-vars)
+            (make-temp-name (concat temporary-file-directory "clearcase-"))))
        (unwind-protect
            (progn
-             (with-current-buffer (find-file-noselect comment-file)
-               (erase-buffer)           ; do we need this?
-               (insert comment-text)
-               (save-buffer)
-               (kill-buffer (current-buffer)))
+             (with-temp-file comment-file
+               (insert ,(cadr comment-vars)))
              ,@forms)
          (delete-file comment-file))))
 
@@ -1106,10 +1105,16 @@ When all is finished, COMMENT-FILE is removed."
 
 
 (defadvice vc-version-backup-file-name
-  (before ah-clearcase-cleanup-version (file &optional rev manual regexp))
+  (after ah-clearcase-cleanup-version (file &optional rev manual regexp))
   "Cleanup rev of \\ and / so it can be stored as a filename."
-  (when rev
-    (setf rev (replace-regexp-in-string "[\\\\/]" "~" rev))))
+  (when (string-match "~.*~" ad-return-value)
+    (let ((start (match-beginning 0))
+          (data (match-string 0 ad-return-value)))
+      (setq data (replace-regexp-in-string "[\\\\/]" "~" data))
+      (setq ad-return-value 
+            (concat (substring ad-return-value 0 start)
+                    data))))
+  ad-return-value)
 (ad-activate 'vc-version-backup-file-name)
 
 (defadvice vc-start-entry
@@ -1370,10 +1375,43 @@ returns a 'pathname not within a VOB' error message."
   "Checkin FILE with COMMENT.  REV is ignored."
   (when rev
     (message "Ignoring revision specification: %s" rev))
-  (with-comment-file comment
+  (with-comment-file (comment-file comment)
     ;; let the cleartool error be directly reported
     (ah-cleartool-ask (format "checkin -cfile %s \"%s\"" comment-file file))
     (ah-clearcase-maybe-set-vc-state file 'force)))
+
+
+(defun ah-clearcase-find-version-helper (file rev destfile)
+  "Get the `file' revision `rev' into `destfile'.
+This is a helper function user by both
+  `vc-clearcase-find-version' and `vc-clearcase-checkout' (since
+  we want to preserve the old vc-clearcase-checkout behaviour."
+  (when (string= rev "")
+    (error "Refusing to checkout head of trunk"))
+  (let ((fprop (ah-clearcase-fprop-file file)))
+    (unless rev
+      (setq rev (ah-clearcase-fprop-latest-sel fprop)))
+    (ah-cleartool-ask
+     (format "get -to \"%s\" \"%s@@%s\"" destfile file rev))))
+
+
+(defun vc-clearcase-find-version (file rev buffer)
+  "Fetch `file' revision `rev' and place it into `buffer'.
+
+If `rev' is nil, it will get the latest on the branch, if `rev'
+is the empty string, we signal an error, since head of trunk has
+no meaning in ClearCase."
+  (let ((tmpfile (make-temp-file (expand-file-name file))))
+    ;; it seems make-temp-file creates the file, and clearcase will
+    ;; refuse to get the version into an existing file.
+    (delete-file tmpfile)
+    (unwind-protect
+	(progn
+          (ah-clearcase-find-version-helper file rev tmpfile)
+	  (with-current-buffer buffer
+	    (insert-file-contents-literally tmpfile)))
+      (delete-file tmpfile))))
+
 
 (defun ah-clearcase-finish-checkout (file rev comment mode)
   "Finish a checkout started by 'vc-clearcase-checkout'.
@@ -1387,7 +1425,8 @@ FILE, REV and COMMENT are the same as the one from
   ;; automatically in a static view).  If we don't do that, vc.el will
   ;; be confused and will try to ckeck-in an unmodified file (without
   ;; bothering to do a difff) instead of reverting the checkout.
-  (with-comment-file comment
+
+  (with-comment-file (comment-file comment)
     (let ((pname (if rev (concat file "@@" rev) file))
           (options (concat "-ptime "
                            "-cfile " comment-file
@@ -1446,87 +1485,75 @@ otherwise return nil."
 ;;
 
 (defun vc-clearcase-checkout (file &optional editable rev destfile)
-  "Checkout FILE.
+  "Checkout `file' as per the checkout specification in vc.el.
 
 This method does three completely different things:
 
-  1/ Checkout a version of the file.
-  2/ Get a version of the file in a separate file
+  1/ Checkout a version of the file.  The real checkout.
+
+  2/ Get a version of the file in a separate file (this is for
+     backwards compatibility with Emacs 21)
+
   3/ Update the file (in snapshot views)."
-  (if editable
-      ;; Checkout the file
-      (progn
-        (when destfile
-          ;; Technically, we can use the -out option, but I'm not sure
-          ;; of all its implications.
-          (error "Cannot checkout to a specific file"))
 
-        (let* ((fprop (ah-clearcase-fprop-file file))
-               (checkout-mode
-                (cond
-                 ;; if the checkout will create a branch, checkout
-                 ;; reserved
-                 ((ah-clearcase-fprop-checkout-will-branch-p fprop)
-                  'ah-clearcase-finish-checkout-reserved)
+  (cond
+   ((and editable destfile)
+    (error "Cannot checkout to a specific file"))
+   (editable
+    ;; this is the real checkout operation
+    (let* ((fprop (ah-clearcase-fprop-file file))
+           checkout)
+      ;; need to find out if we have to checkout reserved or
+      ;; unreserved.
+      (cond
+       ;; if the checkout will create a branch, checkout reserved
+       ((ah-clearcase-fprop-checkout-will-branch-p fprop)
+        (setq checkout 'ah-clearcase-finish-checkout-reserved))
 
-                 ;; if we are not latest on branch and we are asked to
-                 ;; checkout this version (eq rev nil), we checkout
-                 ;; unseserved.
-                 ((and (null rev)
-                       (not (string= (ah-clearcase-fprop-latest fprop)
-                                     (ah-clearcase-fprop-version fprop))))
-                  ;; patch rev first
-                  (setq rev (ah-clearcase-fprop-version fprop))
-                  'ah-clearcase-finish-checkout-unreserved)
+       ;; if we are not latest on branch and we are asked to checkout
+       ;; this version (eq rev nil), we checkout unseserved.
+       ((and (null rev)
+             (not (string= (ah-clearcase-fprop-latest fprop)
+                           (ah-clearcase-fprop-version fprop))))
+        ;; patch rev first
+        (setq rev (ah-clearcase-fprop-version fprop))
+        (setq checkout 'ah-clearcase-finish-checkout-unreserved))
 
-                 ;; if someone else has checked out this revision in
-                 ;; reserved mode, ask the user if he wants an
-                 ;; unreserved checkout.
-                 ((let ((user-and-view
-                         (ah-clearcase-revision-reserved-p file)))
-                    (if user-and-view
-                        (if (yes-or-no-p
-                             (format
-                              "This revision is checked out reserved by %s in %s.  %s"
-                              (car user-and-view) (cdr user-and-view)
-                              "Checkout unreserved? "))
-                            'ah-clearcase-finish-checkout-unreserved
-                          ;; will abort the checkout
-                          nil)
-                      ;; no one has this version checked out, checkout
-                      ;; reserved.
-                      'ah-clearcase-finish-checkout-reserved))))))
-          (if checkout-mode
-              (vc-start-entry
-               file rev nil nil "Enter a checkout comment" checkout-mode)
-            (message "Aborted."))))
+       ;; if someone else has checked out this revision in reserved
+       ;; mode, ask the user if he wants an unreserved checkout.
+       (t (let ((user-and-view (ah-clearcase-revision-reserved-p file)))
+            (if user-and-view
+                (when (yes-or-no-p
+                       (format
+                        "This revision is checked out reserved by %s in %s.  %s"
+                        (car user-and-view) (cdr user-and-view)
+                        "Checkout unreserved? "))
+                  (setq checkout 'ah-clearcase-finish-checkout-unreserved))
+              ;; no one has this version checked out, checkout
+              ;; reserved.
+              (setq checkout 'ah-clearcase-finish-checkout-reserved)))))
+      (if checkout
+          (vc-start-entry
+           file rev nil nil "Enter a checkout comment" checkout)
+        (message "Aborted."))))
+   ((and (not editable) destfile)
+    ;; Check out an arbitrary version to the specified file
+    (ah-clearcase-find-version-helper file rev destfile))
+   ((and (not editable) (or (null rev) (eq rev t)))
+    ;; Update the file in the view (no-op in dynamic views)
+    (let ((update-result
+           (ah-cleartool-ask (format "update -rename \"%s\"" file))))
+      (when (string-match
+             "^Update log has been written to .*$" update-result)
+        (message (match-string 0 update-result)))
+      (ah-clearcase-maybe-set-vc-state file 'force)
+      (vc-resynch-buffer file t t)))
+   ((not editable)                   ; last case left for not editable
+    (error "Cannot to update to a specific revision"))
+   (t
+    (error "vc-clearcase-checkout: bad param combinations: %S %S %S"
+           editable rev destfile))))
 
-    ;; This will go in vc-clearcase-find-version when the next emacs
-    ;; version comes out.
-    (if destfile
-        ;; Check out an arbitrary version to the specified file
-        (progn
-          (unless rev
-            (setq rev (ah-clearcase-fprop-latest-sel
-                       (ah-clearcase-fprop-file file))))
-          (when (string= rev "")
-            (error "Refusing to checkout head of trunk"))
-          (ah-cleartool-ask
-           (format "get -to \"%s\" \"%s@@%s\"" destfile file rev)))
-
-      (progn
-        ;; We cannot update to a specific revision, the user should
-        ;; edit the config spec.
-        (when (and rev (not (eq rev t)))
-          (error "Cannot to update to a specific revision"))
-        ;; Update to the configspec
-        (let ((update-result
-               (ah-cleartool-ask (format "update -rename \"%s\"" file))))
-          (when (string-match
-                 "^Update log has been written to .*$" update-result)
-            (message (match-string 0 update-result)))
-          (ah-clearcase-maybe-set-vc-state file 'force)
-          (vc-resynch-buffer file t t))))))
 
 (defun vc-clearcase-revert (file &optional contents-done)
   "Cancel a checkout on FILE."
@@ -1699,7 +1726,7 @@ With prefix argument, will ask if you want to display the deleted
 sections as well."
   (let ((pname (concat file (when rev (concat "@@" rev)))))
     (with-current-buffer buf
-      (let ((fmt-args '("-fmt" "%-9.9Sd %-4.4u %-20.20Sn |"))
+      (let ((fmt-args '("-fmt" "%-9.9Sd %-4.4u %Sn |"))
             (rm-args (when (and current-prefix-arg
                                 (y-or-n-p "Show deleted sections? "))
                        '("-rm" "-rmfmt" "D %-9.9Sd %-4.4u |"))))
@@ -1709,12 +1736,20 @@ sections as well."
          buf)
         (setq ah-cleartool-finished-function
               #'(lambda ()
-                  (ah-clearcase-annotate-age-buffer)
+                  (ah-clearcase-annotate-post-process)
                   (ah-clearcase-annotate-mark-deleted)))))))
 
 (defun vc-clearcase-annotate-difference (point)
-  "Return the age in days of POINT."
+  "Return the age in days of `point'."
   (get-text-property point 'vc-clearcase-age))
+
+(defun vc-clearcase-annotate-time ()
+  "Return the time in days of (point)"
+  (get-text-property (point) 'vc-clearcase-time))
+
+(defun vc-clearcase-annotate-extract-revision-at-line ()
+  "Return the version of (point)."
+  (get-text-property (point) 'vc-clearcase-revision))
 
 (defconst ah-clearcase-annotate-deleted-face
   (progn
@@ -1731,65 +1766,97 @@ sections as well."
 (defconst ah-clearcase-annotate-date-rx
   "\\([0-9]+\\)-\\([A-Za-z]+\\)-\\([0-9]+\\)")
 
-(defun ah-clearcase-annotate-mk-age (age-str now)
-  "Calculate an age in days from AGE-STR and NOW."
-  (when (and (stringp age-str)
-             (string-match ah-clearcase-annotate-date-rx age-str))
-    (/ (- now
-          (let ((day (string-to-int (match-string 1 age-str)))
-                (month
-                 (cdr (assoc (match-string 2 age-str)
-                             ah-clearcase-annotate-months)))
-                (year (string-to-int (match-string 3 age-str))))
-            (incf year (if (< year 70) 2000 1900))
-            (float-time (encode-time 0 0 0 day month year))))
-       86400)))
+(defun ah-clearcase-annotate-mktime (time-str)
+  "Convert time-str into a fractional number of days.
+NOTE: we don't use vc-annotate-convert-time since it is not
+available in Emacs 21."
+  (when (and (stringp time-str)
+             (string-match ah-clearcase-annotate-date-rx time-str))
+    (let ((day (string-to-number (match-string 1 time-str)))
+          (month
+           (cdr (assoc (match-string 2 time-str)
+                       ah-clearcase-annotate-months)))
+          (year (string-to-number (match-string 3 time-str))))
+      (incf year (if (< year 70) 2000 1900))
+      (/ (float-time (encode-time 0 0 0 day month year)) 24 3600))))
 
-(defun ah-clearcase-annotate-age-buffer (&optional buffer)
-  "Compute the age of each line in BUFFER.
-
-Assume that buffer contains an annotation result.  This is faster than
-looking up regexps for each line in
-'vc-clearcase-annotate-difference'"
-  ;; until we arrange to call this when cleartool finishes...
+(defun ah-clearcase-annotate-post-process (&optional buffer)
+  "Compute the age, time and revision of each line in BUFFER.
+These will be stored as properties, so
+`vc-clearcase-annotate-difference', `vc-clearcase-annotate-time'
+and `vc-clearcase-annotate-revision-atline' work fast."
   (interactive)
   (with-current-buffer (if buffer buffer (current-buffer))
-    (save-excursion
+    (let ((inhibit-read-only t)
+          (date-rx "^[0-9]+-[A-Za-z]+-[0-9]+")
+          (version-rx " \\(\\\\\\|\\/\\)\\([-a-zA-Z0-9._\\/]+\\) +|"))
+      ;; Step 1: parse the buffer and annotate the text with the time
+      ;; and revision number of each line
       (goto-char (point-max))
-      (let ((now (float-time))
+      (let ((now (/ (float-time) 24 3600))
             (beg (point))
             (end (point))
-            (age-str "*INITIAL*")
-            age-str1
-            (date-rx1 "\\(^\\|D \\)[0-9]+-[A-Za-z]+-[0-9]+"))
-        (while (re-search-backward date-rx1 nil 'noerror)
-          (setq age-str1 (match-string 0))
+            time-str revision-str revision-data
+            time age revision)
+        (while (re-search-backward date-rx nil 'noerror)
+          (setq time-str (match-string-no-properties 0))
+          (setq time (ah-clearcase-annotate-mktime time-str))
+          (setq age (- now time))
 
-          (unless (string= age-str1 age-str)
-            (put-text-property
-             beg end 'vc-clearcase-age
-             (ah-clearcase-annotate-mk-age age-str now))
-
-            (setq age-str age-str1)
-            (setq end beg))
+          (when (re-search-forward version-rx (c-point 'eol) 'noerror)
+            (setq revision-str (match-string-no-properties 2))
+            (setq revision
+                  (concat "/"
+                          (replace-regexp-in-string "\\\\" "/" revision-str))))
 
           (beginning-of-line)
-          (setq beg (point)))
+          (setq beg (point))
+          (put-text-property beg end 'vc-clearcase-time time)
+          (put-text-property beg end 'vc-clearcase-age age)
+          (put-text-property beg end 'vc-clearcase-revision revision)
+          (setq end (1- beg))))
+      ;; Step 2: all the '|' markers in continuation lines
+      (goto-char (point-min))
+      (while (re-search-forward "^ +\\. +|" nil t)
+        (let* ((bol (c-point 'bol))
+               (time (get-text-property bol 'vc-clearcase-time))
+               (age (get-text-property bol 'vc-clearcase-age))
+               (revision (get-text-property bol 'vc-clearcase-revision))
+               (str "                 .                  |")
+               (max (1- (length str))))
+          (put-text-property 0 max 'vc-clearcase-time time str)
+          (put-text-property 0 max 'vc-clearcase-age age str)
+          (put-text-property 0 max 'vc-clearcase-revision revision str)
+          (replace-match str nil nil)))
+      ;; Step 3: truncate or expand all the version numbers
+      (goto-char (point-min))
+      (while (re-search-forward version-rx nil t)
+        (let* ((str (match-string-no-properties 2))
+               max
+               (bol (c-point 'bol))
+               (time (get-text-property bol 'vc-clearcase-time))
+               (age (get-text-property bol 'vc-clearcase-age))
+               (revision (get-text-property bol 'vc-clearcase-revision)))
+          (when (> (length str) 20)
+            (setq str (substring str -20 (length str))))
+          (setq str (format " %20s |" str))
+          (setq max (length str))
+          (put-text-property 0 max 'vc-clearcase-time time str)
+          (put-text-property 0 max 'vc-clearcase-age age str)
+          (put-text-property 0 max 'vc-clearcase-revision revision str)
+          (replace-match str nil t))))))
 
-        ;; put the age on the first region
-        (put-text-property
-         beg end 'vc-clearcase-age
-         (ah-clearcase-annotate-mk-age age-str now))))))
 
 (defun ah-clearcase-annotate-mark-deleted (&optional buffer)
   "Mark all deleted files in the buffer with strike-through face."
   (interactive)
   (with-current-buffer (if buffer buffer (current-buffer))
     (save-excursion
-      (goto-char (point-min))
-      (while (re-search-forward ".*|D .*|\\(.*\\)\\s-*$" nil 'noerror)
-        (put-text-property (match-beginning 1) (match-end 1)
-                           'face '(:strike-through t))))))
+      (let ((inhibit-read-only t))
+        (goto-char (point-min))
+        (while (re-search-forward ".*|D .*|\\(.*\\)\\s-*$" nil 'noerror)
+          (put-text-property (match-beginning 1) (match-end 1)
+                             'face '(:strike-through t)))))))
 
 (defun vc-clearcase-create-snapshot (dir name branchp)
   "Apply label NAME to DIR.
@@ -1850,7 +1917,8 @@ element * NAME -nocheckout"
 repository."
   (with-checkedout-dir (file-name-directory old)
     (with-checkedout-dir (file-name-directory new)
-      (with-comment-file (format "*renamed from %s to %s*" old new)
+      (with-comment-file (comment-file
+                          (format "*renamed from %s to %s*" old new))
         ;; let the cleartool error be directly reported
         (ah-cleartool-ask
          (format "mv -cfile %s \"%s\" \"%s\"" comment-file old new))))))

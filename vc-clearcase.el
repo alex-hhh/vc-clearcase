@@ -1092,7 +1092,7 @@ comment file is removed."
              (with-temp-file comment-file
                (insert ,(cadr comment-vars)))
              ,@forms)
-         (delete-file comment-file))))
+         (delete-file ,(car comment-vars)))))
 
   (defmacro ignore-cleartool-errors (&rest forms)
     "Execute forms, trapping any cleartool errors and ignoring them"
@@ -1111,7 +1111,7 @@ comment file is removed."
     (let ((start (match-beginning 0))
           (data (match-string 0 ad-return-value)))
       (setq data (replace-regexp-in-string "[\\\\/]" "~" data))
-      (setq ad-return-value 
+      (setq ad-return-value
             (concat (substring ad-return-value 0 start)
                     data))))
   ad-return-value)

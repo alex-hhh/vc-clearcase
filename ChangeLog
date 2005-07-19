@@ -1,3 +1,33 @@
+2005-07-19  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el most of the changes below represent porting to
+	Emacs 22.
+	(ah-cleartool-tq-handler): 1.41 use string-to-number instead of
+	string-to-int.
+	(with-comment-file): 1.41 now takes an argument for the
+	comment-file and binds the file name to that.  Also re-written to
+	use with-temp-file.  All callers updated.
+	(vc-version-backup-file-name): 1.41 the advice now runs after the
+	function and modifies the result.
+	(ah-clearcase-find-version-helper): 1.41 new function.
+	(vc-clearcase-find-version): 1.41 new function.
+	(vc-clearcase-checkout): 1.41 use a simplified implementation.
+	(vc-clearcase-annotate-command): 1.41 the fmt string passed to
+	cleartool now asks for the full revision instead of only the first
+	20 characters of it.
+	(vc-clearcase-annotate-time): 1.41 new function.
+	(vc-clearcase-annotate-extract-revision-at-line): 1.41 new
+	function.
+	(ah-clearcase-annotate-mktime): 1.41 renamed from
+	ah-clearcase-annotate-mk-age, callers updated.  Semantics also
+	changed to return the number of day as a fraction.
+	(ah-clearcase-annotate-post-process): 1.41 renamed from
+	ah-clearcase-annotate-age-buffer, callers updated.  It now
+	computes the time, age and version of each line in the buffer plus
+	re-formats the buffer.
+	(ah-clearcase-annotate-mark-deleted): 1.41 bind inhibit-read-only
+	to t.
+
 2005-07-12  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-finish-checkout): 1.40 pass -ptime

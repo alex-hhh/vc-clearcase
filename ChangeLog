@@ -27,6 +27,9 @@
 	re-formats the buffer.
 	(ah-clearcase-annotate-mark-deleted): 1.41 bind inhibit-read-only
 	to t.
+	(with-comment-file): 1.42 bugfix: remove the file named in the
+	variable specified by the user instead of hardcodin it to
+	comment-file.
 
 2005-07-12  Alexandru Harsanyi  <harsanyi@mac.com>
 

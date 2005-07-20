@@ -655,6 +655,36 @@ Return the number of records actually moved."
   (interactive "p")
   (ah-clearcase-log-view-forward-record (- num-records)))
 
+(defun ah-clearcase-log-view-forward-version (num)
+  "Visit the log record next `NUM' versions (previous if `NUM' is
+ negative) starting from the version in the current record.
+
+NOTE: you can only move forward if the current version is on the
+version path of the current file."
+  (interactive "p")
+  (let ((version (ah-clearcase-log-view-record-field "version"))
+        (move-version-fn (if (>= num 0) 'vc-clearcase-next-version
+                           'vc-clearcase-previous-version))
+        (file (with-current-buffer vc-parent-buffer
+                (buffer-file-name))))
+
+    (if (or (null version) (string= version ""))
+        (message "No version record in the current field")
+      (catch 'exit
+        (dotimes (i (abs num))
+          (when (null version)
+            (throw 'exit nil))
+          (setq version (funcall move-version-fn file version))))
+      (if (null version)
+          (message "End of version chain")
+        (vc-clearcase-show-log-entry version)))))
+
+(defun ah-clearcase-log-view-backward-version (num)
+  "Visit the log record previous `NUM' versions (next if `NUM' is
+negative), starting with the version of the current record."
+  (interactive "p")
+  (ah-clearcase-log-view-forward-version (- num)))
+
 (defun ah-clearcase-log-view-visit-file ()
   "Visit the file specified by this log record."
   (interactive)
@@ -698,6 +728,8 @@ Return the number of records actually moved."
 (easy-mmode-defmap ah-clearcase-log-view-mode-map
                    '(("n" . ah-clearcase-log-view-forward-record)
                      ("p" . ah-clearcase-log-view-backward-record)
+                     ("N" . ah-clearcase-log-view-forward-version)
+                     ("P" . ah-clearcase-log-view-backward-version)
                      ("\M-a" . ah-clearcase-log-view-bor)
                      ("\M-e" . ah-clearcase-log-view-eor)
                      ("g" . ah-clearcase-log-view-again)
@@ -733,6 +765,11 @@ Return the number of records actually moved."
   comment
 
   view-tag
+
+  ;; a list of all the revisions of this file, starting from \main\0
+  ;; all the way to latest.  Used by vc-clearcase-next-version to
+  ;; speed up the search.
+  revision-list
   )
 
 (defsubst ah-clearcase-fprop-file (file)
@@ -761,7 +798,8 @@ first that it exists."
   (when fprop
     (setf (ah-clearcase-fprop-version fprop) nil)
     (setf (ah-clearcase-fprop-latest fprop) nil)
-    (setf (ah-clearcase-fprop-version-tid fprop) nil)))
+    (setf (ah-clearcase-fprop-version-tid fprop) nil)
+    (setf (ah-clearcase-fprop-revision-list fprop) nil)))
 
 (defsubst ah-clearcase-fprop-hijacked-p (fprop)
   "Return true if FPROP is hijacked."
@@ -1039,7 +1077,7 @@ If FORCE is not nil, always read the properties."
           (setf (ah-clearcase-fprop-latest-sel fprop) latest-sel)
           (setf (ah-clearcase-fprop-latest fprop)
                 (ah-cleartool-ask
-                 (format "desc -fmt \"%%Sn\" \"%s@@%s\"" file latest-sel)))
+                 (format "desc -fmt \"%%Vn\" \"%s@@%s\"" file latest-sel)))
           ;; finally prepare a vprop structure for the file's view,
           ;; but only if we haven't already done so.  NOTE: we don't
           ;; expect the view of the file to ever change, so we ignore
@@ -1161,7 +1199,7 @@ version."
                          file)))
                   (setf (ah-clearcase-fprop-version-tid fprop)
                         (ah-cleartool-ask
-                         (format "desc -fmt \"%%Sn %%PSn %%Rf\" \"%s\""
+                         (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\""
                                  pname)
                          'nowait fprop #'ah-clearcase-fprop-set-version))
                   (vc-file-setprop file 'vc-clearcase-fprop fprop))
@@ -1278,7 +1316,7 @@ information."
                                 (latest-revision
                                  (ah-cleartool-ask
                                   (format
-                                   "desc -fmt \"%%Sn\" \"%s@@%s/LATEST\""
+                                   "desc -fmt \"%%Vn\" \"%s@@%s/LATEST\""
                                    file
                                    (ah-clearcase-version-base revision)))))
                             (if (string= parent-revision latest-revision)
@@ -1461,7 +1499,7 @@ otherwise return nil."
         (checkouts
          (split-string
           (ah-cleartool-ask
-           (format "lsco -fmt \"%%PSn %%Rf %%Tf %%u\\n\" \"%s\"" file))
+           (format "lsco -fmt \"%%PVn %%Rf %%Tf %%u\\n\" \"%s\"" file))
           "[\n\r]+")))
     (let* ((match (concat (ah-clearcase-fprop-version fprop) " reserved"))
            (len (length match))
@@ -1617,7 +1655,9 @@ to cleartool).
 This is not intended to be called directly from the vc.el.  Instead,
 `vc-print-log' is advised to call this function directly for Clearcase
 registered files."
-  (with-current-buffer (get-buffer-create "*clearcase-lshistory*")
+  (let ((buf (get-buffer-create "*clearcase-lshistory*")))
+    (vc-setup-buffer buf)
+    (with-current-buffer buf
     (let ((inhibit-read-only t))
       (erase-buffer)
       (ah-clearcase-log-view-mode)
@@ -1634,7 +1674,7 @@ registered files."
                          (ah-clearcase-fprop-file ah-clearcase-file-name)))
                     (vc-clearcase-show-log-entry
                      (ah-clearcase-fprop-version fprop)))))
-        (switch-to-buffer-other-window (process-buffer process))))))
+          (switch-to-buffer-other-window (process-buffer process)))))))
 
 (defadvice vc-print-log (around ah-clearcase-print-log-advice)
   "On Clearcase files, call 'vc-clearcase-print-log' directly.
@@ -1654,7 +1694,8 @@ Only works for the clearcase log format defined in
 'ah-clearcase-lshistory-fmt'."
   (let ((regexp
          (concat "^version: "
-                 (replace-regexp-in-string "[\\\\/]" "[\\\\/]" version)))
+                 (replace-regexp-in-string "[\\\\/]" "[\\\\/]" version)
+                 "\\>"))
         pos)
     (save-excursion
       (goto-char (point-min))
@@ -1725,6 +1766,7 @@ Only works for the clearcase log format defined in
 With prefix argument, will ask if you want to display the deleted
 sections as well."
   (let ((pname (concat file (when rev (concat "@@" rev)))))
+    (vc-setup-buffer buf)
     (with-current-buffer buf
       (let ((fmt-args '("-fmt" "%-9.9Sd %-4.4u %Sn |"))
             (rm-args (when (and current-prefix-arg
@@ -1789,31 +1831,27 @@ and `vc-clearcase-annotate-revision-atline' work fast."
   (with-current-buffer (if buffer buffer (current-buffer))
     (let ((inhibit-read-only t)
           (date-rx "^[0-9]+-[A-Za-z]+-[0-9]+")
-          (version-rx " \\(\\\\\\|\\/\\)\\([-a-zA-Z0-9._\\/]+\\) +|"))
+          (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|"))
       ;; Step 1: parse the buffer and annotate the text with the time
       ;; and revision number of each line
       (goto-char (point-max))
       (let ((now (/ (float-time) 24 3600))
             (beg (point))
             (end (point))
-            time-str revision-str revision-data
-            time age revision)
+            time-str revision-str time age)
         (while (re-search-backward date-rx nil 'noerror)
           (setq time-str (match-string-no-properties 0))
           (setq time (ah-clearcase-annotate-mktime time-str))
           (setq age (- now time))
 
           (when (re-search-forward version-rx (c-point 'eol) 'noerror)
-            (setq revision-str (match-string-no-properties 2))
-            (setq revision
-                  (concat "/"
-                          (replace-regexp-in-string "\\\\" "/" revision-str))))
+            (setq revision-str (match-string-no-properties 1)))
 
           (beginning-of-line)
           (setq beg (point))
           (put-text-property beg end 'vc-clearcase-time time)
           (put-text-property beg end 'vc-clearcase-age age)
-          (put-text-property beg end 'vc-clearcase-revision revision)
+          (put-text-property beg end 'vc-clearcase-revision revision-str)
           (setq end (1- beg))))
       ;; Step 2: all the '|' markers in continuation lines
       (goto-char (point-min))
@@ -1831,7 +1869,7 @@ and `vc-clearcase-annotate-revision-atline' work fast."
       ;; Step 3: truncate or expand all the version numbers
       (goto-char (point-min))
       (while (re-search-forward version-rx nil t)
-        (let* ((str (match-string-no-properties 2))
+        (let* ((str (match-string-no-properties 1))
                max
                (bol (c-point 'bol))
                (time (get-text-property bol 'vc-clearcase-time))
@@ -1908,6 +1946,53 @@ element * NAME -nocheckout"
 ;;;; make-version-backups-p
 ;;;; check-headers
 ;;;; clear-headers
+
+(defun vc-clearcase-previous-version (file rev)
+  "Return the version number that precedes `REV' for `FILE', or
+nil if no such version exists."
+  ;; We simply ask clearcase to tell us the previous version name
+  ;; (%PSn).  If we came accros a version number of 0, we ask for the
+  ;; previous version again, since the initial version on a branch (0)
+  ;; is identical to the original version in the parent branch...
+  (let* ((cmd (format "desc -fmt \"%%PVn\" \"%s@@%s\"" file rev))
+         (prev (ah-cleartool-ask cmd)))
+    (if (string= prev "")
+        nil
+      (if (string-match "[\\/]0$" prev)
+          (vc-clearcase-previous-version file prev)
+        prev))))
+
+(defun vc-clearcase-next-version (file rev)
+  "Return the version number that follows `REV' for `FILE', or
+  nil if no such version exists."
+  ;; Unfortunately, there's no easy (and correct) way of finding the
+  ;; next version.  We start with the LATEST for FILE and walk
+  ;; backwards until the parent is REV. If we came accros a version
+  ;; number of 0, skip it, since the initial version on a branch (0)
+  ;; is identical to the original version in the parent branch...
+  ;;
+  ;; To speed up the search, we use the revision-list in fprop.
+  (let* ((fprop (ah-clearcase-fprop-file file))
+         (revision-list (ah-clearcase-fprop-revision-list fprop)))
+    (unless revision-list
+      ;; If we don't have a revision list, build one now
+      (message "Building revision list...")
+      (let* ((prev (ah-clearcase-fprop-latest fprop)))
+        (setq revision-list (list prev))
+        (while (not (string= prev ""))
+          (let ((cmd (format "desc -fmt \"%%PVn\" \"%s@@%s\"" file prev)))
+            (setq prev (ah-cleartool-ask cmd))
+            (unless (or (string= prev "") (string-match "[\\/]0$" prev))
+              (setq revision-list (cons prev revision-list)))))
+        (setf (ah-clearcase-fprop-revision-list fprop) revision-list)
+        (message "Building revision list...done.")))
+    ;; seaarch the revision-list
+    (catch 'found
+      (while revision-list
+        (if (string= (car revision-list) rev)
+            (throw 'found (car-safe (cdr-safe revision-list)))
+          (setq revision-list (cdr revision-list))))
+      nil)))
 
 ;;; NOTE: for some reason, the renamed file does not show up as a
 ;;; clearcase registered until after I kill it and re-open it...

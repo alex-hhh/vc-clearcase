@@ -1,3 +1,29 @@
+2005-07-20  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-log-view-forward-version): 1.43
+	new function.
+	(ah-clearcase-log-view-backward-version): 1.43 new function.
+	(ah-clearcase-log-view-mode-map): 1.43 keymap updated with new
+	functions.
+	(ah-clearcase-fprop): 1.43 added revision-list as a new slot.
+	(ah-clearcase-fprop-reset): 1.43 reset revision-list
+	(ah-clearcase-maybe-set-vc-state): 1.43 use %Vn to get the
+	version (instead of %Sn).
+	(vc-clearcase-registered): 1.43 use %Vn and %PVn instead of %Sn
+	and %PSn to get the version and parent version.
+	(vc-clearcase-dir-state): 1.43 use %Vn instead of %Sn.
+	(ah-clearcase-revision-reserved-p): 1.43 use %PVn instead of %PSn.
+	(vc-clearcase-print-log): 1.43 call vc-setup-buffer on the log
+	buffer.
+	(vc-clearcase-show-log-entry): 1.43 bugfix in the regexp that
+	searches for the revision.
+	(vc-clearcase-annotate-command): 1.43 call vc-setup-buffer on
+	`buf'
+	(ah-clearcase-annotate-post-process): 1.43 use a simpler regexp to
+	match the revision.
+	(vc-clearcase-previous-version): 1.43 new function.
+	(vc-clearcase-next-version): 1.43 new function.
+
 2005-07-19  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el most of the changes below represent porting to

@@ -271,9 +271,12 @@ Cleans up properly if cleartool exits."
           ah-cleartool-next-command 1
           ah-cleartool-last-command-timestamp (float-time))))
 
-(defvar ah-cleartool-save-stop-data nil
-  "If t, when cleartool is stopped, a report will be output into the
-*cleartool-aborts* buffer.")
+
+(defcustom ah-cleartool-save-stop-data nil
+  "When t, print a report each time cleartool is stopped.
+The report is appended to the *cleartool-aborts* buffer."
+  :type 'boolean
+  :group 'vc-clearcase)
 
 (defun ah-cleartool-tq-stop ()
   "Stop the transaction queue to cleartool and kill cleartool."

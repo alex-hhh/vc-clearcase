@@ -1,3 +1,8 @@
+2005-07-28  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-save-stop-data): 1.44 now a
+	defcustom variable.
+
 2005-07-20  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-log-view-forward-version): 1.43

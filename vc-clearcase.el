@@ -739,14 +739,15 @@ negative), starting with the version of the current record."
     (while (ah-clearcase-log-view-forward-record 1)
       (ah-clearcase-log-view-wash-record))))
 
-(define-derived-mode ah-clearcase-log-view-mode fundamental-mode "Cc-Log-View"
-                     "Generic mode to view clearcase log listings."
-                     ;; this gets reset when we switch modes
-                     (make-local-variable 'font-lock-defaults)
-                     (setq case-fold-search nil)
-                     (setq font-lock-defaults '(ah-clearcase-log-view-font-lock-keywords nil nil))
-                     (font-lock-mode t)
-                     (setq buffer-read-only t))
+(define-derived-mode ah-clearcase-log-view-mode fundamental-mode 
+  "Cc-Log-View"
+  "Generic mode to view clearcase log listings."
+  ;; this gets reset when we switch modes
+  (make-local-variable 'font-lock-defaults)
+  (setq case-fold-search nil)
+  (setq font-lock-defaults '(ah-clearcase-log-view-font-lock-keywords nil nil))
+  (font-lock-mode t)
+  (setq buffer-read-only t))
 
 (easy-mmode-defmap ah-clearcase-log-view-mode-map
                    '(("n" . ah-clearcase-log-view-forward-record)

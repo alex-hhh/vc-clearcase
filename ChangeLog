@@ -1,3 +1,21 @@
+2005-08-05  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.45 installation instructions updated.  all
+	the keymaps (including menus) are autoloaded.  added (autoloaded)
+	code to update vc-handled-backends with the CLEARCASE tag.
+	(vc-clearcase-registered): 1.45 a simple version of the function
+	is autoloaded, will only load the vc-clearcase package if needed.
+	(ah-clearcase-cleartool-program, vc-clearcase-what-version)
+	(vc-clearcase-what-rule, vc-clearcase-what-view-tag)
+	(vc-clearcase-gui-vtree-browser, vc-clearcase-list-checkouts)
+	(vc-clearcase-update-view, vc-clearcase-edcs): 1.45 added an
+	autoload cookie.
+	(vc-clearcase-label-diff-report): 1.45 renamed from
+	ah-clearcase-label-diff-report, plus added an autoloaded cookie.
+	(vc-clearcase-list-view-private-files): 1.45 renamed from
+	ah-clearcase-list-view-private-files, plus added an autoloaded
+	cookie.
+
 2005-07-28  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-save-stop-data): 1.44 now a

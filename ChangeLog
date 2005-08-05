@@ -15,6 +15,7 @@
 	(vc-clearcase-list-view-private-files): 1.45 renamed from
 	ah-clearcase-list-view-private-files, plus added an autoloaded
 	cookie.
+	(ah-clearcase-log-view-mode): 1.46 reindented.
 
 2005-07-28  Alexandru Harsanyi  <harsanyi@mac.com>
 

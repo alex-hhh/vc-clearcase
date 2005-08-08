@@ -1,3 +1,7 @@
+2005-08-08  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.47 only require cc-defs at compile time.
+
 2005-08-05  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.45 installation instructions updated.  all

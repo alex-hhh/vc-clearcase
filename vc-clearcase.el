@@ -138,7 +138,8 @@
 ;; we ask for this at runtime because we use find-if, remove-if-not,
 ;; etc
 (require 'cl)
-(require 'cc-defs)                      ; for c-point
+(eval-when-compile
+  (require 'cc-defs))                      ; for c-point
 
 (defgroup vc-clearcase nil
   "Support for the ClearCase version control system."

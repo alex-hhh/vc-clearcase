@@ -1148,14 +1148,23 @@ If DIR was checked out by us, check it back in."
 commant-file will be bound to a temporary file name and
 comment-text will be saved into it.  When all is finished, the
 comment file is removed."
-    `(let ((,(car comment-vars)
-            (make-temp-name (concat temporary-file-directory "clearcase-"))))
-       (unwind-protect
-            (progn
-              (with-temp-file comment-file
-                (insert ,(cadr comment-vars)))
+    (unless (listp comment-vars)
+      (error "comment-vars vars should be a list"))
+    (unless (= 2 (length comment-vars))
+      (error "expecting two elements in comment-vars"))
+    (unless (symbolp (car comment-vars))
+        (error "(car comment-vars) is not a symbol"))
+    (let ((cfile (car comment-vars))
+          (ctext (cadr comment-vars)))
+      `(let ((,cfile
+              (make-temp-name (concat temporary-file-directory 
+                                      "clearcase-"))))
+         (unwind-protect
+              (progn
+                (with-temp-file ,cfile
+                  (insert ,ctext)) ; ctext evaluated once, here
               ,@forms)
-         (delete-file ,(car comment-vars)))))
+           (delete-file ,cfile)))))
 
   (defmacro ignore-cleartool-errors (&rest forms)
     "Execute forms, trapping any cleartool errors and ignoring them"

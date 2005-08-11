@@ -740,7 +740,7 @@ negative), starting with the version of the current record."
     (while (ah-clearcase-log-view-forward-record 1)
       (ah-clearcase-log-view-wash-record))))
 
-(define-derived-mode ah-clearcase-log-view-mode fundamental-mode 
+(define-derived-mode ah-clearcase-log-view-mode fundamental-mode
   "Cc-Log-View"
   "Generic mode to view clearcase log listings."
   ;; this gets reset when we switch modes
@@ -1157,7 +1157,7 @@ comment file is removed."
     (let ((cfile (car comment-vars))
           (ctext (cadr comment-vars)))
       `(let ((,cfile
-              (make-temp-name (concat temporary-file-directory 
+              (make-temp-name (concat temporary-file-directory
                                       "clearcase-"))))
          (unwind-protect
               (progn

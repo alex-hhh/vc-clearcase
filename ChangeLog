@@ -1,3 +1,8 @@
+2005-08-11  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (with-comment-file): 1.48 check input arguments
+	and evaluate them only once.
+
 2005-08-08  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.47 only require cc-defs at compile time.

@@ -2417,17 +2417,16 @@ to inspect the configspec of ANY view accessible from this machine."
                        (ah-clearcase-refresh-files-in-view
                         ah-clearcase-edcs-view-tag))))))))))
 
-(define-derived-mode ah-clearcase-edcs-mode fundamental-mode "Configspec"
-                     "Generic mode to edit clearcase configspecs."
-                     (make-local-variable 'ah-clearcase-edcs-view-tag)
-
-                     ;; 'adapted' from values in emacs-lisp-mode
-                     (setq comment-start "#"
-                           comment-start-skip "\\(\\(^\\|[^\\\\\n]\\)\\(\\\\\\\\\\)*\\)#+ *"
-                           comment-end ""
-                           comment-end-skip nil)
-
-                     (font-lock-mode t))
+(define-derived-mode ah-clearcase-edcs-mode fundamental-mode 
+  "Configspec"
+  "Generic mode to edit clearcase configspecs."
+  (make-local-variable 'ah-clearcase-edcs-view-tag)
+  ;; 'adapted' from values in emacs-lisp-mode
+  (setq comment-start "#"
+        comment-start-skip "\\(\\(^\\|[^\\\\\n]\\)\\(\\\\\\\\\\)*\\)#+ *"
+        comment-end ""
+        comment-end-skip nil)
+  (font-lock-mode t))
 
 ;; Provide a shorter alias for the edcs mode.  This is useful if you
 ;; want to keep configspecs separately and have mode tags in them.

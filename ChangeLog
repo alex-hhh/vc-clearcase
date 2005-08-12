@@ -1,3 +1,9 @@
+2005-08-12  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.51 validated the file using checkdoc.  All
+	comments and strings are spellchecked.  Converted the file from
+	using folding.el to outline-minor for outlining.
+
 2005-08-11  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (with-comment-file): 1.48 check input arguments

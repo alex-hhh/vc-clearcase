@@ -2090,7 +2090,9 @@ be browsed)"
   (let ((file (buffer-file-name (current-buffer))))
     (when ask-for-file
       (setq file
-            (read-file-name "Browse vtree for: " file file t)))
+            (expand-file-name
+             (read-file-name "Browse vtree for: " file file t)
+             default-directory)))
     (if (and file (vc-clearcase-registered file))
         (progn
           (message "Starting Vtree browser...")
@@ -2117,6 +2119,7 @@ all the views are listed."
   (interactive "DList checkouts in directory: \nP")
   (when (string-match "\\(\\\\\\|/\\)$" dir)
     (setq dir (replace-match "" nil nil dir)))
+  (setq dir (expand-file-name dir default-directory))
   (let ((user-selection
          (if prefix-arg
              (let ((u (read-from-minibuffer "User: ")))
@@ -2146,6 +2149,7 @@ are made to the views)."
   (interactive "DUpdate directory: \nP")
   (when (string-match "[\\\/]+$" dir)
     (setq dir (substring dir 0 (match-beginning 0))))
+  (setq dir (expand-file-name dir default-directory))
   (with-current-buffer (get-buffer-create "*clearcase-update*")
     (setq buffer-read-only t)
     (let ((inhibit-read-only t))
@@ -2164,6 +2168,7 @@ are made to the views)."
 (defun vc-clearcase-label-diff-report (dir label-1 label-2)
   "Report the changed file revisions in DIR between LABEL-1 and LABEL-2."
   (interactive "DReport on directory: \nsLabel 1: \nsLabel 2: ")
+  (setq dir (expand-file-name dir default-directory))
   ;; make sure both labels exist
   (ah-cleartool-ask (format "cd \"%s\"" dir))
   (ah-cleartool-ask (format "desc -fmt \"ok\" lbtype:%s" label-1))
@@ -2305,6 +2310,7 @@ are made to the views)."
   "List the view private files in DIR.
 You can edit the files using 'find-file-at-point'"
   (interactive "DReport on directory: ")
+  (setq dir (expand-file-name dir default-directory))
   (let ((buf (get-buffer-create "*clearcase-view-private-files*")))
     (with-current-buffer buf
       (buffer-disable-undo)

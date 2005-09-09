@@ -1935,6 +1935,7 @@ of the sources with this single line in the configspec:
 element * NAME -nocheckout"
   (when (and branchp (not (yes-or-no-p "Move existing label? ")))
     (error "Aborted"))
+  (setq dir (expand-file-name dir))
   (ah-cleartool-ask (format "cd \"%s\"" (file-name-directory dir)))
   ;; let's see if the label exists
   (condition-case nil

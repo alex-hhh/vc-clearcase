@@ -1,3 +1,8 @@
+2005-09-09  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-create-snapshot): 1.53 call
+	expand-file-name on dir before using it.
+
 2005-08-24  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-gui-vtree-browser)

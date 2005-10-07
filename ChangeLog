@@ -1,3 +1,9 @@
+2005-10-07  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-list-checkouts): 1.54 set the
+	default directory of the *clearcase-lsco* buffer to the directory
+	being searched for checkouts.
+
 2005-09-09  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-create-snapshot): 1.53 call

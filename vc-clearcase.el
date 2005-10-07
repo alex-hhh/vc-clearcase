@@ -2131,6 +2131,7 @@ all the views are listed."
     (with-current-buffer (get-buffer-create "*clearcase-lsco*")
       (let ((inhibit-read-only t))
         (erase-buffer)
+        (setq default-directory dir)
         (insert "Listing checkouts in " dir "\n")
         (insert "Cleartool command: "
                 (format "%S" (append user-selection other-options))

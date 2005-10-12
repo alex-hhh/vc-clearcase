@@ -2422,43 +2422,17 @@ view accessible from this machine."
   "Completion function for entering a view-tag.
 See `completing-read' for the meanings of STRING, PREDICATE and
 FLAG."
-  ;; most of the code below could be implemented by try-completion,
-  ;; except that ah-clearcase-edcs-all-view-tags might be set after
-  ;; the first time we are called..
-  (let ((len (length string))
-        (exact-match? nil))
-    (let ((matches (remove-if-not
-                    #'(lambda (x)
-                        (and (or (not predicate) (funcall predicate x))
-                             (if (string= string x)
-                                 ;; will also return t for remove-if-not
-                                 (setq exact-match? t)
-                                 (and (>= (length x) len)
-                                      (eq (compare-strings string 0 len x 0 len)
-                                          t)))))
-                    ah-clearcase-edcs-all-view-tags)))
-
-      ;; NOTE: when we are asked for a list of completions, we must
-      ;; return a fresh copy of the sequence, as I believe
-      ;; completing-read manipulates that list internally and would
-      ;; destroy our list.
-      (cond
-        ((eq flag t) (copy-sequence matches))
-        ((eq flag 'lambda) exact-match?)
-        (t (cond ((= (length matches) 0) nil)
-                 ((and exact-match? (= (length matches) 1)) t) ; exact match
-                 (exact-match? string)
-                 (t
-                  ;; we need to find the longest common substring...
-                  (let ((min-len (apply #'min (mapcar #'length matches)))
-                        (a-string (car matches)))
-                    (while (notevery
-                            #'(lambda (x)
-                                (eq t (compare-strings a-string 0 min-len
-                                                       x 0 min-len)))
-                            matches)
-                      (decf min-len))
-                    (substring a-string 0 min-len)))))))))
+  ;; Note that we cannot pass ah-clearcase-edcs-all-view-tags to
+  ;; completing-read because its value will be set asynchronously when
+  ;; the cleartool ask command finishes.  Thus, we simply check the
+  ;; flag and call the proper function (which completing-read would
+  ;; call if we would pass ah-clearcase-edcs-all-view-tags directly to
+  ;; it.
+  (let ((completion-fn (cond ((eq flag t) 'all-completions)
+                             ((eq flag 'lambda) 'test-completion)
+                             ((null flag) 'try-completion)
+                             (t (error "unknwn value for flag %S" flag)))))
+    (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
 
 ;;;###autoload
 (defun vc-clearcase-edcs ()

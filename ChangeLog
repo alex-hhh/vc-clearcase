@@ -1,3 +1,8 @@
+2005-10-12  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-view-tag-complete): 1.55 re-wrote
+	it to make use of all-completions, test-completion, try-completion
+
 2005-10-07  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-list-checkouts): 1.54 set the

@@ -74,10 +74,6 @@
 ;; (involves finding out about all the branches), and if the revision
 ;; starts with a '/' just leave it in place.
 ;;
-;; - reformat the annotate buffer to print a meaningful substring of
-;; the version for long version strings.  Provide a key mapping to
-;; display the version at the line.
-;;
 ;; - provide filter functions for the mode-line string to reduce its
 ;; length.  For example, VTK_Iteration12_patch should be reduced to
 ;; VTK_I~12_pat.  This should be configurable, as other sites will
@@ -122,10 +118,10 @@
 (require 'vc)
 
 (eval-and-compile
-  (require 'cl))                        ; we use find-if, remove-if-not
+  (require 'cl))                       ; we use find-if, remove-if-not
 
 (eval-when-compile
-  (require 'cc-defs))                      ; for c-point
+  (require 'cc-defs))                   ; for c-point
 
 (defgroup vc-clearcase nil
   "Support for the ClearCase version control system."
@@ -1143,7 +1139,7 @@ comment file is removed."
     (unless (= 2 (length comment-vars))
       (error "Expecting two elements in comment-vars"))
     (unless (symbolp (car comment-vars))
-        (error "(car comment-vars) is not a symbol"))
+      (error "(car comment-vars) is not a symbol"))
     (let ((cfile (car comment-vars))
           (ctext (cadr comment-vars)))
       `(let ((,cfile
@@ -1151,8 +1147,8 @@ comment file is removed."
          (unwind-protect
               (progn
                 (with-temp-file ,cfile
-                  (insert ,ctext)) ; ctext evaluated once, here
-              ,@forms)
+                  (insert ,ctext))      ; ctext evaluated once, here
+                ,@forms)
            (delete-file ,cfile)))))
 
   (defmacro ignore-cleartool-errors (&rest forms)
@@ -1918,6 +1914,26 @@ When BUFFER is nil, the current buffer is used."
           (put-text-property (match-beginning 1) (match-end 1)
                              'face '(:strike-through t)))))))
 
+(defcustom ah-clearcase-no-label-action 'ask
+  "What to do when we are asked to apply a label that does not exist.
+
+When 'error, an error will be signalled when we are asked to
+apply a non existent label.
+
+When 'create, we will automatically create the label if it does
+not exist.
+
+When 'ask, we will ask the user whether she wants to create the
+label or not.
+
+NOTE: in ClearCase a label exists independentlty from the files
+it is applied to.  A label must be created first before it can be
+applied."
+  :type '(choice (const :tag "Signal error" error)
+          (const :tag "Automatically create it" create)
+          (const :tag "Ask the user" ask))
+  :group 'vc-clearcase)
+
 (defun vc-clearcase-create-snapshot (dir name branchp)
   "Label all files under DIR using NAME as the label.
 
@@ -1941,10 +1957,18 @@ element * NAME -nocheckout"
   (condition-case nil
       (ah-cleartool-ask (concat "desc lbtype:" name))
     (ah-cleartool-error
-     (progn
-       (message "Creating label %s" name)
-       (ah-cleartool-ask (concat "mklbtype -ordinary -nc lbtype:" name))
-       (message nil))))
+     (let ((should-create
+            (ecase ah-clearcase-no-label-action
+              ('create t)
+              ('error nil)
+              ('ask (yes-or-no-p 
+                     (format "Label %s does not exist.  Create it? " name))))))
+       (if should-create
+           (progn
+             (message "Creating label %s" name)
+             (ah-cleartool-ask (concat "mklbtype -ordinary -nc lbtype:" name))
+             (message nil))
+           (error "Label %s does not exist and will not create it." name)))))
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
     ;; NOTE: the mklabel command might fail if some files are

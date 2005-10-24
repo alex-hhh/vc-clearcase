@@ -1,3 +1,10 @@
+2005-10-24  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-no-label-action): 1.56 new
+	variable.
+	(vc-clearcase-create-snapshot): 1.56 use it to decide what to do
+	when a label does not exist.
+
 2005-10-12  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-view-tag-complete): 1.55 re-wrote

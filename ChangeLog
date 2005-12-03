@@ -1,3 +1,10 @@
+2005-12-03  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (with-clearcase-checkout): 1.57 renamed from
+	with-checkedout-dir, callers updated.
+	(with-clearcase-cfile): 1.57 renamed from with-comment-file,
+	callers updated.
+
 2005-10-24  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-no-label-action): 1.56 new

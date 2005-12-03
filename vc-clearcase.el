@@ -60,8 +60,8 @@
 ;; the 'ah' prefix stands for Alex Harsanyi and is used to avoid
 ;; conflicts with the clearcase.el package.
 ;;
-;; In addition, three macros are defined: with-checkedout-dir,
-;; with-comment-file and ignore-cleartool-errors if you compile this
+;; In addition, three macros are defined: with-clearcase-checkout,
+;; with-clearcase-cfile and ignore-cleartool-errors if you compile this
 ;; file they will not pollute the Emacs namespace.
 ;;
 ;;
@@ -1102,38 +1102,40 @@ If FORCE is not nil, always read the properties."
   ;; If you compile this file, these macros won't exist at runtime, so
   ;; it is safe to give them nice names.
 
-  (defmacro with-checkedout-dir (dir &rest forms)
-    "Ensure that DIR is checked out, than execute FORMS.
-
-If DIR was checked out by us, check it back in."
-
+  (defmacro with-clearcase-checkout (thing &rest forms)
+    "Ensure that THING is checked out, than execute FORMS.
+If THING was checked out by us, we check it back in.  THING can
+be either a file or a directory."
     ;; NOTE: we could use make-symbol with the same effect
-    (let ((checkout-needed-flag (gensym))
-          (real-dir (gensym)))
-      `(let* ((,real-dir ,dir)
-              (,checkout-needed-flag
+    (let ((checkout-needed (gensym))
+          (real-thing (gensym)))
+      `(let* ((,real-thing ,thing)
+              (,checkout-needed
                (string=
                 (ah-cleartool-ask
-                 (format "desc -fmt \"%%Rf\" \"%s\"" ,real-dir))
+                 (format "desc -fmt \"%%Rf\" \"%s\"" ,real-thing))
                 "")))
          (unwind-protect
               (progn
-                (when ,checkout-needed-flag
-                  (message "Checking out %s" ,real-dir)
+                (when ,checkout-needed
+                  (message "Checking out %s" ,real-thing)
                   (ah-cleartool-ask
-                   (format "checkout -reserved -nc \"%s\"" ,real-dir)))
+                   (format "checkout -reserved -nc \"%s\"" ,real-thing)))
                 ,@forms)
-           (when ,checkout-needed-flag
-             (message "Checking in %s" ,real-dir)
-             (ah-cleartool-ask (format "checkin -nc \"%s\"" ,real-dir)))))))
+           (when ,checkout-needed
+             (message "Checking in %s" ,real-thing)
+             (ah-cleartool-ask (format "checkin -nc \"%s\"" ,real-thing)))))))
 
-  (defmacro with-comment-file (comment-vars &rest forms)
+  (defmacro with-clearcase-cfile (comment-vars &rest forms)
     "Save a comment in a temporary file, than execute `FORMS'.
-
 `COMMENT-VARS' is a list of (comment-file comment-text),
 comment-file will be bound to a temporary file name and
 comment-text will be saved into it.  When all is finished, the
 comment file is removed."
+    ;; NOTE: we could have used
+    ;; (defmacro* with-cleacase-cfile ((comment-file comment-text) &body forms)
+    ;;    ;; blah blah)
+    ;; but we didn't
     (unless (listp comment-vars)
       (error "comment-vars vars should be a list"))
     (unless (= 2 (length comment-vars))
@@ -1412,7 +1414,7 @@ for the file insertion than a checkin.
 NOTE: if dir is not under clearcase, this code will fail.  We
 don't attempt to register a directory in clearcase even if one of
 it's parents is registered."
-  (with-checkedout-dir (file-name-directory file)
+  (with-clearcase-checkout (file-name-directory file)
     (message "Registering %s" (file-name-nondirectory file))
     (let ((ah-cleartool-timeout (* 2 ah-cleartool-timeout)))
       (ah-cleartool-ask (format "mkelem -nc \"%s\"" file)))
@@ -1439,7 +1441,7 @@ returns a 'pathname not within a VOB' error message."
 REV is ignored, COMMENT is the checkin comment."
   (when rev
     (message "Ignoring revision specification: %s" rev))
-  (with-comment-file (comment-file comment)
+  (with-clearcase-cfile (comment-file comment)
     ;; let the cleartool error be directly reported
     (ah-cleartool-ask (format "checkin -cfile %s \"%s\"" comment-file file))
     (ah-clearcase-maybe-set-vc-state file 'force)))
@@ -1489,7 +1491,7 @@ be 'reserved or 'unreserved."
   ;; be confused and will try to ckeck-in an unmodified file (without
   ;; bothering to do a diff) instead of reverting the checkout.
 
-  (with-comment-file (comment-file comment)
+  (with-clearcase-cfile (comment-file comment)
     (let ((pname (if rev (concat file "@@" rev) file))
           (options (concat "-ptime "
                            "-cfile " comment-file
@@ -2043,9 +2045,9 @@ Return nil if no such revision exists."
 (defun vc-clearcase-rename-file (old new)
   "Rename file from OLD to NEW.
 Both in the working area and in the repository are renamed."
-  (with-checkedout-dir (file-name-directory old)
-    (with-checkedout-dir (file-name-directory new)
-      (with-comment-file (comment-file
+  (with-clearcase-checkout (file-name-directory old)
+    (with-clearcase-checkout (file-name-directory new)
+      (with-clearcase-cfile (comment-file
                           (format "*renamed from %s to %s*" old new))
         ;; let the cleartool error be directly reported
         (ah-cleartool-ask
@@ -2599,8 +2601,8 @@ buffer with it."
 ;;; mode: outline-minor
 ;;; outline-regexp: ";;;;+"
 ;;; eval: (progn
-;;;         (put 'with-checkedout-dir 'lisp-indent-function 1)
-;;;         (put 'with-comment-file 'lisp-indent-function 1)
+;;;         (put 'with-clearcase-checkout 'lisp-indent-function 1)
+;;;         (put 'with-clearcase-cfile 'lisp-indent-function 1)
 ;;;         (put 'ignore-cleartool-errors 'lisp-indent-function 0))
 ;;; End:
 

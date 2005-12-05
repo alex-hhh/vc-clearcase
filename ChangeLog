@@ -1,3 +1,12 @@
+2005-12-05  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.58 only require the cl library at compile
+	time.
+	(ah-clearcase-vprop-get, ah-clearcase-revision-reserved-p): 1.58
+	replace find-if with a dolist loop
+	(vc-clearcase-checkout): 1.58 use concat instead of format for
+	constructing the message.
+
 2005-12-03  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (with-clearcase-checkout): 1.57 renamed from

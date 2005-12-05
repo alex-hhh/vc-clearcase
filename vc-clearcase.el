@@ -117,10 +117,8 @@
 (require 'vc-hooks)
 (require 'vc)
 
-(eval-and-compile
-  (require 'cl))                       ; we use find-if, remove-if-not
-
 (eval-when-compile
+  (require 'cl)
   (require 'cc-defs))                   ; for c-point
 
 (defgroup vc-clearcase nil
@@ -1000,9 +998,10 @@ returned (if no such vprop exists, it is created first)
                              ((ah-clearcase-fprop-p view-tag)
                               (ah-clearcase-fprop-view-tag view-tag))
                              (t (error "Unknown type for VIEW-TAG")))))
-        (let ((vprop (find-if (lambda (x)
-                                (string= vtag-name (ah-clearcase-vprop-name x)))
-                              ah-clearcase-all-vprops)))
+        (let ((vprop (catch 'found
+                       (dolist (v ah-clearcase-all-vprops)
+                         (when (string= vtag-name (ah-clearcase-vprop-name v))
+                           (throw 'found v))))))
           (unless vprop
             (setq vprop (ah-clearcase-make-vprop :name vtag-name))
             (push vprop ah-clearcase-all-vprops)
@@ -1529,9 +1528,10 @@ otherwise return nil."
           "[\n\r]+")))
     (let* ((match (concat (ah-clearcase-fprop-version fprop) " reserved"))
            (len (length match))
-           (rev (find-if (lambda (x)
-                           (eq (compare-strings match 0 len x 0 len) t))
-                         checkouts)))
+           (rev (catch 'found
+                  (dolist (c checkouts)
+                    (when (eq (compare-strings match 0 len c 0 len) t)
+                      (throw 'found c))))))
       (if rev
           (let ((elements (split-string rev)))
             (cons (nth 3 elements) (nth 2 elements)))
@@ -1590,10 +1590,10 @@ This method does three completely different things:
          (t (let ((user-and-view (ah-clearcase-revision-reserved-p file)))
               (if user-and-view
                   (when (yes-or-no-p
-                         (format
-                          "This revision is checked out reserved by %s in %s.  %s"
-                          (car user-and-view) (cdr user-and-view)
-                          "Checkout unreserved? "))
+                         (concat
+                          "This revision is checked out reserved by "
+                          (car user-and-view) "in" (cdr user-and-view)
+                          ".  Checkout unreserved? "))
                     (setq checkout 'ah-clearcase-finish-checkout-unreserved))
                   ;; no one has this version checked out, checkout
                   ;; reserved.

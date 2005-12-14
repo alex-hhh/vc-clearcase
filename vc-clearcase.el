@@ -2439,7 +2439,7 @@ view accessible from this machine."
 (modify-syntax-entry ?\n ">" ah-clearcase-edcs-mode-syntax-table)
 
 (defvar ah-clearcase-edcs-all-view-tags nil
-  "A list of all viewtags on this server.")
+  "An obarray of all viewtags on this server as symbols.")
 
 (defvar  ah-clearcase-edcs-all-view-tags-tid nil
   "Transaction ID to wait for fetching all view-tags.")
@@ -2455,7 +2455,9 @@ FLAG."
   ;; call if we would pass ah-clearcase-edcs-all-view-tags directly to
   ;; it.
   (let ((completion-fn (cond ((eq flag t) 'all-completions)
-                             ((eq flag 'lambda) 'test-completion)
+                             ((eq flag 'lambda) 
+                              ;; test-completion does not exist in emacs 21.
+                              '(lambda (x l &optional p) (intern-soft x l)))
                              ((null flag) 'try-completion)
                              (t (error "unknwn value for flag %S" flag)))))
     (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
@@ -2485,8 +2487,9 @@ buffer with it."
           (ah-cleartool-ask
            "lsview -short" 'nowait nil
            #'(lambda (x view-tags)
-               (setq ah-clearcase-edcs-all-view-tags
-                     (split-string view-tags "[\n\r]+")))))
+               (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
+               (dolist (vtag (split-string view-tags "[\n\r]+"))
+                 (intern vtag ah-clearcase-edcs-all-view-tags)))))
 
     (setq view-tag (completing-read
                     "Edit configspec for view: "

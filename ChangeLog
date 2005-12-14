@@ -1,3 +1,11 @@
+2005-12-14  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-view-tag-complete): 1.59 don't use
+	test-completion, as Emacs21 does not have this function.
+	(vc-clearcase-edcs): 1.59 build an obarray of the view tags
+	instead of the string list.  The try-completion and
+	all-completions from Emacs21 cannot handle string lists.
+
 2005-12-05  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.58 only require the cl library at compile

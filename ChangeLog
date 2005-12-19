@@ -1,3 +1,12 @@
+2005-12-19  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-rmbranch-on-revert-flag): 1.60 new
+	variable.
+	(vc-clearcase-revert): 1.60 remove the current branch if there are
+	no versions on it after the uncheckout.
+	(ah-clearcase-edcs-mode-map): 1.60 define C-c C-c for
+	ah-clearcase-setcs
+
 2005-12-14  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-view-tag-complete): 1.59 don't use

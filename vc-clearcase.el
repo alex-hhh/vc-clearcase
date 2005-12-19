@@ -1620,12 +1620,31 @@ This method does three completely different things:
      (error "Bad param combinations in vc-clearcase-checkout: %S %S %S"
             editable rev destfile))))
 
+(defcustom ah-clearcase-rmbranch-on-revert-flag t
+  "Non-nil means remove a branch when a revert leaves no versions on it.
+When a checkout operation creates a new branch, the uncheckout
+will leave the element on that branch with a version of 0 which
+is identical to the parent version.  If you use lots of branches,
+the version tree will become littered with useless branches.
+When this flag is true, the empty branches will be removed (a new
+checkout in the same view will recreate the branch.)"
+  :type 'boolean
+  :group 'vc-clearcase)
 
 (defun vc-clearcase-revert (file &optional contents-done)
   "Cancel a checkout on FILE.
-CONTENTS-DONE is ignored."
+CONTENTS-DONE is ignored. The
+`ah-clearcase-rmbranch-on-revert-flag' is honoured."
+  (let* ((fprop (ah-clearcase-fprop-file file))
+         (empty-branch-p 
+          (string-match "[\\\\\\/]0$" (ah-clearcase-fprop-latest fprop))))
   (ah-cleartool-ask (format "uncheckout -keep \"%s\"" file))
-  (ah-clearcase-maybe-set-vc-state file 'force))
+    (when (and empty-branch-p ah-clearcase-rmbranch-on-revert-flag)
+      (let ((branch (replace-regexp-in-string 
+                     "[\\\\\\/]0$" "" (ah-clearcase-fprop-latest fprop))))
+        (ah-cleartool-ask 
+         (format "rmbranch -force -nc \"%s@@%s\"" file branch))))
+    (ah-clearcase-maybe-set-vc-state file 'force)))
 
 
 (defun vc-clearcase-merge (file rev1 rev2)
@@ -2432,7 +2451,8 @@ view accessible from this machine."
 
 
 (easy-mmode-defmap ah-clearcase-edcs-mode-map
-                   '(("\C-c\C-s" . ah-clearcase-setcs))
+                   '(("\C-c\C-s" . ah-clearcase-setcs)
+                     ("\C-c\C-c" . ah-clearcase-setcs))
                    "Keymap for Clearcase Edit Configspec mode")
 
 (modify-syntax-entry ?\# "<" ah-clearcase-edcs-mode-syntax-table)

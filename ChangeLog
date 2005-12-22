@@ -1,3 +1,20 @@
+2005-12-22  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-do): 1.61 doc update.
+	(ah-clearcase-file-fprop): 1.61 renamed from
+	ah-clearcase-fprop-file, callers updated.
+	(ah-clearcase-reset-fprop): 1.61 renamed from
+	ah-clearcase-fprop-reset, callers updated.
+	(ah-clearcase-set-fprop-version): 1.61 renamed from
+	ah-clearcase-fprop-set-version, callers updated.
+	(ah-clearcase-set-fprop-version-simple): 1.61 renamed from
+	ah-clearcase-fprop-set-version-simple, callers updated.
+	(ah-clearcase-prepare-vprop): 1.61 renamed from
+	ah-clearcase-vprop-prepare, callers udpated.
+	(ah-clearcase-get-vprop): 1.61 renamed form
+	ah-clearcase-vprop-get, callers updated.
+	(ah-clearcase-version): 1.61 new function.
+
 2005-12-19  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-rmbranch-on-revert-flag): 1.60 new

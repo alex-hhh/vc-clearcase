@@ -5,8 +5,6 @@
 ;; Keywords: version-control, clearcase
 ;; $Id$
 
-;;;; Documentation Notes
-
 ;;; Commentary:
 ;;
 ;; vc-clearcase.el is a ClearCase integration package that works as a
@@ -16,8 +14,10 @@
 ;; browser GUI on a file.  Once the package is loaded, these
 ;; additional commands will show up in the Tools/Version Control menu.
 ;;
-;;
-;;; Installation:
+
+;;;; Documentation Notes
+
+;;;;; Installation:
 ;;
 ;; 1/ Put this file somewhere in your load-path and byte-compile it.
 ;;
@@ -40,9 +40,9 @@
 ;; symbol CLEARCASE to `vc-handled-backends' via customize, to tell
 ;; the vc package about the new backend (the autoloads above do that
 ;; automatically for you.)
-;;
-;;
-;;; Implementation notes:
+
+
+;;;;; Implementation notes:
 ;;
 ;; This package uses the following prefixes for its functions and
 ;; variables:
@@ -61,11 +61,178 @@
 ;; conflicts with the clearcase.el package.
 ;;
 ;; In addition, three macros are defined: with-clearcase-checkout,
-;; with-clearcase-cfile and ignore-cleartool-errors if you compile this
-;; file they will not pollute the Emacs namespace.
+;; with-clearcase-cfile and ignore-cleartool-errors if you compile
+;; this file they will not pollute the Emacs namespace.
+
+
+;;;;; Implementation status of vc backend functions from vc.el
 ;;
 ;;
-;;; Todo:
+;; STATE-QUERYING FUNCTIONS (*) is mandatory, (-) is optional
+;;
+;; * registered (file) -- implemented
+;;
+;; * state (file) -- implemented, except that we don't return the
+;;   "USER" state (meaning that another user has a reserved checkout
+;;   on the file).  vc.el will try to steal the lock if we do that and
+;;   that is not always the right thing to do.
+;;
+;; - state-heuristic (file) -- implemented, see `state'
+;;
+;; - dir-state (dir) -- partially implemented, not really working; see
+;;   ah-clearcase-list-view-private-files and
+;;   vc-clearcase-list-checkouts for alternatives
+;;
+;; * workfile-version (file) -- implemented
+;;
+;; - latest-on-branch-p (file) -- implemented
+;;
+;; * checkout-model (file) -- implemented
+;;
+;; - workfile-unchanged-p (file) -- implemented
+;;
+;; - mode-line-string (file) -- implemented
+;;
+;; - dired-state-info (file) -- not implemented (default is fine)
+;;
+;;
+;; STATE-CHANGING FUNCTIONS
+;;
+;; * register (file &optional rev comment) -- implemented
+;;
+;; - init-version (file) -- not implemented, you don't choose the
+;;   initial version in ClearCase
+;;
+;; - responsible-p (file) -- implemented
+;;
+;; - could-register (file) -- not implemented, default implementation
+;;   is fine.  Not really clear what it should do...
+;;
+;; - receive-file (file rev) -- not implemented
+;;
+;; - unregister (file) -- not implemented
+;;
+;; * checkin (file rev comment) -- implemented, but `rev' is ignored;
+;;   vc-checkin-switches is ignored
+;;
+;; * find-version (file rev buffer) -- implemented, but will not
+;;   check-out the head of the trunk: will sigal an error when
+;;   (string= rev "".  Head of trunk has no meaning in ClearCase.
+;;
+;; * checkout (file &optional editable rev) -- implemented, but not
+;;   all parameter combinations are allowed.  Furthermore, the
+;;   function is asynchronous (like checkin), it pops up a buffer for
+;;   the checkout comment and finishes the checkout later.
+;;
+;; * revert (file &optional contents-done) -- implemented, but
+;;   `contents-done' is ignored.
+;;
+;; - cancel-version (file editable) -- not implemented, ClearCase does
+;;   provide this functionality, but I consider it too dangerous.
+;;
+;; - merge (file rev1 rev2) -- implemented, but the operation will
+;;   throw an error if the merge cannot be done automatically.  vc.el
+;;   assumes there are conflict markers in the buffer, but ClearCase
+;;   does not use them.
+;;
+;; - merge-news (file) -- implemented, same restrictions as for
+;;   `merge'
+;;
+;; - steal-lock (file &optional version) -- not implemented.  Maybe it
+;;   could be implemented as unreserving someone elses reserved
+;;   checkout.  vc.el seems to handle locking by someone else in a
+;;   limited way (compared to ClearCase).  vc-clearcase-state will
+;;   never return a string (which signifies that the file is locked by
+;;   someone else) because vc.el will always want to steal the lock.
+;;   Instead, vc-clearcase-checkout will ask the user if he wants to
+;;   checkout the file unreserved.
+;;
+;;
+;; HISTORY FUNCTIONS
+;;
+;; * print-log (file &optional buffer) -- implemented, but as a
+;;   separate function (vc-print-log is defadvice'd).  ClearCase logs
+;;   look nothing like CVS logs, especially since revision names are
+;;   soo different.
+;;
+;; - show-log-entry (version) -- implemented, but see `print-log'
+;;
+;; - wash-log (file) -- not implemented
+;;
+;; - logentry-check () -- not implemented
+;;
+;; - comment-history (file) -- not implemented
+;;
+;; - update-changelog (files) -- not implemented
+;;
+;; * diff (file &optional rev1 rev2 buffer) -- implemented.
+;;
+;; - diff-tree (dir &optional rev1 rev2) -- not implemented (new in
+;;   Emacs 22)
+;;
+;; - annotate-command (file buf &optional rev) -- implemented, but
+;;   runs annotate asynchronously
+;;
+;; - annotate-time () -- implemented (new in Emacs 22), we also
+;;   implement annotate-difference which is Emacs 21.
+;;
+;; - annotate-current-time () -- not implemented (new in Emacs 22)
+;;
+;; - annotate-extract-revision-at-line () -- implemented (new in Emacs
+;;   22)
+;;
+;;
+;; SNAPSHOT SYSTEM
+;;
+;; - create-snapshot (dir name branchp) -- implemented, but `branchp'
+;;   is used to move a label.  You cannot make branches in ClearCase
+;;   in the way vc.el would like
+;;
+;; - assign-name (file name) -- not implemented
+;;
+;; - retrieve-snapshot (dir name update) -- not implemented as it is not
+;;   applicable for ClearCase.  See `vc-clearcase-edcs' for an
+;;   alternative.
+;;
+;;
+;; MISCELLANEOUS
+;;
+;; - make-version-backups-p (file) -- not implemented
+;;
+;; - repository-hostname (dirname) -- not implemented
+;;
+;; - previous-version (file rev) -- implemented
+;;
+;; - next-version (file rev) -- implemented
+;;
+;; - check-headers () -- not implemented, version headers don't seem
+;;   to exist in ClearCase.
+;;
+;; - clear-headers () -- not implemented
+;;
+;; - delete-file (file) -- not implemented
+;;
+;; - rename-file (old new) -- implemented
+;;
+;; - find-file-hook () -- not implemented
+;;
+;; - find-file-not-found-hook () -- not implemented
+;;
+;; CLEARCASE SPECIFIC FUNCTIONS
+;; (see their help text for details)
+;;
+;; - vc-clearcase-what-version
+;; - vc-clearcase-what-rule
+;; - vc-clearcase-what-view-tag
+;; - vc-clearcase-gui-vtree-browser
+;; - vc-clearcase-list-checkouts
+;; - vc-clearcase-update-view
+;; - vc-clearcase-label-diff-report
+;; - vc-clearcase-list-view-private-files
+;; - vc-clearcase-edcs
+
+
+;;;;; Todo:
 ;;
 ;; - allow expanding of revision strings to avoid the need to type a
 ;; full path.  The idea is: if revision is a number, it should expand
@@ -92,7 +259,8 @@
 ;; - vc-clearcase-dir-state is both inefficient and incomplete
 ;;
 
-;;; Known bugs:
+
+;;;;; Known bugs:
 ;;
 ;; When trying to merge revisions (`vc-merge') on a file that is not
 ;; checked-out, vc asks for a checkout, but that the comment window
@@ -109,6 +277,7 @@
 ;;; History:
 ;;
 
+
 ;;; Code:
 
 ;;;; Initial requires and setup
@@ -1638,13 +1807,13 @@ checkout in the same view will recreate the branch.)"
 CONTENTS-DONE is ignored. The
 `ah-clearcase-rmbranch-on-revert-flag' is honoured."
   (let* ((fprop (ah-clearcase-file-fprop file))
-         (empty-branch-p 
+         (empty-branch-p
           (string-match "[\\\\\\/]0$" (ah-clearcase-fprop-latest fprop))))
   (ah-cleartool-ask (format "uncheckout -keep \"%s\"" file))
     (when (and empty-branch-p ah-clearcase-rmbranch-on-revert-flag)
-      (let ((branch (replace-regexp-in-string 
+      (let ((branch (replace-regexp-in-string
                      "[\\\\\\/]0$" "" (ah-clearcase-fprop-latest fprop))))
-        (ah-cleartool-ask 
+        (ah-cleartool-ask
          (format "rmbranch -force -nc \"%s@@%s\"" file branch))))
     (ah-clearcase-maybe-set-vc-state file 'force)))
 
@@ -1984,7 +2153,7 @@ element * NAME -nocheckout"
             (ecase ah-clearcase-no-label-action
               ('create t)
               ('error nil)
-              ('ask (yes-or-no-p 
+              ('ask (yes-or-no-p
                      (format "Label %s does not exist.  Create it? " name))))))
        (if should-create
            (progn
@@ -2477,7 +2646,7 @@ FLAG."
   ;; call if we would pass ah-clearcase-edcs-all-view-tags directly to
   ;; it.
   (let ((completion-fn (cond ((eq flag t) 'all-completions)
-                             ((eq flag 'lambda) 
+                             ((eq flag 'lambda)
                               ;; test-completion does not exist in emacs 21.
                               '(lambda (x l &optional p) (intern-soft x l)))
                              ((null flag) 'try-completion)

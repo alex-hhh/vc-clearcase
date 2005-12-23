@@ -1,3 +1,26 @@
+2005-12-23  Alexandru Harsanyi  <harsanyi@mac.com>
+	
+	* vc-clearcase.el (vc-clearcase-cvsid)
+	(vc-clearcase-maintainer-address): 1.63 new constants
+	(ah-clearcase-file-fprop, vc-clearcase-registered)
+	(vc-clearcase-state, vc-clearcase-state)
+	(vc-clearcase-workfile-unchanged-p, vc-clearcase-register)
+	(vc-clearcase-responsible-p, vc-clearcase-checkin)
+	(vc-clearcase-find-version, vc-clearcase-checkout)
+	(vc-clearcase-revert, vc-clearcase-merge, vc-clearcase-merge-news)
+	(vc-clearcase-print-log, vc-clearcase-diff)
+	(vc-clearcase-annotate-command, vc-clearcase-previous-version)
+	(vc-clearcase-next-version, vc-clearcase-rename-file): 1.63 call
+	expand-file-name on file.
+	(vc-clearcase-gui-vtree-browser, vc-clearcase-list-checkouts)
+	(vc-clearcase-update-view, vc-clearcase-label-diff-report)
+	(vc-clearcase-list-view-private-files): 1.63 don't pass
+	default-directory to expand-file-name
+	(vc-clearcase-report-bug): 1.63 new function
+	(ah-clearcase-function-to-trace): 1.63 new variable
+	(ah-clearcase-trace-cleartool-tq): 1.63 use it
+	(ah-clearcase-untrace-cleartool-tq): 1.63 new function
+
 2005-12-22  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-do): 1.61 doc update.

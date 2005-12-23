@@ -1,6 +1,6 @@
 ;; vc-clearcase.el --- support for ClearCase version control system
 
-;; Author: Alexandru Harsanyi (harsanyi@bigpond.com)
+;; Author: Alexandru Harsanyi (harsanyi@mac.com)
 ;; Created: 28 July 2004
 ;; Keywords: version-control, clearcase
 ;; $Id$
@@ -289,6 +289,11 @@
 (eval-when-compile
   (require 'cl)
   (require 'cc-defs))                   ; for c-point
+
+(defconst vc-clearcase-cvsid
+  "$Id$")
+
+(defconst vc-clearcase-maintainer-address "harsanyi@mac.com")
 
 (defgroup vc-clearcase nil
   "Support for the ClearCase version control system."
@@ -969,7 +974,7 @@ Will move to the next record if NUM is negative."
 
 (defsubst ah-clearcase-file-fprop (file)
   "Return the fprop structure associated with FILE."
-  (vc-file-getprop file 'vc-clearcase-fprop))
+  (vc-file-getprop (expand-file-name file) 'vc-clearcase-fprop))
 
 (defsubst ah-clearcase-fprop-initialized-p (fprop)
   "Return true if FPROP is initialized.
@@ -1380,6 +1385,9 @@ comment file is removed."
   "Return non nil if FILE is registered in ClearCase.
 We consider it to be registered, if cleartool can tell us its
 version."
+  ;; we cannot guarantee that vc.el will give us an expanded file
+  ;; name, and cleartool does not know about tilde expansion...
+  (setq file (expand-file-name file))
   ;; if the file already has a version set, or we asked for it
   ;; already, return t
   (let ((fprop (ah-clearcase-file-fprop file)))
@@ -1435,6 +1443,10 @@ configspec rule does not branch.  (we should check that an update
 checked it out.
 
 'unlocked-change -- file is hijacked."
+  ;; we cannot guarantee that vc.el will give us an expanded file
+  ;; name, and cleartool does not know about tilda expansion...
+  (setq file (expand-file-name file))
+
   ;; we are asked for a reliable computation of state, so refresh all
   ;; the properties.
   (ah-clearcase-maybe-set-vc-state file 'force)
@@ -1551,6 +1563,7 @@ separate version, so we return the parent version in that case."
 
 (defun vc-clearcase-workfile-unchanged-p (file)
   "Is FILE un-changed?"
+  (setq file (expand-file-name file))
   (let ((diff
          (ah-cleartool-ask
           (format "diff -predecessor -options -headers_only \"%s\"" file))))
@@ -1584,6 +1597,7 @@ for the file insertion than a checkin.
 NOTE: if dir is not under clearcase, this code will fail.  We
 don't attempt to register a directory in clearcase even if one of
 it's parents is registered."
+  (setq file (expand-file-name file))
   (with-clearcase-checkout (file-name-directory file)
     (message "Registering %s" (file-name-nondirectory file))
     (let ((ah-cleartool-timeout (* 2 ah-cleartool-timeout)))
@@ -1595,6 +1609,7 @@ it's parents is registered."
   "Return t if we responsible for FILE.
 We don't consider ourselves responsible if cleartool ls command
 returns a 'pathname not within a VOB' error message."
+  (setq file (expand-file-name file))
   (if (file-exists-p file)
       (let ((case-fold-search t))
         (condition-case msg
@@ -1609,6 +1624,7 @@ returns a 'pathname not within a VOB' error message."
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
 REV is ignored, COMMENT is the checkin comment."
+  (setq file (expand-file-name file))
   (when rev
     (message "Ignoring revision specification: %s" rev))
   (with-clearcase-cfile (comment-file comment)
@@ -1637,6 +1653,7 @@ behavior."
 If REV nil, it will get the latest on the branch, if REV is the
 empty string, we signal an error, since head of trunk has no
 meaning in ClearCase."
+  (setq file (expand-file-name file))
   (let ((tmpfile (make-temp-file (expand-file-name file))))
     ;; it seems make-temp-file creates the file, and clearcase will
     ;; refuse to get the version into an existing file.
@@ -1733,6 +1750,7 @@ This method does three completely different things:
 
   3/ Update the file (in snapshot views)."
 
+  (setq file (expand-file-name file))
   (cond
     ((and editable destfile)
      (error "Cannot checkout to a specific file"))
@@ -1806,6 +1824,7 @@ checkout in the same view will recreate the branch.)"
   "Cancel a checkout on FILE.
 CONTENTS-DONE is ignored. The
 `ah-clearcase-rmbranch-on-revert-flag' is honoured."
+  (setq file (expand-file-name file))
   (let* ((fprop (ah-clearcase-file-fprop file))
          (empty-branch-p
           (string-match "[\\\\\\/]0$" (ah-clearcase-fprop-latest fprop))))
@@ -1826,6 +1845,7 @@ not checked-out, vc asks for a checkout, but that the comment
 window pops up, and `vc-merge' assumes the file was already
 checked out.  We need to do an automatic checkout in this case,
 but how do we detect it?"
+  (setq file (expand-file-name file))
   (let ((merge-status
          (ah-cleartool-ask
           (format "merge -abort -insert -to \"%s\" -ver %s %s"
@@ -1839,6 +1859,7 @@ but how do we detect it?"
 
 (defun vc-clearcase-merge-news (file)
   "Merge the new versions in FILE."
+  (setq file (expand-file-name file))
   (let ((latest (concat file "@@"
                         (ah-clearcase-fprop-latest-sel
                          (ah-clearcase-file-fprop file)))))
@@ -1873,6 +1894,7 @@ sent to cleartool).
 This is not intended to be called directly from the vc.el.
 Instead, `vc-print-log' is advised to call this function directly
 for Clearcase registered files."
+  (setq file (expand-file-name file))
   (let ((buf (get-buffer-create "*clearcase-lshistory*")))
     (vc-setup-buffer buf)
     (with-current-buffer buf
@@ -1933,6 +1955,7 @@ Only works for the clearcase log format defined in
 
 (defun vc-clearcase-diff (file &optional rev1 rev2)
   "Return the diff on FILE between REV1 and REV2."
+  (setq file (expand-file-name file))
   (let ((fprop (ah-clearcase-file-fprop file)))
     (when (not rev1)
       (setq rev1 (ah-clearcase-fprop-version fprop)))
@@ -1974,6 +1997,7 @@ Only works for the clearcase log format defined in
   "Get the annotations for FILE and put them in BUF.
 REV is the revision we want to annotate.  With prefix argument,
 will ask if you want to display the deleted sections as well."
+  (setq file (expand-file-name file))
   (let ((pname (concat file (when rev (concat "@@" rev)))))
     (vc-setup-buffer buf)
     (with-current-buffer buf
@@ -2185,6 +2209,7 @@ element * NAME -nocheckout"
 (defun vc-clearcase-previous-version (file rev)
   "Return the FILE revision that precedes the revision REV.
 Return nil if no such revision exists."
+  (setq file (expand-file-name file))
   ;; We simply ask clearcase to tell us the previous version name
   ;; (%PVn).  If we came across a version number of 0, we ask for the
   ;; previous version again, since the initial version on a branch (0)
@@ -2200,6 +2225,7 @@ Return nil if no such revision exists."
 (defun vc-clearcase-next-version (file rev)
   "Return the FILE revision that follows the revision REV.
 Return nil if no such revision exists."
+  (setq file (expand-file-name file))
   ;; Unfortunately, there's no easy (and correct) way of finding the
   ;; next version.  We start with the LATEST for FILE and walk
   ;; backwards until the parent is REV. If we came across a version
@@ -2235,6 +2261,9 @@ Return nil if no such revision exists."
 (defun vc-clearcase-rename-file (old new)
   "Rename file from OLD to NEW.
 Both in the working area and in the repository are renamed."
+  ;; Unfortunately vc-rename-file will not expand these for us
+  (setq old (expand-file-name old))
+  (setq new (expand-file-name new))
   (with-clearcase-checkout (file-name-directory old)
     (with-clearcase-checkout (file-name-directory new)
       (with-clearcase-cfile (comment-file
@@ -2308,14 +2337,13 @@ be browsed)"
     (when ask-for-file
       (setq file
             (expand-file-name
-             (read-file-name "Browse vtree for: " file file t)
-             default-directory)))
+             (read-file-name "Browse vtree for: " file file t)))
     (if (and file (vc-clearcase-registered file))
         (progn
           (message "Starting Vtree browser...")
           (start-process-shell-command
            "Vtree_browser" nil ah-clearcase-vtree-program file))
-        (message "Not a clearcase file"))))
+        (message "Not a clearcase file")))))
 
 (defconst ah-cleartool-lsco-fmt
   (concat "----------\n"
@@ -2336,7 +2364,7 @@ all the views are listed."
   (interactive "DList checkouts in directory: \nP")
   (when (string-match "\\(\\\\\\|/\\)$" dir)
     (setq dir (replace-match "" nil nil dir)))
-  (setq dir (expand-file-name dir default-directory))
+  (setq dir (expand-file-name dir))
   (let ((user-selection
          (if prefix-arg
              (let ((u (read-from-minibuffer "User: ")))
@@ -2367,7 +2395,7 @@ are made to the views)."
   (interactive "DUpdate directory: \nP")
   (when (string-match "[\\\/]+$" dir)
     (setq dir (substring dir 0 (match-beginning 0))))
-  (setq dir (expand-file-name dir default-directory))
+  (setq dir (expand-file-name dir))
   (with-current-buffer (get-buffer-create "*clearcase-update*")
     (setq buffer-read-only t)
     (let ((inhibit-read-only t))
@@ -2386,7 +2414,7 @@ are made to the views)."
 (defun vc-clearcase-label-diff-report (dir label-1 label-2)
   "Report the changed file revisions in DIR between LABEL-1 and LABEL-2."
   (interactive "DReport on directory: \nsLabel 1: \nsLabel 2: ")
-  (setq dir (expand-file-name dir default-directory))
+  (setq dir (expand-file-name dir))
   ;; make sure both labels exist
   (ah-cleartool-ask (format "cd \"%s\"" dir))
   (ah-cleartool-ask (format "desc -fmt \"ok\" lbtype:%s" label-1))
@@ -2528,7 +2556,7 @@ are made to the views)."
   "List the view private files in DIR.
 You can edit the files using 'find-file-at-point'"
   (interactive "DReport on directory: ")
-  (setq dir (expand-file-name dir default-directory))
+  (setq dir (expand-file-name dir))
   (let ((buf (get-buffer-create "*clearcase-view-private-files*")))
     (with-current-buffer buf
       (buffer-disable-undo)
@@ -2767,7 +2795,7 @@ buffer with it."
     'vc))
 
 
-;;;; Debugging aids
+;;;; Debugging aids, reporting bugs
 
 (defun ah-clearcase-version ()
   "Return the clearcase version as a string.
@@ -2778,13 +2806,79 @@ This is the string returned by the cleartool -version command."
     (catch 'done (while t (sit-for 0.1)))
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))
 
+(defun vc-clearcase-report-bug ()
+  "Submit via mail a bug report on vc-clearcase.el"
+  (interactive)
+  (require 'reporter)
+  (let ((reporter-prompt-for-summary-p t))
+    (reporter-submit-bug-report
+     vc-clearcase-maintainer-address
+     "vc-clearcase.el"
+     `( vc-clearcase-cvsid
+
+        ah-clearcase-cleartool-program
+        ah-cleartool-timeout
+        ah-cleartool-idle-timeout
+        ah-cleartool-save-stop-data
+        ah-clearcase-rmbranch-on-revert-flag
+        ah-clearcase-diff-format
+        ah-clearcase-diff-cleanup-flag
+        ah-clearcase-no-label-action
+
+        ah-cleartool-next-command
+
+        ,(cons 'ah-cleartool-last-command-timestamp
+               (lambda (x buf)
+                 (let ((name (symbol-name x))
+                       (value (symbol-value x)))
+                   (insert name " " (format "%.3f" value)
+                           "; " (format "%.3f" (- (float-time) value))
+                           " seconds ago")
+                   (lisp-indent-line)
+                   (insert "\n"))))
+
+        ah-cleartool-ctid
+        ah-cleartool-ntid
+        ah-cleartool-terr
+        ah-cleartool-tresults)
+
+     (lambda ()
+       (insert "\n\nClearCase version:\n==================\n\n"
+               (ah-clearcase-version))
+       (insert "\n\nContents of *cleartool-aborts*:\n"
+               "===============================\n\n")
+       (if ah-cleartool-save-stop-data
+           (ignore-errors (insert-buffer-substring
+                           (get-buffer "*cleartool-aborts*")))
+         (insert "ah-cleartool-save-stop-data is nil, "
+                 "*cleartool-aborts* is not available"))
+       (insert "\n")
+       (insert "\n\nContents of *cleartool-tq-trace*:\n"
+               "=================================\n\n")
+       (let ((buf (get-buffer "*cleartool-tq-trace*")))
+         (if buf
+             (insert-buffer-substring buf)
+           (insert "buffer *cleartool-tq-trace* is not available")))
+       (insert "\n")))))
+
+(defvar ah-clearcase-function-to-trace
+  '(ah-clearcase-ask ah-cleartool-wait-for ah-cleartool-tq-handler)
+  "List of function to trace.
+See `ah-clearcase-trace-cleartool-tq' and
+`ah-clearcase-untrace-cleartool-tq' ")
+
 (defun ah-clearcase-trace-cleartool-tq ()
   "Trace some of the cleartool commands."
   (interactive)
   (let ((trace-buf (get-buffer-create "*cleartool-tq-trace*")))
-    (trace-function-background 'ah-cleartool-ask trace-buf)
-    (trace-function-background 'ah-cleartool-wait-for trace-buf)
-    (trace-function-background 'ah-cleartool-tq-handler trace-buf)))
+    (dolist (f ah-clearcase-function-to-trace)
+      (trace-function-background f trace-buf))))
+
+(defun ah-clearcase-untrace-cleartool-tq ()
+  "Disable tracing of cleartool commands."
+  (interactive)
+  (dolist (f ah-clearcase-function-to-trace)
+    (untrace-function f)))
 
 ;;;; Finish up
 

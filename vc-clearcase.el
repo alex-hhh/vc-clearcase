@@ -2337,13 +2337,13 @@ be browsed)"
     (when ask-for-file
       (setq file
             (expand-file-name
-             (read-file-name "Browse vtree for: " file file t)))
+             (read-file-name "Browse vtree for: " file file t))))
     (if (and file (vc-clearcase-registered file))
         (progn
           (message "Starting Vtree browser...")
           (start-process-shell-command
            "Vtree_browser" nil ah-clearcase-vtree-program file))
-        (message "Not a clearcase file")))))
+        (message "Not a clearcase file"))))
 
 (defconst ah-cleartool-lsco-fmt
   (concat "----------\n"

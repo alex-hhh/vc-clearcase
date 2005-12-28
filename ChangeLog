@@ -1,3 +1,8 @@
+2005-12-28  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-gui-vtree-browser): 1.64 bugfix:
+	closed the when form too late.
+
 2005-12-23  Alexandru Harsanyi  <harsanyi@mac.com>
 	
 	* vc-clearcase.el (vc-clearcase-cvsid)

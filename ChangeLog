@@ -1,3 +1,14 @@
+2006-01-23  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool): 1.65 new function,
+	all (ah-cleartool-ask (format ...)) calls replaced with it.
+	(ah-clearcase-get-vprop): 1.65 re-coded it to use let*
+	(ah-clearcase-annotate-post-process)
+	(ah-clearcase-annotate-mark-deleted, ah-clearcase-setcs) : 1.65
+	use the interactive form to set the buffer
+	(ah-clearcase-setcs-and-kill-buffer): 1.65 new function, used as
+	the C-c C-c binding in edcs-mode.
+
 2005-12-28  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-gui-vtree-browser): 1.64 bugfix:

@@ -1,3 +1,9 @@
+2006-01-24  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-annotate-post-process)
+	(ah-clearcase-annotate-mark-deleted) : 1.66 the buffer argument is
+	now mandatory
+
 2006-01-23  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool): 1.65 new function,

@@ -1998,8 +1998,9 @@ will ask if you want to display the deleted sections as well."
          buf)
         (setq ah-cleartool-finished-function
               #'(lambda ()
-                  (ah-clearcase-annotate-post-process)
-                  (ah-clearcase-annotate-mark-deleted)))))))
+                  (let ((buffer (current-buffer)))
+                    (ah-clearcase-annotate-post-process buffer)
+                    (ah-clearcase-annotate-mark-deleted buffer))))))))
 
 (defun vc-clearcase-annotate-difference (point)
   "Return the age in days of POINT."
@@ -2042,12 +2043,11 @@ available in Emacs 21."
       (incf year (if (< year 70) 2000 1900))
       (/ (float-time (encode-time 0 0 0 day month year)) 24 3600))))
 
-(defun ah-clearcase-annotate-post-process (&optional buffer)
+(defun ah-clearcase-annotate-post-process (buffer)
   "Compute the age, time and revision of each line in BUFFER.
 These will be stored as properties, so
 `vc-clearcase-annotate-difference', `vc-clearcase-annotate-time'
 and `vc-clearcase-annotate-revision-atline' work fast."
-  (interactive (list (current-buffer)))
   (with-current-buffer buffer
     (let ((inhibit-read-only t)
           (date-rx "^[0-9]+-[A-Za-z]+-[0-9]+")
@@ -2105,10 +2105,9 @@ and `vc-clearcase-annotate-revision-atline' work fast."
           (replace-match str nil t))))))
 
 
-(defun ah-clearcase-annotate-mark-deleted (&optional buffer)
+(defun ah-clearcase-annotate-mark-deleted (buffer)
   "Mark all deleted files in BUFFER with strike-through face.
 When BUFFER is nil, the current buffer is used."
-  (interactive (list (current-buffer)))
   (with-current-buffer buffer
     (save-excursion
       (let ((inhibit-read-only t))

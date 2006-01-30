@@ -2168,9 +2168,9 @@ element * NAME -nocheckout"
        (if should-create
            (progn
              (message "Creating label %s" name)
-             (ah-cleartool "mklbtype -ordinary -nc lbtype:%s" name))
-           (message nil))
-       (error "Label %s does not exist and will not create it." name))))
+             (ah-cleartool "mklbtype -ordinary -nc lbtype:%s" name)
+             (message nil))
+           (error "Label %s does not exist and will not create it." name)))))
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
     ;; NOTE: the mklabel command might fail if some files are

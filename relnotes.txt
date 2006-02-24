@@ -1,0 +1,14 @@
+
+Release 1.69
+
+This is the first public release of vc-clearcase.el.  I have used it
+privately for more than a year without any problems.  This version
+works with GNU Emacs 21 and the current CVS version.  It has been
+tested with Clearcase on Windows XP and Solaris.  See the
+documentation section in vc-clearcase.el for installation
+instructions.
+
+HINT: The version number is 1.69 because this is the version of the
+vc-clearcase.el in CVS.
+
+

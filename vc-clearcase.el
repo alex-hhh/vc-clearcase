@@ -248,6 +248,7 @@
 ;; - vc-clearcase-label-diff-report
 ;; - vc-clearcase-list-view-private-files
 ;; - vc-clearcase-edcs
+;; - vc-clearcase-start-view
 
 
 ;;;;; Todo:
@@ -2274,12 +2275,11 @@ Both in the working area and in the repository are renamed."
 
 ;;;; Additional vc clearcase commands
 
-;;;###autoload
 (defun vc-clearcase-what-version ()
   "Show what is the version of the current file."
   (interactive)
   (let ((file (buffer-file-name (current-buffer))))
-    (if (vc-clearcase-registered file)
+    (if (and (stringp file) (vc-clearcase-registered file))
         (progn
           (ah-clearcase-maybe-set-vc-state file)
           (let* ((fprop (ah-clearcase-file-fprop file))
@@ -2294,12 +2294,11 @@ Both in the working area and in the repository are renamed."
                        (t "")))))
         (message "Not a clearcase file"))))
 
-;;;###autoload
 (defun vc-clearcase-what-rule ()
   "Show the configspec rule for the current file."
   (interactive)
   (let ((file (buffer-file-name (current-buffer))))
-    (if (vc-clearcase-registered file)
+    (if (and (stringp file) (vc-clearcase-registered file))
         (progn
           (ah-clearcase-maybe-set-vc-state file)
           (let ((rule (ah-clearcase-fprop-what-rule
@@ -2309,12 +2308,11 @@ Both in the working area and in the repository are renamed."
                 (message "No configspec rule"))))
         (message "Not a clearcase file"))))
 
-;;;###autoload
 (defun vc-clearcase-what-view-tag ()
   "Show view-tag for the current file."
   (interactive)
   (let ((file (buffer-file-name (current-buffer))))
-    (if (vc-clearcase-registered file)
+    (if (and (stringp file) (vc-clearcase-registered file))
         (progn
           (ah-clearcase-maybe-set-vc-state file)
           (let ((view-tag (ah-clearcase-fprop-view-tag
@@ -2324,7 +2322,6 @@ Both in the working area and in the repository are renamed."
                 (message "View tag not (yet?) known"))))
         (message "Not a clearcase file"))))
 
-;;;###autoload
 (defun vc-clearcase-gui-vtree-browser (ask-for-file)
   "Start the version tree browser GUI on a file or directory.
 When ASK-FOR-FILE is nil, the file in the current buffer is used.
@@ -2744,6 +2741,34 @@ buffer with it."
     (ignore-errors
       (ah-cleartool-wait-for ah-clearcase-edcs-all-view-tags-tid))))
 
+;;;###autoload
+(defun vc-clearcase-start-view ()
+  "Start a dynamic view.
+Prompts the user for the view name."
+  (interactive)
+  (let (view-tag)
+    ;; start reading the view-tags. By the time the user decides what
+    ;; view-tag it wants, we may have the answer already.
+    (setq ah-clearcase-edcs-all-view-tags-tid
+          (ah-cleartool-ask
+           "lsview -short" 'nowait nil
+           #'(lambda (x view-tags)
+               (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
+               (dolist (vtag (split-string view-tags "[\n\r]+"))
+                 (intern vtag ah-clearcase-edcs-all-view-tags)))))
+    
+    (setq view-tag (completing-read
+                    "Dynamic view to start: "
+                    #'ah-clearcase-view-tag-complete
+                    nil nil view-tag))
+    
+    (unwind-protect
+        (progn
+          (message "Starting %s dynamic view..." view-tag)
+          (message (ah-cleartool "startview %s" view-tag))
+          (message "Starting %s dynamic view...done." view-tag))
+      (ignore-errors
+        (ah-cleartool-wait-for ah-clearcase-edcs-all-view-tags-tid)))))
 
 ;;;; Update vc keymap
 
@@ -2752,13 +2777,14 @@ buffer with it."
 
 ;;;###autoload
 (progn
-  (define-key vc-prefix-map "y" 'vc-clearcase-what-version)
-  (define-key vc-prefix-map "w" 'vc-clearcase-what-rule)
-  (define-key vc-prefix-map "t" 'vc-clearcase-what-view-tag)
   (define-key vc-prefix-map "e" 'vc-clearcase-edcs)
-  (define-key vc-prefix-map "p" 'vc-clearcase-update-view)
+  (define-key vc-prefix-map "f" 'vc-clearcase-start-view)
+  (define-key vc-prefix-map "j" 'vc-clearcase-gui-vtree-browser)
   (define-key vc-prefix-map "o" 'vc-clearcase-list-checkouts)
-  (define-key vc-prefix-map "j" 'vc-clearcase-gui-vtree-browser))
+  (define-key vc-prefix-map "p" 'vc-clearcase-update-view)
+  (define-key vc-prefix-map "t" 'vc-clearcase-what-view-tag)
+  (define-key vc-prefix-map "w" 'vc-clearcase-what-rule)
+  (define-key vc-prefix-map "y" 'vc-clearcase-what-version))
 
 ;;;###autoload
 (progn
@@ -2794,6 +2820,9 @@ buffer with it."
     (define-key m [vc-clearcase-edcs]
       '(menu-item "Edit Configspec" vc-clearcase-edcs
         :help "Edit a view's configspec"))
+    (define-key m [vc-clearcase-start-view]
+      '(menu-item "Start dynamic view" view-clearcase-start-view
+        :help "Start a dynamic view"))
     (fset 'clearcase-global-menu m)))
 
 ;;;###autoload

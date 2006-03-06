@@ -1,3 +1,23 @@
+2006-03-06  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-what-version)
+	(vc-clearcase-what-rule, vc-clearcase-what-view-tag): 1.69 removed
+	autoload cookie, also handle corectly the case when we are called
+	in a buffer which is not associated with a file.
+	(vc-clearcase-gui-vtree-browser): 1.69 remove autoload cookie
+	(vc-clearcase-start-view): 1.69 new function
+	(vc-prefix-map): 1.69 order the define-key calls in alphabetical
+	order.
+	(clearcase-global-menu): 1.69 add a "Start dynamic view" menu
+	entry.
+
+2006-02-24  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.68 applied GPL licence to the file, added the
+	sourceforge address for the vc-clearcase project
+	
+	Initial public release
+
 2006-01-30  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-create-snapshot): 1.67 bugfix, the
@@ -26,7 +46,7 @@
 	closed the when form too late.
 
 2005-12-23  Alexandru Harsanyi  <harsanyi@mac.com>
-	
+
 	* vc-clearcase.el (vc-clearcase-cvsid)
 	(vc-clearcase-maintainer-address): 1.63 new constants
 	(ah-clearcase-file-fprop, vc-clearcase-registered)

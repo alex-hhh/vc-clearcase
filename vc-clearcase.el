@@ -2351,7 +2351,7 @@ be browsed)"
   "Format string to use when listing checkouts.")
 
 ;;;###autoload
-(defun vc-clearcase-list-checkouts (dir prefix-arg)
+(defun vc-clearcase-list-checkouts (dir &optional prefix-arg)
   "List the checkouts of the current user in DIR.
 If PREFIX-ARG is present, an user name can be entered, and all
 the views are searched for checkouts of the specified user.  If
@@ -2686,89 +2686,74 @@ FLAG."
                              (t (error "unknwn value for flag %S" flag)))))
     (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
 
-;;;###autoload
-(defun vc-clearcase-edcs ()
-  "Start editing a config spec.
-Prompts for a view-tag name with the default of the current
-file's view-tag, fetches that view's config spec and pops up a
-buffer with it."
-  (interactive)
-  (let ((file (buffer-file-name (current-buffer)))
-        view-tag)
-    (when (and file (vc-clearcase-registered file))
-      (ah-clearcase-maybe-set-vc-state file)
-      (setq view-tag (ah-clearcase-fprop-view-tag
-                      (ah-clearcase-file-fprop file))))
 
-    ;; don't remove the old view-tag list.  The view we are looking
-    ;; for might already be in there.
+(defun ah-clearcase-read-view-tag (prompt &optional initial)
+  "Read a view tag from the minibuffer and return it.
+`prompt' is displayed to the user, `initial', when non-nil is the
+initial view tag name presented to the user.
 
-    ;; (setq ah-clearcase-edcs-all-view-tags nil)
+This function will provide a completing-read with the list of
+available view tags in the system.  It does however read the view
+tags asynchronously so they might not be available immediately as
+the user hits the TAB key.
 
-    ;; start reading the view-tags. By the time the user decides what
-    ;; view-tag it wants, we may have the answer already.
-    (setq ah-clearcase-edcs-all-view-tags-tid
-          (ah-cleartool-ask
-           "lsview -short" 'nowait nil
-           #'(lambda (x view-tags)
-               (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
-               (dolist (vtag (split-string view-tags "[\n\r]+"))
-                 (intern vtag ah-clearcase-edcs-all-view-tags)))))
+This implementation was chosen to improve responsiveness, if the
+user wants to accept `initial' or wants to type in the name of
+the view, he can do so without waiting for the full list of view
+tags to be read from cleartool (on my site we have around 4000
+views, which is quite large)"
 
-    (setq view-tag (completing-read
-                    "Edit configspec for view: "
-                    #'ah-clearcase-view-tag-complete
-                    nil nil view-tag))
+  ;; start reading the view-tags. By the time the user decides what
+  ;; view-tag it wants, we may have the answer already.  Note that the
+  ;; previous view tag list still exists and the user can perform
+  ;; completions form that one.
+  (setq ah-clearcase-edcs-all-view-tags-tid
+        (ah-cleartool-ask
+         "lsview -short" 'nowait nil
+         '(lambda (x view-tags)
+           (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
+           (dolist (vtag (split-string view-tags "[\n\r]+"))
+             (intern vtag ah-clearcase-edcs-all-view-tags)))))
 
-    (message "Fetching configspec for %s" view-tag)
-    (let ((tid (ah-cleartool-ask (concat "catcs -tag " view-tag) 'nowait))
-          (configspec-file (concat temporary-file-directory
-                                   (format "/%s.configspec" view-tag))))
+  (completing-read prompt 'ah-clearcase-view-tag-complete nil nil initial))
 
-      (with-current-buffer (find-file-noselect configspec-file)
-        (ah-clearcase-edcs-mode)
-        (setq ah-clearcase-edcs-view-tag view-tag)
-        (buffer-disable-undo)
-        (erase-buffer)
-        (insert (ah-cleartool-wait-for tid))
-        (buffer-enable-undo)
-        (goto-char (point-min))
-        (pop-to-buffer (current-buffer))
-        (message nil)))
-
-    ;; We wait for this transaction here because by this time it will
-    ;; already have ended (since we already read a configspec above).
-    (ignore-errors
-      (ah-cleartool-wait-for ah-clearcase-edcs-all-view-tags-tid))))
 
 ;;;###autoload
-(defun vc-clearcase-start-view ()
-  "Start a dynamic view.
-Prompts the user for the view name."
-  (interactive)
-  (let (view-tag)
-    ;; start reading the view-tags. By the time the user decides what
-    ;; view-tag it wants, we may have the answer already.
-    (setq ah-clearcase-edcs-all-view-tags-tid
-          (ah-cleartool-ask
-           "lsview -short" 'nowait nil
-           #'(lambda (x view-tags)
-               (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
-               (dolist (vtag (split-string view-tags "[\n\r]+"))
-                 (intern vtag ah-clearcase-edcs-all-view-tags)))))
-    
-    (setq view-tag (completing-read
-                    "Dynamic view to start: "
-                    #'ah-clearcase-view-tag-complete
-                    nil nil view-tag))
-    
-    (unwind-protect
-        (progn
-          (message "Starting %s dynamic view..." view-tag)
-          (message (ah-cleartool "startview %s" view-tag))
-          (message "Starting %s dynamic view...done." view-tag))
-      (ignore-errors
-        (ah-cleartool-wait-for ah-clearcase-edcs-all-view-tags-tid)))))
+(defun vc-clearcase-edcs (view-tag)
+  "Fetch the config spec for `view-tag' and pop up a buffer with it.
+In interactive mode, prompts for a view-tag name with the default
+of the current file's view-tag."
+  (interactive
+   (list
+    (ah-clearcase-read-view-tag
+     "Edit configspec for view: "
+     ;; get an initial view-tag if possible.
+     (let ((file (buffer-file-name (current-buffer))))
+       (when (and file (vc-clearcase-registered file))
+         (ah-clearcase-fprop-view-tag (ah-clearcase-file-fprop file)))))))
+
+  (message "Fetching configspec for %s" view-tag)
+  (let ((tid (ah-cleartool-ask (concat "catcs -tag " view-tag) 'nowait))
+        (csfile (format "%s%s.configspec" temporary-file-directory view-tag)))
+    (with-current-buffer (find-file-noselect csfile)
+      (ah-clearcase-edcs-mode)
+      (setq ah-clearcase-edcs-view-tag view-tag)
+      (buffer-disable-undo)
+      (erase-buffer)
+      (insert (ah-cleartool-wait-for tid))
+      (buffer-enable-undo)
+      (goto-char (point-min))
+      (pop-to-buffer (current-buffer))
+      (message "Edit your configspec.  Type C-c C-c when done."))))
+
+;;;###autoload
+(defun vc-clearcase-start-view (view-tag)
+  "Start the dynamic view for `view-tag'.
+In interactive mode, prompts for a view-tag name."
+  (interactive (list (ah-clearcase-read-view-tag "Start dynamic view: ")))
+  (message "Starting %s dynamic view..." view-tag)
+  (message (ah-cleartool "startview %s" view-tag))
+  (message "Starting %s dynamic view...done." view-tag))
 
 ;;;; Update vc keymap
 
@@ -2804,24 +2789,25 @@ Prompts the user for the view name."
 (defvar clearcase-global-menu
   (let ((m (make-sparse-keymap "Clearcase")))
     (define-key m [vc-clearcase-label-diff-report]
-      '(menu-item "Label diff report" vc-clearcase-label-diff-report
+      '(menu-item "Label diff report..." vc-clearcase-label-diff-report
         :help "Report file version differences between two labels"))
     (define-key m [separator-clearcase-1]
       '("----" 'separator-1))
     (define-key m [vc-clearcase-list-view-private-files]
-      '(menu-item "List View Private Files" vc-clearcase-list-view-private-files
+      '(menu-item "List View Private Files..." 
+        vc-clearcase-list-view-private-files
         :help "List view private files in a directory"))
     (define-key m [vc-clearcase-list-checkouts]
-      '(menu-item "List Checkouts" vc-clearcase-list-checkouts
+      '(menu-item "List Checkouts..." vc-clearcase-list-checkouts
         :help "List Clearcase checkouts in a directory"))
     (define-key m [vc-clearcase-update-view]
-      '(menu-item "Update snapshot view" vc-clearcase-update-view
+      '(menu-item "Update snapshot view..." vc-clearcase-update-view
         :help "Update a snapshot view"))
     (define-key m [vc-clearcase-edcs]
-      '(menu-item "Edit Configspec" vc-clearcase-edcs
+      '(menu-item "Edit Configspec..." vc-clearcase-edcs
         :help "Edit a view's configspec"))
     (define-key m [vc-clearcase-start-view]
-      '(menu-item "Start dynamic view" view-clearcase-start-view
+      '(menu-item "Start dynamic view..." vc-clearcase-start-view
         :help "Start a dynamic view"))
     (fset 'clearcase-global-menu m)))
 

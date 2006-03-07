@@ -1,3 +1,15 @@
+2006-03-07  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-list-checkouts): 1.70 make
+	prefix-arg optional
+	(ah-clearcase-read-view-tag): 1.70 new function.
+	(vc-clearcase-edcs, vc-clearcase-start-view): 1.70 use it.  Also
+	read the view-tag in the interactive form, allowing these
+	functions to be used from elisp code as well.
+	(clearcase-global-menu): 1.70 add the string "..." to all menu
+	names, indicating that the menu items will prompt the user for
+	more information.
+
 2006-03-06  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-what-version)

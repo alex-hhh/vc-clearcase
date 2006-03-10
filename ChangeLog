@@ -1,3 +1,16 @@
+2006-03-10  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-sentinel): 1.71 print out a
+	message when the cleartool process buffer is killer, instead of
+	signaling an error
+	(vc-clearcase-get-branch-attribute)
+	(vc-clearcase-get-label-differences): 1.71 new function
+	(vc-clearcase-what-version, vc-clearcase-what-rule)
+	(vc-clearcase-what-view-tag): 1.71 accept a file argument which in
+	interactive mode will be bound to the current buffers file name.
+	(vc-clearcase-label-diff-report): 1.71 use
+	vc-clearcase-get-label-differences, plus rewriten body.
+
 2006-03-07  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-list-checkouts): 1.70 make

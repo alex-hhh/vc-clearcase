@@ -716,7 +716,7 @@ Updates the modeline when the cleartool command finishes, calls
         (pbuffer (process-buffer process)))
     (when (memq status '(signal exit))
       (if (null (buffer-name pbuffer))
-          (error "Cleartool process buffer was killed")
+          (message "Cleartool process buffer was killed")
           (with-current-buffer pbuffer
             (setq ah-cleartool-mode-line
                   (format "%s [%d]" (symbol-name status) exit-status))
@@ -2273,143 +2273,67 @@ Both in the working area and in the repository are renamed."
         (ah-cleartool "mv -cfile %s \"%s\" \"%s\"" comment-file old new)))))
 
 
-;;;; Additional vc clearcase commands
+;;;; A library of clearcase utilities
 
-(defun vc-clearcase-what-version ()
-  "Show what is the version of the current file."
-  (interactive)
-  (let ((file (buffer-file-name (current-buffer))))
-    (if (and (stringp file) (vc-clearcase-registered file))
-        (progn
-          (ah-clearcase-maybe-set-vc-state file)
-          (let* ((fprop (ah-clearcase-file-fprop file))
-                 (version (ah-clearcase-fprop-version fprop))
-                 (co-status (ah-clearcase-fprop-status fprop)))
-            (message "File version: %s%s" version
-                     (case co-status
-                       ('reserved ", checkedout reserved")
-                       ('unreserved ", checkedout unreserved")
-                       ('hijacked ", hijacked")
-                       ('broken-view ", broken view")
-                       (t "")))))
-        (message "Not a clearcase file"))))
+(defun vc-clearcase-get-branch-attribute (file attr)
+  "Get the value of `attribute' for `file'.
+We assume that `attribute' is attached to one of the branches of
+the file's version; this function will search all branches from
+newest to oldest and returns the value of the first attribute
+found.  If the configspec rule for this file is a mkbranch
+rule (that is, checkout will branch) we add the new branch to the
+search list as the newest branch.
 
-(defun vc-clearcase-what-rule ()
-  "Show the configspec rule for the current file."
-  (interactive)
-  (let ((file (buffer-file-name (current-buffer))))
-    (if (and (stringp file) (vc-clearcase-registered file))
-        (progn
-          (ah-clearcase-maybe-set-vc-state file)
-          (let ((rule (ah-clearcase-fprop-what-rule
-                       (ah-clearcase-file-fprop file))))
-            (if rule
-                (message "Configspec rule: %s" rule)
-                (message "No configspec rule"))))
-        (message "Not a clearcase file"))))
+Returns nil if no attribute is found."
 
-(defun vc-clearcase-what-view-tag ()
-  "Show view-tag for the current file."
-  (interactive)
-  (let ((file (buffer-file-name (current-buffer))))
-    (if (and (stringp file) (vc-clearcase-registered file))
-        (progn
-          (ah-clearcase-maybe-set-vc-state file)
-          (let ((view-tag (ah-clearcase-fprop-view-tag
-                           (ah-clearcase-file-fprop file))))
-            (if view-tag
-                (message "View tag: %s" view-tag)
-                (message "View tag not (yet?) known"))))
-        (message "Not a clearcase file"))))
+  (setq file (expand-file-name file))
 
-(defun vc-clearcase-gui-vtree-browser (ask-for-file)
-  "Start the version tree browser GUI on a file or directory.
-When ASK-FOR-FILE is nil, the file in the current buffer is used.
-Otherwise, it will ask for a file (you can also specify a
-directory, in this case the versions of the directory itself will
-be browsed)"
-  (interactive "P")
-  (let ((file (buffer-file-name (current-buffer))))
-    (when ask-for-file
-      (setq file
-            (expand-file-name
-             (read-file-name "Browse vtree for: " file file t))))
-    (if (and file (vc-clearcase-registered file))
-        (progn
-          (message "Starting Vtree browser...")
-          (start-process-shell-command
-           "Vtree_browser" nil ah-clearcase-vtree-program file))
-        (message "Not a clearcase file"))))
+  ;; check that the attribute exists.  This will cause the function to
+  ;; report an error if the atttribute type does not exist
+  (ah-cleartool "cd \"%s\"" (file-name-directory file))
+  (ah-cleartool "desc -fmt \"ok\" attype:%s" attr)
 
-(defconst ah-cleartool-lsco-fmt
-  (concat "----------\n"
-          "file: %n\n"
-          "parent-version: %PVn\n"
-          "checkout-status: (%Rf)\n"
-          "user: %u; view: %Tf; date: %Sd (%Ad days ago)\n\n"
-          "%c")
-  "Format string to use when listing checkouts.")
+  (let* ((fprop (ah-clearcase-file-fprop file))
 
-;;;###autoload
-(defun vc-clearcase-list-checkouts (dir &optional prefix-arg)
-  "List the checkouts of the current user in DIR.
-If PREFIX-ARG is present, an user name can be entered, and all
-the views are searched for checkouts of the specified user.  If
-the entered user name is empty, checkouts from all the users on
-all the views are listed."
-  (interactive "DList checkouts in directory: \nP")
-  (when (string-match "\\(\\\\\\|/\\)$" dir)
-    (setq dir (replace-match "" nil nil dir)))
-  (setq dir (expand-file-name dir))
-  (let ((user-selection
-         (if prefix-arg
-             (let ((u (read-from-minibuffer "User: ")))
-               (unless (string= u "")
-                 (list "-user" u)))
-             (list "-me" "-cview")))
-        (other-options (list "-recurse" "-fmt" ah-cleartool-lsco-fmt dir)))
-    (with-current-buffer (get-buffer-create "*clearcase-lsco*")
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (setq default-directory dir)
-        (insert "Listing checkouts in " dir "\n")
-        (insert "Cleartool command: "
-                (format "%S" (append user-selection other-options))
-                "\n")
-        (ah-clearcase-log-view-mode)
-        (let ((process
-               (ah-cleartool-do
-                "lsco"
-                (append user-selection other-options) (current-buffer))))
-          (switch-to-buffer-other-window (process-buffer process)))))))
+         ;; the list of branches for this version
+         (blist (split-string (ah-clearcase-fprop-version fprop) "[\\\\/]"))
 
-;;;###autoload
-(defun vc-clearcase-update-view (dir prefix-arg)
-  "Run a cleartool update command in DIR and display the results.
-With PREFIX-ARG, run update in preview mode (no actual changes
-are made to the views)."
-  (interactive "DUpdate directory: \nP")
-  (when (string-match "[\\\/]+$" dir)
-    (setq dir (substring dir 0 (match-beginning 0))))
-  (setq dir (expand-file-name dir))
-  (with-current-buffer (get-buffer-create "*clearcase-update*")
-    (setq buffer-read-only t)
-    (let ((inhibit-read-only t))
-      (erase-buffer)
-      (when prefix-arg (insert "*PREVIEW* "))
-      (insert "Updating directory " dir "\n")
-      (let ((options (list "-force" "-rename" dir)))
-        (when prefix-arg (setq options (cons "-print" options)))
-        (let ((process (ah-cleartool-do "update" options (current-buffer))))
-          (switch-to-buffer-other-window (process-buffer process))
-          ;; TODO: how do we refresh all the files that were loaded
-          ;; from this view?
-          )))))
+         ;; a format string to get the attribute value for our
+         ;; attribute.  Note that the % in %[attr]a needs to survive
+         ;; two format parses so we need four of them
+         (attr-get-fs (format "desc -local -fmt \"%%%%[%s]a\" brtype:%%s" attr))
 
-;;;###autoload
-(defun vc-clearcase-label-diff-report (dir label-1 label-2)
-  "Report the changed file revisions in DIR between LABEL-1 and LABEL-2."
-  (interactive "DReport on directory: \nsLabel 1: \nsLabel 2: ")
+         ;; a regular expression to extract the value of our attribute
+         (attr-val-rx (format "(%s=\\([A-Za-z0-9_-]+\\))" attr)))
+
+    ;; remove the last and first element form blist (the branch list)
+    ;; and store it in reverse order.  Fist element is the empty
+    ;; string (""), last one is the version number on the last branch.
+    ;; Both should always exist.
+    (setq blist (cdr (nreverse (cdr blist))))
+
+    ;; if we are about to branch, add the branch name as well
+    (let ((what-rule (ah-clearcase-fprop-what-rule fprop)))
+      (when (string-match "-mkbranch\\s-+\\([A-Za-z0-9_-]+\\)" what-rule)
+        (push (match-string 1 what-rule) blist)))
+
+    (catch 'found
+      (dolist (b blist)
+        (let ((a (ah-cleartool attr-get-fs b)))
+          (when (string-match attr-val-rx a)
+            (throw 'found (match-string 1 a))))))))
+
+(defun vc-clearcase-get-label-differences (dir label-1 label-2)
+  "Return the changed files in `dir' between `label-1' and `label-2'.
+A list is returned, each element is another list of
+
+  (file version-1 version-2)
+
+Where version-1 is the version attached to label-1 (or the string
+*no version* if there is no version for that label.  version-2 is
+the same for label-2.
+
+The list of files is not returned in any particular order."
   (setq dir (expand-file-name dir))
   ;; make sure both labels exist
   (ah-cleartool "cd \"%s\"" dir)
@@ -2500,22 +2424,166 @@ are made to the views)."
                   (t (puthash file (cons ver1 version) report)))))))
         (forward-line 1)))
 
-    ;; prepare the report
-    (let (all-files
-          ;; start with some values in case the report is empty...
-          (max-file-len (length "File"))
-          (max-lb-1-len (length label-1))
-          (max-lb-2-len (length label-2))
-          fmt-str)
-      (maphash (lambda (x y)
-                 (push x all-files)
-                 (setq max-file-len (max max-file-len (length x)))
-                 (setq max-lb-1-len (max max-lb-1-len (length (car y))))
-                 (setq max-lb-2-len (max max-lb-2-len (length (cdr y)))))
-               report)
-      (setq all-files (sort all-files 'string<))
-      (setq fmt-str (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n"
-                            max-file-len max-lb-1-len max-lb-2-len))
+    ;; cleanup after us.  maybe these should be in an unwind-protect
+    (kill-buffer buf1)
+    (kill-buffer buf2)
+
+    (let (result)
+      (maphash '(lambda (k v) (push (list k (car v) (cdr v)) result)) report)
+      result)))
+
+
+;;;; Additional vc clearcase commands (for files)
+
+(defun vc-clearcase-what-version (file)
+  "Show what is the version of `file'."
+  (interactive (list (buffer-file-name (current-buffer))))
+    (if (and (stringp file) (vc-clearcase-registered file))
+        (progn
+          (ah-clearcase-maybe-set-vc-state file)
+          (let* ((fprop (ah-clearcase-file-fprop file))
+                 (version (ah-clearcase-fprop-version fprop))
+                 (co-status (ah-clearcase-fprop-status fprop)))
+            (message "File version: %s%s" version
+                     (case co-status
+                       ('reserved ", checkedout reserved")
+                       ('unreserved ", checkedout unreserved")
+                       ('hijacked ", hijacked")
+                       ('broken-view ", broken view")
+                       (t "")))))
+      (message "Not a clearcase file")))
+
+(defun vc-clearcase-what-rule (file)
+  "Show the configspec rule for `file'."
+  (interactive (list (buffer-file-name (current-buffer))))
+    (if (and (stringp file) (vc-clearcase-registered file))
+        (progn
+          (ah-clearcase-maybe-set-vc-state file)
+          (let ((rule (ah-clearcase-fprop-what-rule
+                       (ah-clearcase-file-fprop file))))
+            (if rule
+                (message "Configspec rule: %s" rule)
+                (message "No configspec rule"))))
+      (message "Not a clearcase file")))
+
+(defun vc-clearcase-what-view-tag (file)
+  "Show view-tag for `file'."
+  (interactive (list (buffer-file-name (current-buffer))))
+    (if (and (stringp file) (vc-clearcase-registered file))
+        (progn
+          (ah-clearcase-maybe-set-vc-state file)
+          (let ((view-tag (ah-clearcase-fprop-view-tag
+                           (ah-clearcase-file-fprop file))))
+            (if view-tag
+                (message "View tag: %s" view-tag)
+                (message "View tag not (yet?) known"))))
+      (message "Not a clearcase file")))
+
+(defun vc-clearcase-gui-vtree-browser (ask-for-file)
+  "Start the version tree browser GUI on a file or directory.
+When ASK-FOR-FILE is nil, the file in the current buffer is used.
+Otherwise, it will ask for a file (you can also specify a
+directory, in this case the versions of the directory itself will
+be browsed)"
+  (interactive "P")
+  (let ((file (buffer-file-name (current-buffer))))
+    (when ask-for-file
+      (setq file
+            (expand-file-name
+             (read-file-name "Browse vtree for: " file file t))))
+    (if (and file (vc-clearcase-registered file))
+        (progn
+          (message "Starting Vtree browser...")
+          (start-process-shell-command
+           "Vtree_browser" nil ah-clearcase-vtree-program file))
+        (message "Not a clearcase file"))))
+
+
+;;;; Additional vc clearcase commands (for directories)
+
+(defconst ah-cleartool-lsco-fmt
+  (concat "----------\n"
+          "file: %n\n"
+          "parent-version: %PVn\n"
+          "checkout-status: (%Rf)\n"
+          "user: %u; view: %Tf; date: %Sd (%Ad days ago)\n\n"
+          "%c")
+  "Format string to use when listing checkouts.")
+
+;;;###autoload
+(defun vc-clearcase-list-checkouts (dir &optional prefix-arg)
+  "List the checkouts of the current user in DIR.
+If PREFIX-ARG is present, an user name can be entered, and all
+the views are searched for checkouts of the specified user.  If
+the entered user name is empty, checkouts from all the users on
+all the views are listed."
+  (interactive "DList checkouts in directory: \nP")
+  (when (string-match "\\(\\\\\\|/\\)$" dir)
+    (setq dir (replace-match "" nil nil dir)))
+  (setq dir (expand-file-name dir))
+  (let ((user-selection
+         (if prefix-arg
+             (let ((u (read-from-minibuffer "User: ")))
+               (unless (string= u "")
+                 (list "-user" u)))
+             (list "-me" "-cview")))
+        (other-options (list "-recurse" "-fmt" ah-cleartool-lsco-fmt dir)))
+    (with-current-buffer (get-buffer-create "*clearcase-lsco*")
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (setq default-directory dir)
+        (insert "Listing checkouts in " dir "\n")
+        (insert "Cleartool command: "
+                (format "%S" (append user-selection other-options))
+                "\n")
+        (ah-clearcase-log-view-mode)
+        (let ((process
+               (ah-cleartool-do
+                "lsco"
+                (append user-selection other-options) (current-buffer))))
+          (switch-to-buffer-other-window (process-buffer process)))))))
+
+;;;###autoload
+(defun vc-clearcase-update-view (dir prefix-arg)
+  "Run a cleartool update command in DIR and display the results.
+With PREFIX-ARG, run update in preview mode (no actual changes
+are made to the views)."
+  (interactive "DUpdate directory: \nP")
+  (when (string-match "[\\\/]+$" dir)
+    (setq dir (substring dir 0 (match-beginning 0))))
+  (setq dir (expand-file-name dir))
+  (with-current-buffer (get-buffer-create "*clearcase-update*")
+    (setq buffer-read-only t)
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (when prefix-arg (insert "*PREVIEW* "))
+      (insert "Updating directory " dir "\n")
+      (let ((options (list "-force" "-rename" dir)))
+        (when prefix-arg (setq options (cons "-print" options)))
+        (let ((process (ah-cleartool-do "update" options (current-buffer))))
+          (switch-to-buffer-other-window (process-buffer process))
+          ;; TODO: how do we refresh all the files that were loaded
+          ;; from this view?
+          )))))
+
+;;;###autoload
+(defun vc-clearcase-label-diff-report (dir label-1 label-2)
+  "Report the changed file revisions between labels.
+A report is prepared in the *label-diff-report* buffer for the
+files in `dir' that have different revisions between `label-1'
+and `label-2'."
+  (interactive "DReport on directory: \nsLabel 1: \nsLabel 2: ")
+  (let ((diff (vc-clearcase-get-label-differences dir label-1 label-2))
+        ;; the format string for a line in the report
+        line-fmt)
+    (setq diff (sort* diff 'string< :key 'car))
+    (loop for (file rev-1 rev-2) in diff
+       maximize (length file) into file-len
+       maximize (length rev-1) into lb1-len
+       maximize (length rev-2) into lb2-len
+       finally do
+         (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n" 
+                                file-len lb1-len lb2-len)))
 
       (with-current-buffer (get-buffer-create "*label-diff-report*")
         ;; these are declared in ps-print.el, but I want to avoid an
@@ -2530,22 +2598,18 @@ are made to the views)."
         (buffer-disable-undo)
         (insert (format "Directory: %s\nLabel 1: %s\nLabel 2: %s\n\n"
                         dir label-1 label-2))
-        (insert (format fmt-str 0 "File" label-1 label-2))
-        (insert (make-string
-                 (+ 3 4 max-file-len 4 max-lb-1-len 4 max-lb-2-len)
-                 ?=))
+      (let ((header (format line-fmt 0 "File" label-1 label-2)))
+        (insert header)
+        (insert (make-string (length header) ?=)))
         (insert "\n")
-        (let ((cnt 0))
-          (dolist (i all-files)
-            (let ((v (gethash i report)))
-              (insert (format fmt-str cnt i (car v) (cdr v))))
-            (incf cnt)))
-        (goto-char (point-min))
-        (pop-to-buffer (current-buffer))))
 
-    ;; cleanup after us.  maybe these should be in an unwind-protect
-    (kill-buffer buf1)
-    (kill-buffer buf2)))
+      (loop for (file rev-1 rev-2) in diff
+           count 1 into pos
+           do (insert (format line-fmt pos file rev-1 rev-2)))
+
+      (goto-char (point-min))
+      (buffer-enable-undo)
+      (pop-to-buffer (current-buffer)))))
 
 ;;;###autoload
 (defun vc-clearcase-list-view-private-files (dir)

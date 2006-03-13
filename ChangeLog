@@ -1,3 +1,8 @@
+2006-03-13  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-get-label-differences): 1.72
+	remove a leading slash or backslash from the files in the report.
+
 2006-03-10  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-sentinel): 1.71 print out a

@@ -2428,8 +2428,14 @@ The list of files is not returned in any particular order."
     (kill-buffer buf1)
     (kill-buffer buf2)
 
+    ;; collect all files from the hash.  We also remove a leading
+    ;; slash or backslash -- cleartool likes to print it, but it
+    ;; causes confusion
     (let (result)
-      (maphash '(lambda (k v) (push (list k (car v) (cdr v)) result)) report)
+      (maphash '(lambda (k v) 
+                 (push (list 
+                        (replace-regexp-in-string "\\`[\\\\/]" "" k)
+                        (car v) (cdr v)) result)) report)
       result)))
 
 

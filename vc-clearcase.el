@@ -2430,11 +2430,13 @@ The list of files is not returned in any particular order."
 
     ;; collect all files from the hash.  We also remove a leading
     ;; slash or backslash -- cleartool likes to print it, but it
-    ;; causes confusion
+    ;; causes confusion. Also make sure that the current directory is
+    ;; "." not "/" as cleartool prints it.
     (let (result)
       (maphash '(lambda (k v) 
                  (push (list 
-                        (replace-regexp-in-string "\\`[\\\\/]" "" k)
+                        (let ((file (replace-regexp-in-string "\\`[\\\\/]" "" k)))
+                          (if (equal file "") "." file))
                         (car v) (cdr v)) result)) report)
       result)))
 
@@ -2579,6 +2581,7 @@ A report is prepared in the *label-diff-report* buffer for the
 files in `dir' that have different revisions between `label-1'
 and `label-2'."
   (interactive "DReport on directory: \nsLabel 1: \nsLabel 2: ")
+  (setq dir (expand-file-name dir))
   (let ((diff (vc-clearcase-get-label-differences dir label-1 label-2))
         ;; the format string for a line in the report
         line-fmt)
@@ -2600,6 +2603,7 @@ and `label-2'."
         (set (make-local-variable 'ps-number-of-columns) 1)
         (set (make-local-variable 'ps-zebra-stripes) t)
 
+        (setq default-directory dir)
         (erase-buffer)
         (buffer-disable-undo)
         (insert (format "Directory: %s\nLabel 1: %s\nLabel 2: %s\n\n"

@@ -1,3 +1,10 @@
+2006-03-14  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-get-label-differences): 1.73
+	change the "/" to "." for the current directory.
+	(vc-clearcase-label-diff-report): 1.73 call expand-file-name on
+	dir, set the current directory of the report buffer to dir.
+
 2006-03-13  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-get-label-differences): 1.72

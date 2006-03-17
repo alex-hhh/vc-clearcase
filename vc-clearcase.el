@@ -797,8 +797,7 @@ that were run to create this buffer."
   (interactive)
   (unless (eolp)
     (end-of-line))
-  (if (re-search-backward ah-clearcase-record-separator-rx
-                          (point-min) 'noerror)
+  (if (re-search-backward ah-clearcase-record-separator-rx (point-min) 'noerror)
       (progn
         (goto-char (match-beginning 0))
         (forward-line 1)

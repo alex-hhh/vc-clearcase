@@ -4,6 +4,12 @@
 	look for the vprop.
 	(vc-clearcase-next-version): 1.75 use member to search the next
 	version in the revision list.
+	(vc-clearcase-get-label-differences): 1.76 use a loop to collect
+	the results.
+	
+	* vc-clearcase.el: 1.76 The lisp-indent-function properties for the
+	macros are now in the file rather than in the Local Variables
+	section.
 
 2006-03-18  Alexandru Harsanyi  <harsanyi@mac.com>
 

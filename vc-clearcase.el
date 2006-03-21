@@ -1194,22 +1194,20 @@ returned (if no such vprop exists, it is created first)
                          ((ah-clearcase-fprop-p view-tag)
                           (ah-clearcase-fprop-view-tag view-tag))
                          (t (error "Unknown type for VIEW-TAG"))))
-             (vprop (catch 'found
-                      (dolist (v ah-clearcase-all-vprops)
-                        (when (string= vtag (ah-clearcase-vprop-name v))
-                          (throw 'found v))))))
-        (unless vprop
-          (setq vprop (ah-clearcase-make-vprop :name vtag))
-          (push vprop ah-clearcase-all-vprops)
+             ;; find or create a new vprop
+             (vprop (car (or (member* vtag ah-clearcase-all-vprops
+                                      :key 'ah-clearcase-vprop-name
+                                      :test 'equal)
+                             (push (ah-clearcase-make-vprop :name vtag)
+                                   ah-clearcase-all-vprops)))))
 
-          ;; find out if this is a started dynamic view.  This allows
-          ;; to set configspec in dynamic views without having to
-          ;; declare them first.  NOTE: maybe we could start it if it
-          ;; is not?
-          (let ((vinfo (ignore-errors (ah-cleartool "lsview %s" vtag))))
-            (when (and vinfo (char-equal ?* (aref vinfo 0)))
-              ;; we have a started dynamic view
-              (setf (ah-clearcase-vprop-type vprop) 'dynamic))))
+        ;; find out if this is a started dynamic view.  This allows to
+        ;; set configspec in dynamic views without having to declare
+        ;; them first.  NOTE: maybe we could start it if it is not?
+        (let ((vinfo (ignore-errors (ah-cleartool "lsview %s" vtag))))
+          (when (and vinfo (char-equal ?* (aref vinfo 0)))
+            ;; we have a started dynamic view
+            (setf (ah-clearcase-vprop-type vprop) 'dynamic)))
         vprop)))
 
 (defun ah-clearcase-declare-view (view-tag type &optional root)
@@ -2247,13 +2245,7 @@ Return nil if no such revision exists."
             (setq revision-list (cons prev revision-list))))
         (setf (ah-clearcase-fprop-revision-list fprop) revision-list)
         (message "Building revision list...done.")))
-    ;; search the revision-list
-    (catch 'found
-      (while revision-list
-        (if (string= (car revision-list) rev)
-            (throw 'found (car-safe (cdr-safe revision-list)))
-            (setq revision-list (cdr revision-list))))
-      nil)))
+    (car (cdr-safe (member rev revision-list)))))
 
 ;;; NOTE: for some reason, the renamed file does not show up as a
 ;;; clearcase registered until after I kill it and re-open it...
@@ -2445,45 +2437,45 @@ The list of files is not returned in any particular order."
 (defun vc-clearcase-what-version (file)
   "Show what is the version of `file'."
   (interactive (list (buffer-file-name (current-buffer))))
-    (if (and (stringp file) (vc-clearcase-registered file))
-        (progn
-          (ah-clearcase-maybe-set-vc-state file)
-          (let* ((fprop (ah-clearcase-file-fprop file))
-                 (version (ah-clearcase-fprop-version fprop))
-                 (co-status (ah-clearcase-fprop-status fprop)))
-            (message "File version: %s%s" version
-                     (case co-status
-                       ('reserved ", checkedout reserved")
-                       ('unreserved ", checkedout unreserved")
-                       ('hijacked ", hijacked")
-                       ('broken-view ", broken view")
-                       (t "")))))
+  (if (and (stringp file) (vc-clearcase-registered file))
+      (progn
+        (ah-clearcase-maybe-set-vc-state file)
+        (let* ((fprop (ah-clearcase-file-fprop file))
+               (version (ah-clearcase-fprop-version fprop))
+               (co-status (ah-clearcase-fprop-status fprop)))
+          (message "File version: %s%s" version
+                   (case co-status
+                     ('reserved ", checkedout reserved")
+                     ('unreserved ", checkedout unreserved")
+                     ('hijacked ", hijacked")
+                     ('broken-view ", broken view")
+                     (t "")))))
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-what-rule (file)
   "Show the configspec rule for `file'."
   (interactive (list (buffer-file-name (current-buffer))))
-    (if (and (stringp file) (vc-clearcase-registered file))
-        (progn
-          (ah-clearcase-maybe-set-vc-state file)
-          (let ((rule (ah-clearcase-fprop-what-rule
-                       (ah-clearcase-file-fprop file))))
-            (if rule
-                (message "Configspec rule: %s" rule)
-                (message "No configspec rule"))))
+  (if (and (stringp file) (vc-clearcase-registered file))
+      (progn
+        (ah-clearcase-maybe-set-vc-state file)
+        (let ((rule (ah-clearcase-fprop-what-rule
+                     (ah-clearcase-file-fprop file))))
+          (if rule
+              (message "Configspec rule: %s" rule)
+              (message "No configspec rule"))))
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-what-view-tag (file)
   "Show view-tag for `file'."
   (interactive (list (buffer-file-name (current-buffer))))
-    (if (and (stringp file) (vc-clearcase-registered file))
-        (progn
-          (ah-clearcase-maybe-set-vc-state file)
-          (let ((view-tag (ah-clearcase-fprop-view-tag
-                           (ah-clearcase-file-fprop file))))
-            (if view-tag
-                (message "View tag: %s" view-tag)
-                (message "View tag not (yet?) known"))))
+  (if (and (stringp file) (vc-clearcase-registered file))
+      (progn
+        (ah-clearcase-maybe-set-vc-state file)
+        (let ((view-tag (ah-clearcase-fprop-view-tag
+                         (ah-clearcase-file-fprop file))))
+          (if view-tag
+              (message "View tag: %s" view-tag)
+              (message "View tag not (yet?) known"))))
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-gui-vtree-browser (ask-for-file)
@@ -2590,31 +2582,31 @@ and `label-2'."
        maximize (length rev-1) into lb1-len
        maximize (length rev-2) into lb2-len
        finally do
-         (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n" 
-                                file-len lb1-len lb2-len)))
+       (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n" 
+                              file-len lb1-len lb2-len)))
 
-      (with-current-buffer (get-buffer-create "*label-diff-report*")
-        ;; these are declared in ps-print.el, but I want to avoid an
-        ;; (eval-when-compile (require 'ps-print))
-        (declare
-         (special ps-landscape-mode ps-number-of-columns ps-zebra-stripes))
-        (set (make-local-variable 'ps-landscape-mode) 'landscape)
-        (set (make-local-variable 'ps-number-of-columns) 1)
-        (set (make-local-variable 'ps-zebra-stripes) t)
+    (with-current-buffer (get-buffer-create "*label-diff-report*")
+      ;; these are declared in ps-print.el, but I want to avoid an
+      ;; (eval-when-compile (require 'ps-print))
+      (declare
+       (special ps-landscape-mode ps-number-of-columns ps-zebra-stripes))
+      (set (make-local-variable 'ps-landscape-mode) 'landscape)
+      (set (make-local-variable 'ps-number-of-columns) 1)
+      (set (make-local-variable 'ps-zebra-stripes) t)
 
-        (setq default-directory dir)
-        (erase-buffer)
-        (buffer-disable-undo)
-        (insert (format "Directory: %s\nLabel 1: %s\nLabel 2: %s\n\n"
-                        dir label-1 label-2))
+      (setq default-directory dir)
+      (erase-buffer)
+      (buffer-disable-undo)
+      (insert (format "Directory: %s\nLabel 1: %s\nLabel 2: %s\n\n"
+                      dir label-1 label-2))
       (let ((header (format line-fmt 0 "File" label-1 label-2)))
         (insert header)
         (insert (make-string (length header) ?=)))
-        (insert "\n")
+      (insert "\n")
 
       (loop for (file rev-1 rev-2) in diff
-           count 1 into pos
-           do (insert (format line-fmt pos file rev-1 rev-2)))
+         count 1 into pos
+         do (insert (format line-fmt pos file rev-1 rev-2)))
 
       (goto-char (point-min))
       (buffer-enable-undo)

@@ -1348,6 +1348,11 @@ comment file is removed."
 
   )                                     ; eval-when-compile
 
+(put 'with-clearcase-checkout 'lisp-indent-function 1)
+(put 'with-clearcase-cfile 'lisp-indent-function 1)
+(put 'ignore-cleartool-errors 'lisp-indent-function 0)
+
+
 
 
 (defadvice vc-version-backup-file-name
@@ -2423,14 +2428,11 @@ The list of files is not returned in any particular order."
     ;; slash or backslash -- cleartool likes to print it, but it
     ;; causes confusion. Also make sure that the current directory is
     ;; "." not "/" as cleartool prints it.
-    (let (result)
-      (maphash '(lambda (k v) 
-                 (push (list 
-                        (let ((file (replace-regexp-in-string "\\`[\\\\/]" "" k)))
-                          (if (equal file "") "." file))
-                        (car v) (cdr v)) result)) report)
-      result)))
-
+    (loop for k being the hash-keys of report using (hash-values v)
+       collect (list 
+                (let ((file (replace-regexp-in-string "\\`[\\\\/]" "" k)))
+                  (if (equal file "") "." file))
+                (car v) (cdr v)))))
 
 ;;;; Additional vc clearcase commands (for files)
 
@@ -2985,10 +2987,6 @@ See `ah-clearcase-trace-cleartool-tq' and
 ;;; mode: emacs-lisp
 ;;; mode: outline-minor
 ;;; outline-regexp: ";;;;+"
-;;; eval: (progn
-;;;         (put 'with-clearcase-checkout 'lisp-indent-function 1)
-;;;         (put 'with-clearcase-cfile 'lisp-indent-function 1)
-;;;         (put 'ignore-cleartool-errors 'lisp-indent-function 0))
 ;;; End:
 
 ;;; vc-clearcase.el ends here

@@ -1,3 +1,15 @@
+2006-03-21  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-get-vprop): 1.75 use member* to
+	look for the vprop.
+	(vc-clearcase-next-version): 1.75 use member to search the next
+	version in the revision list.
+
+2006-03-18  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-log-view-bor): 1.74 indentation
+	change.
+
 2006-03-14  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-get-label-differences): 1.73

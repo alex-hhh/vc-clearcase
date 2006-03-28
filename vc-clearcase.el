@@ -2271,54 +2271,6 @@ Both in the working area and in the repository are renamed."
 
 ;;;; A library of clearcase utilities
 
-(defun vc-clearcase-get-branch-attribute (file attr)
-  "Get the value of `attribute' for `file'.
-We assume that `attribute' is attached to one of the branches of
-the file's version; this function will search all branches from
-newest to oldest and returns the value of the first attribute
-found.  If the configspec rule for this file is a mkbranch
-rule (that is, checkout will branch) we add the new branch to the
-search list as the newest branch.
-
-Returns nil if no attribute is found."
-
-  (setq file (expand-file-name file))
-
-  ;; check that the attribute exists.  This will cause the function to
-  ;; report an error if the atttribute type does not exist
-  (ah-cleartool "cd \"%s\"" (file-name-directory file))
-  (ah-cleartool "desc -fmt \"ok\" attype:%s" attr)
-
-  (let* ((fprop (ah-clearcase-file-fprop file))
-
-         ;; the list of branches for this version
-         (blist (split-string (ah-clearcase-fprop-version fprop) "[\\\\/]"))
-
-         ;; a format string to get the attribute value for our
-         ;; attribute.  Note that the % in %[attr]a needs to survive
-         ;; two format parses so we need four of them
-         (attr-get-fs (format "desc -local -fmt \"%%%%[%s]a\" brtype:%%s" attr))
-
-         ;; a regular expression to extract the value of our attribute
-         (attr-val-rx (format "(%s=\\([A-Za-z0-9_-]+\\))" attr)))
-
-    ;; remove the last and first element form blist (the branch list)
-    ;; and store it in reverse order.  Fist element is the empty
-    ;; string (""), last one is the version number on the last branch.
-    ;; Both should always exist.
-    (setq blist (cdr (nreverse (cdr blist))))
-
-    ;; if we are about to branch, add the branch name as well
-    (let ((what-rule (ah-clearcase-fprop-what-rule fprop)))
-      (when (string-match "-mkbranch\\s-+\\([A-Za-z0-9_-]+\\)" what-rule)
-        (push (match-string 1 what-rule) blist)))
-
-    (catch 'found
-      (dolist (b blist)
-        (let ((a (ah-cleartool attr-get-fs b)))
-          (when (string-match attr-val-rx a)
-            (throw 'found (match-string 1 a))))))))
-
 (defun vc-clearcase-get-label-differences (dir label-1 label-2)
   "Return the changed files in `dir' between `label-1' and `label-2'.
 A list is returned, each element is another list of
@@ -2429,7 +2381,7 @@ The list of files is not returned in any particular order."
     ;; causes confusion. Also make sure that the current directory is
     ;; "." not "/" as cleartool prints it.
     (loop for k being the hash-keys of report using (hash-values v)
-       collect (list 
+       collect (list
                 (let ((file (replace-regexp-in-string "\\`[\\\\/]" "" k)))
                   (if (equal file "") "." file))
                 (car v) (cdr v)))))
@@ -2584,7 +2536,7 @@ and `label-2'."
        maximize (length rev-1) into lb1-len
        maximize (length rev-2) into lb2-len
        finally do
-       (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n" 
+       (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n"
                               file-len lb1-len lb2-len)))
 
     (with-current-buffer (get-buffer-create "*label-diff-report*")
@@ -2861,7 +2813,7 @@ In interactive mode, prompts for a view-tag name."
     (define-key m [separator-clearcase-1]
       '("----" 'separator-1))
     (define-key m [vc-clearcase-list-view-private-files]
-      '(menu-item "List View Private Files..." 
+      '(menu-item "List View Private Files..."
         vc-clearcase-list-view-private-files
         :help "List view private files in a directory"))
     (define-key m [vc-clearcase-list-checkouts]

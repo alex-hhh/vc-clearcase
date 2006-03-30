@@ -97,9 +97,7 @@
 ;;
 ;; - state-heuristic (file) -- implemented, see `state'
 ;;
-;; - dir-state (dir) -- partially implemented, not really working; see
-;;   ah-clearcase-list-view-private-files and
-;;   vc-clearcase-list-checkouts for alternatives
+;; - dir-state (dir) -- not implemented
 ;;
 ;; * workfile-version (file) -- implemented
 ;;
@@ -471,7 +469,7 @@ Cleans up properly if cleartool exits.  EVENT is not used."
             (accept-process-output process 2)
             (goto-char (point-min)))
           (erase-buffer))))
-    (set-process-sentinel process #'ah-cleartool-tq-sentinel)
+    (set-process-sentinel process 'ah-cleartool-tq-sentinel)
     (process-kill-without-query process nil)
     (setq ah-cleartool-tq (tq-create process)
           ah-cleartool-next-command 1
@@ -665,7 +663,7 @@ transaction is complete as funcall(fn closure answer)."
         (command (concat question "\n")))
     (incf ah-cleartool-ntid)
     (tq-enqueue ah-cleartool-tq command ah-cleartool-tq-rx
-                (vector tid closure fn) #'ah-cleartool-tq-handler)
+                (vector tid closure fn) 'ah-cleartool-tq-handler)
     (if (eq wait 'nowait)
         tid
         (ah-cleartool-wait-for tid))))
@@ -861,8 +859,8 @@ Return the number of records actually moved."
   (interactive "p")
   (multiple-value-bind (search-fn limit adjust)
       (if (>= num-records 0)
-          (list #'re-search-forward (point-max) 1)
-          (list #'re-search-backward (point-min) -1))
+          (list 're-search-forward (point-max) 1)
+          (list 're-search-backward (point-min) -1))
     (if (funcall search-fn ah-clearcase-record-separator-rx limit 'noerror
                  (abs num-records))
         (progn
@@ -965,27 +963,26 @@ Will move to the next record if NUM is negative."
 ;; Rather than keeping all the version information as properties
 ;; accessible via vc-file-{get/set}prop, we define a structure to hold
 ;; all the information and store it in as the 'vc-clearcase-prop
-;; property of a file.
+;; property of a file.  We also define some pseudo structure members
+;; in the form of functions starting with ah-clearcase-fprop- -- they
+;; return derived information from a fprop.
 
 (defstruct (ah-clearcase-fprop
              (:constructor ah-clearcase-make-fprop)
              (:copier ah-clearcase-copy-fprop))
 
+  file-name                      ; the file name this fprop belongs to
+
   version-tid
-  version
-  parent
-  latest
-  latest-sel                            ; latest selector (LATEST)
+  version                               ; current file revision
+  parent                                ; parent revision
   status        ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
-  mode-line
-  base
-  branch
-  what-rule
+  what-rule                             ; confispec rule for the file
 
   comment-tid
-  comment
+  comment                    ; the checkout comment (when checked out)
 
-  view-tag
+  view-tag                              ; the view for the file
 
   ;; a list of all the revisions of this file, starting from \main\0
   ;; all the way to latest.  Used by vc-clearcase-next-version to
@@ -1007,18 +1004,6 @@ FPROP can be nil, meaning it is not initialized."
                (ah-clearcase-fprop-version-tid fprop)))
       t
       nil))
-
-(defun ah-clearcase-reset-fprop (fprop)
-  "Clear the version fields in FPROP.
-This will mark fprop as not initialized for the functions that
-care about this.  This function accepts a nil fprop (in which
-case it does nothing), to the user can reset a file's fprop
-without having to check first that it exists."
-  (when fprop
-    (setf (ah-clearcase-fprop-version fprop) nil)
-    (setf (ah-clearcase-fprop-latest fprop) nil)
-    (setf (ah-clearcase-fprop-version-tid fprop) nil)
-    (setf (ah-clearcase-fprop-revision-list fprop) nil)))
 
 (defsubst ah-clearcase-fprop-hijacked-p (fprop)
   "Return true if FPROP is hijacked."
@@ -1044,6 +1029,36 @@ check is whether ClearCase will try to branch this file at
 checkout."
   (string-match "-mkbranch" (ah-clearcase-fprop-what-rule fprop)))
 
+(defun ah-clearcase-fprop-branch (fprop)
+  "Return the branch part of `fprop'.
+This is the second last element in version path."
+  (let ((version (ah-clearcase-fprop-version fprop)))
+    (nth 1 (nreverse (split-string version "[\\\\/]")))))
+
+(defun ah-clearcase-fprop-version-base (fprop)
+  "Return the version of `fprop' minus the last element."
+  (let ((version (copy-sequence (ah-clearcase-fprop-version fprop))))
+    (when (string-match "[\\\\/][^\\\\/]*$" version)
+      (replace-match "" t t version))))
+
+(defun ah-clearcase-fprop-version-number (fprop)
+  "Return the version number of `fprop' (last element in version path).
+If the file is checked out, the version is '.../CHECKEDOUT', in
+that case, we return the version of the parent."
+  (let ((version (ah-clearcase-fprop-version fprop)))
+    (when (string-match "[\\\\/]\\([^\\\\/]*\\)$" version)
+      (match-string 1 version))))
+
+(defsubst ah-clearcase-fprop-latest-sel (fprop)
+  "Return a version selector for the latest version of `fprop'."
+  (format "%s/LATEST" (ah-clearcase-fprop-version-base fprop)))
+
+(defun ah-clearcase-fprop-latest (fprop)
+  "Return the latest version of `fprop' on the current branch."
+  (ah-cleartool "desc -fmt \"%%Vn\" \"%s@@%s\""
+                (ah-clearcase-fprop-file-name fprop)
+                (ah-clearcase-fprop-latest-sel fprop)))
+
 (defun ah-clearcase-wash-mode-line (mode-line)
   "Make the MODE-LINE string shorter.
 We do this by replacing some of the words in it with shorter
@@ -1058,11 +1073,49 @@ made configurable..."
      (replace-regexp-in-string
       "iteration\\([0-9]+\\)" "I~\\1" mode-line)))))
 
+(defun ah-clearcase-reset-fprop (fprop)
+  "Clear the version fields in FPROP.
+This will mark fprop as not initialized for the functions that
+care about this.  This function accepts a nil fprop (in which
+case it does nothing), to the user can reset a file's fprop
+without having to check first that it exists."
+  (when fprop
+    (setf (ah-clearcase-fprop-version fprop) nil)
+    (setf (ah-clearcase-fprop-version-tid fprop) nil)
+    (setf (ah-clearcase-fprop-revision-list fprop) nil)))
 
-(defun ah-clearcase-set-fprop-version (fprop version-string)
-  "Set the version information in FPROP from VERSION-STRING.
-Version string is returned by the following command: 'cleartool
-desc -fmt \"%Vn %PVn %Rf\" file'."
+(defun ah-clearcase-set-fprop-version-stage-1 (fprop ls-string)
+  "Set version information in `fprop' from `ls-string'.
+Ls-string is returned by a 'cleartool ls file' command.  From it,
+we detemine the configspec rule, the intial version of the file
+and whether the file is hijacked or in a broken view.
+
+Note that if the file is checked out, the revision will end in
+/CHECKEDOUT, which is not a valid revision for vc.el
+semantics (for example it cannot be used for diff'ing purposes).
+In that case, the version will be adjusted in
+`ah-clearcase-set-fprop-version-stage-2'"
+  (when (string-match "Rule: \\(.*\\)$" ls-string)
+    (setf (ah-clearcase-fprop-what-rule fprop) (match-string 1 ls-string)))
+  (when (string-match "@@\\([^ \t]+\\)" ls-string)
+    (let ((fver (match-string 1 ls-string)))
+      (setf (ah-clearcase-fprop-version fprop) fver)))
+  ;; The ls string will also tell us when something is wrong with the
+  ;; file.
+  (setf (ah-clearcase-fprop-status fprop)
+        (cond ((string-match "hijacked" ls-string) 'hijacked)
+              ((string-match "rule info unavailable" ls-string) 'broken-view)
+              (t nil))))
+
+(defun ah-clearcase-set-fprop-version-stage-2 (fprop version-string)
+  "Set version information in `fprop' from `version-string'.
+Version string is returned by the following command:
+
+    cleartool desc -fmt \"%Vn %PVn %Rf\" file
+
+From it we determine the parent revision and the checkout status
+of the file.  If the file is checked out, we set its version to
+the parent version, to conform to vc.el semantics."
   (let ((fver-raw (split-string version-string)))
     (let ((fver (nth 0 fver-raw))       ; file version
           (pver (nth 1 fver-raw))       ; parent version
@@ -1072,56 +1125,16 @@ desc -fmt \"%Vn %PVn %Rf\" file'."
                            ((string= co-mode-raw "unreserved") 'unreserved)
                            (t 'unknown)))))
       (when co-mode
-        ;; The semantics of vc.el requires that the workfile version be
-        ;; the parent version if the file is checked out.
-        (setq fver pver))
-      (let ((base (ah-clearcase-version-base fver))
-            (branch (ah-clearcase-version-branch fver))
-            (version (ah-clearcase-version-version fver)))
+        ;; The semantics of vc.el requires that the workfile version
+        ;; be the parent version if the file is checked out.
+        (setf (ah-clearcase-fprop-version fprop) pver))
+      (setf (ah-clearcase-fprop-parent fprop) pver)
+      ;; a hijacked file should keep its existing checkout status and
+      ;; modeline (set by ah-clearcase-set-fprop-version-stage-1)
+      (unless (memq (ah-clearcase-fprop-status fprop) '(hijacked broken-view))
+        (setf (ah-clearcase-fprop-status fprop) co-mode)))))
 
-        (setf (ah-clearcase-fprop-version fprop) fver)
-        (setf (ah-clearcase-fprop-parent fprop) pver)
-        ;; a hijacked file should keep its existing checkout status
-        ;; and modeline (set by ah-clearcase-set-fprop-version-simple)
-        (unless (or (ah-clearcase-fprop-hijacked-p fprop)
-                    (ah-clearcase-fprop-broken-view-p fprop))
-          (setf (ah-clearcase-fprop-status fprop) co-mode)
-          (setf (ah-clearcase-fprop-mode-line fprop)
-                (ah-clearcase-wash-mode-line
-                 (concat "Cc:"
-                         (case co-mode
-                           ('reserved "(R)")
-                           ('unreserved "(U)")
-                           (t ""))
-                         ;; ".../"
-                         branch "/" version))))
-        (setf (ah-clearcase-fprop-base fprop) base)
-        (setf (ah-clearcase-fprop-branch fprop) branch)))))
 
-(defun ah-clearcase-set-fprop-version-simple (fprop ls-string)
-  "Set version information in FPROP from LS-STRING.
-Ls-string is returned by a 'cleartool ls file' command."
-  (when (string-match "Rule: \\(.*\\)$" ls-string)
-    (setf (ah-clearcase-fprop-what-rule fprop) (match-string 1 ls-string)))
-  (when (string-match "@@\\([^ \t]+\\)" ls-string)
-    (let* ((fver (match-string 1 ls-string))
-           (base (ah-clearcase-version-base fver))
-           (branch (ah-clearcase-version-branch fver)))
-      (setf (ah-clearcase-fprop-version fprop) fver)
-
-      ;; do we need to set these here?
-      (setf (ah-clearcase-fprop-base fprop) base)
-      (setf (ah-clearcase-fprop-branch fprop) branch)))
-
-  ;; The ls string will also tell us when something is wrong with the
-  ;; file.
-  (cond ((string-match "hijacked" ls-string)
-         (setf (ah-clearcase-fprop-status fprop) 'hijacked)
-         (setf (ah-clearcase-fprop-mode-line fprop) "Cc:HIJACKED"))
-
-        ((string-match "rule info unavailable" ls-string)
-         (setf (ah-clearcase-fprop-status fprop) 'broken-view)
-         (setf (ah-clearcase-fprop-mode-line fprop) "Cc:BROKEN-VIEW"))))
 
 
 ;;;; Clearcase view-tag properties
@@ -1155,10 +1168,8 @@ create a new vprop for it."
   ;; first, we switch the current directory in cleartool, as it is the
   ;; only way to get the current view and its root directory
   (ah-cleartool "cd \"%s\"" (file-name-directory file))
-  (ah-cleartool-ask "pwv -short" 'wait fprop
-                    '(lambda (fprop view-tag)
-                      (setf (ah-clearcase-fprop-view-tag fprop)
-                       (replace-regexp-in-string "[\n\r]+" "" view-tag))))
+  (setf (ah-clearcase-fprop-view-tag fprop)
+        (replace-regexp-in-string "[\n\r]+" "" (ah-cleartool "pwv -short")))
   (let ((vprop (ah-clearcase-get-vprop fprop)))
     (unless (ah-clearcase-vprop-type vprop)
       ;; This is the first time we see this view, collect some info on it
@@ -1247,22 +1258,6 @@ command).  VIEW can be either a view-tag name or a vprop."
 
 ;;;; Vc interface + some helpers
 
-(defun ah-clearcase-version-branch (version)
-  "Return the branch part of  VERSION.
-\(second last element in version path)."
-  (nth 1 (nreverse (split-string version "[\\\\/]"))))
-
-(defun ah-clearcase-version-base (version)
-  "Return the VERSION minus the last element."
-  (let ((v (copy-sequence version)))
-    (when (string-match "[\\\\/][^\\\\/]*$" v)
-      (replace-match "" t t v))))
-
-(defun ah-clearcase-version-version (version)
-  "Return the VERSION (last element in version path)."
-  (when (string-match "[\\\\/]\\([^\\\\/]*\\)$" version)
-    (match-string 1 version)))
-
 (defun ah-clearcase-maybe-set-vc-state (file &optional force)
   "Lazily set the clearcase specific properties of FILE.
 If FORCE is not nil, always read the properties."
@@ -1272,18 +1267,12 @@ If FORCE is not nil, always read the properties."
               (vc-clearcase-registered file))
       (unless fprop (setq fprop (ah-clearcase-file-fprop file)))
       (ah-cleartool-wait-for (ah-clearcase-fprop-version-tid fprop))
-      (unless (ah-clearcase-fprop-latest fprop)
-        (let ((latest-sel
-               (format "%s/LATEST" (ah-clearcase-fprop-base fprop))))
-          (setf (ah-clearcase-fprop-latest-sel fprop) latest-sel)
-          (setf (ah-clearcase-fprop-latest fprop)
-                (ah-cleartool "desc -fmt \"%%Vn\" \"%s@@%s\"" file latest-sel))
-          ;; finally prepare a vprop structure for the file's view,
-          ;; but only if we haven't already done so.  NOTE: we don't
-          ;; expect the view of the file to ever change, so we ignore
-          ;; the 'force option.
-          (unless (ah-clearcase-fprop-view-tag fprop)
-            (ah-clearcase-prepare-vprop file fprop)))))))
+      ;; finally prepare a vprop structure for the file's view, but
+      ;; only if we haven't already done so.  NOTE: we don't expect
+      ;; the view of the file to ever change, so we ignore the 'force
+      ;; option.
+      (unless (ah-clearcase-fprop-view-tag fprop)
+        (ah-clearcase-prepare-vprop file fprop)))))
 
 
 (eval-when-compile
@@ -1411,12 +1400,12 @@ version."
     (if (ah-clearcase-fprop-initialized-p fprop)
         t
         (ignore-cleartool-errors
-          (unless fprop (setq fprop (ah-clearcase-make-fprop)))
+          (unless fprop (setq fprop (ah-clearcase-make-fprop :file-name file)))
           (let ((ls-result (ah-cleartool "ls \"%s\"" file)))
             (if (string-match "Rule: \\(.*\\)$" ls-result)
                 ;; file is registered
                 (progn
-                  (ah-clearcase-set-fprop-version-simple fprop ls-result)
+                  (ah-clearcase-set-fprop-version-stage-1 fprop ls-result)
                   ;; anticipate that the version will be needed
                   ;; shortly, so ask for it.  When a file is
                   ;; hijacked, do the desc command on the version
@@ -1429,9 +1418,9 @@ version."
                              file)))
                     (setf (ah-clearcase-fprop-version-tid fprop)
                           (ah-cleartool-ask
-                           (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\""
-                                   pname)
-                           'nowait fprop #'ah-clearcase-set-fprop-version))
+                           (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+                           'nowait fprop
+                           'ah-clearcase-set-fprop-version-stage-2))
                     (vc-file-setprop file 'vc-clearcase-fprop fprop))
                   t)                    ;file is registered
                 nil)))                  ;file is not registered
@@ -1487,8 +1476,8 @@ checked it out.
       (setf (ah-clearcase-fprop-comment-tid fprop)
             (ah-cleartool-ask
              (format "desc -fmt \"%%c\" \"%s\"" file) 'nowait fprop
-             #'(lambda (fprop comment)
-                 (setf (ah-clearcase-fprop-comment fprop) comment)))))
+             '(lambda (fprop comment)
+               (setf (ah-clearcase-fprop-comment fprop) comment)))))
 
     ;; return the state.  The heuristic already gives all the
     ;; information we need.
@@ -1514,48 +1503,6 @@ information."
                              (ah-clearcase-fprop-version fprop)))
                 'up-to-date
                 'needs-patch)))))
-
-;; NOTE: this does not work correctly, as the 'need-update state is not
-;; detected (we need to run a cleartool update and parse the resulting
-;; file).  The vc's dir-state is also inefficient for clearcase, as it
-;; calls this function for each sub-directory when we could get the
-;; state more efficiently for the entire sub-directory tree.
-
-(defun vc-clearcase-dir-state (dir)
-  "Retrieve version state in DIR.  Fast."
-  (when (string-match "\\(\\\\\\|/\\)$" dir)
-    (setq dir (replace-match "" nil nil dir)))
-  (when (vc-clearcase-registered dir)
-    (ah-clearcase-maybe-set-vc-state dir)
-    (message "Processing %s" dir)
-    (let ((ls-result
-           (split-string (ah-cleartool "ls \"%s\"" dir) "[\n\r]+"))
-          (static-view?
-           (ah-clearcase-snapshot-view-p (ah-clearcase-file-fprop dir))))
-      (dolist (entry ls-result)
-        (ignore-errors
-          (when (string-match "Rule: \\(.*\\)$" entry)
-            ;; looks like clearcase knows something about this file
-            (when (string-match "^\\(.*\\)@@\\([^ \t]+\\)" entry)
-              (let ((file (match-string 1 entry))
-                    (revision (match-string 2 entry)))
-                (if (string-match "hijacked" entry)
-                    (vc-file-setprop file 'vc-state 'unlocked-changes)
-                    (if (string-match "CHECKEDOUT$" revision)
-                        (progn
-                          (when (string-match "from \\([^ \t]+\\)" entry)
-                            (let ((parent-revision (match-string 1 entry))
-                                  (latest-revision
-                                   (ah-cleartool
-                                    "desc -fmt \"%%Vn\" \"%s@@%s/LATEST\""
-                                    file
-                                    (ah-clearcase-version-base revision))))
-                              (if (string= parent-revision latest-revision)
-                                  (vc-file-setprop file 'vc-state 'edited)
-                                  (vc-file-setprop file 'vc-state 'needs-merge)))))
-                        ;; we need to check if the file needs update when
-                        ;; in a snapshot view...
-                        (vc-file-setprop file 'vc-state 'up-to-date)))))))))))
 
 (defun vc-clearcase-workfile-version (file)
   "Return the workfile version of FILE.
@@ -1598,9 +1545,16 @@ separate version, so we return the parent version in that case."
 (defun vc-clearcase-mode-line-string (file)
   "Return the mode line string for FILE."
   (ah-clearcase-maybe-set-vc-state file)
-  (let ((fprop (ah-clearcase-file-fprop file)))
-    (let ((mode-line (ah-clearcase-fprop-mode-line fprop)))
-      (if mode-line mode-line "Cc:"))))
+  (let* ((fprop (ah-clearcase-file-fprop file))
+         (branch (ah-clearcase-fprop-branch fprop))
+         (version-number (ah-clearcase-fprop-version-number fprop)))
+    (ah-clearcase-wash-mode-line
+     (case (ah-clearcase-fprop-status fprop)
+       ('hijacked "Cc:HIJACKED")
+       ('broken-view "Cc:BROKEN-VIEW")
+       ('reserved (concat "Cc:(R)" branch "/" version-number))
+       ('unreserved (concat "Cd:(U)" branch "/" version-number))
+       (t (concat "Cc:" branch "/" version-number))))))
 
 (defun vc-clearcase-register (file &optional rev comment)
   "Register FILE with clearcase.  REV and COMMENT are ignored.
@@ -1837,13 +1791,11 @@ CONTENTS-DONE is ignored. The
 `ah-clearcase-rmbranch-on-revert-flag' is honoured."
   (setq file (expand-file-name file))
   (let* ((fprop (ah-clearcase-file-fprop file))
-         (empty-branch-p
-          (string-match "[\\\\\\/]0$" (ah-clearcase-fprop-latest fprop))))
+         (empty-branch-p (equal "0" (ah-clearcase-fprop-version-number fprop))))
     (ah-cleartool "uncheckout -keep \"%s\"" file)
     (when (and empty-branch-p ah-clearcase-rmbranch-on-revert-flag)
-      (let ((branch (replace-regexp-in-string
-                     "[\\\\\\/]0$" "" (ah-clearcase-fprop-latest fprop))))
-        (ah-cleartool "rmbranch -force -nc \"%s@@%s\"" file branch)))
+      (let ((base (ah-clearcase-fprop-version-base fprop)))
+        (ah-cleartool "rmbranch -force -nc \"%s@@%s\"" file base)))
     (ah-clearcase-maybe-set-vc-state file 'force)))
 
 
@@ -1917,11 +1869,11 @@ for Clearcase registered files."
                                          (current-buffer))))
           (setq ah-clearcase-file-name file)
           (setq ah-cleartool-finished-function
-                #'(lambda ()
-                    (let ((fprop
-                           (ah-clearcase-file-fprop ah-clearcase-file-name)))
-                      (vc-clearcase-show-log-entry
-                       (ah-clearcase-fprop-version fprop)))))
+                '(lambda ()
+                  (let ((fprop
+                         (ah-clearcase-file-fprop ah-clearcase-file-name)))
+                    (vc-clearcase-show-log-entry
+                     (ah-clearcase-fprop-version fprop)))))
           (switch-to-buffer-other-window (process-buffer process)))))))
 
 (defadvice vc-print-log (around ah-clearcase-print-log-advice)
@@ -2018,10 +1970,10 @@ will ask if you want to display the deleted sections as well."
          (append fmt-args rm-args `("-out" "-" "-nheader" ,pname))
          buf)
         (setq ah-cleartool-finished-function
-              #'(lambda ()
-                  (let ((buffer (current-buffer)))
-                    (ah-clearcase-annotate-post-process buffer)
-                    (ah-clearcase-annotate-mark-deleted buffer))))))))
+              '(lambda ()
+                (let ((buffer (current-buffer)))
+                  (ah-clearcase-annotate-post-process buffer)
+                  (ah-clearcase-annotate-mark-deleted buffer))))))))
 
 (defun vc-clearcase-annotate-difference (point)
   "Return the age in days of POINT."
@@ -2642,9 +2594,9 @@ view accessible from this machine."
              ;; buffer.
              (set (make-local-variable 'ah-clearcase-edcs-view-tag) view-tag)
              (setq ah-cleartool-finished-function
-                   #'(lambda ()
-                       (ah-clearcase-refresh-files-in-view
-                        ah-clearcase-edcs-view-tag))))))))))
+                   '(lambda ()
+                     (ah-clearcase-refresh-files-in-view
+                      ah-clearcase-edcs-view-tag))))))))))
 
 (defun ah-clearcase-setcs-and-kill-buffer (&optional buffer view-tag)
   "Set the configspec found in BUFFER to the VIEW-TAG than kill the buffer."
@@ -2843,7 +2795,7 @@ In interactive mode, prompts for a view-tag name."
   "Return the clearcase version as a string.
 This is the string returned by the cleartool -version command."
   (with-temp-buffer
-    (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
+      (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
     (ah-cleartool-do "-version" nil (current-buffer))
     (catch 'done (while t (sit-for 0.1)))
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))
@@ -2904,7 +2856,7 @@ This is the string returned by the cleartool -version command."
        (insert "\n")))))
 
 (defvar ah-clearcase-function-to-trace
-  '(ah-clearcase-ask ah-cleartool-wait-for ah-cleartool-tq-handler)
+  '(ah-cleartool-ask ah-cleartool-wait-for ah-cleartool-tq-handler)
   "List of function to trace.
 See `ah-clearcase-trace-cleartool-tq' and
 `ah-clearcase-untrace-cleartool-tq' ")

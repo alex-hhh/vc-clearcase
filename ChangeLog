@@ -1,3 +1,39 @@
+2006-03-30  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-tq-start, ah-cleartool-ask)
+	(ah-clearcase-log-view-forward-record, vc-clearcase-state)
+	(vc-clearcase-print-log, vc-clearcase-annotate-command)
+	(ah-clearcase-setcs): 1.78 use quote (') instead of
+	hash-quote (#') for functions.
+	(ah-clearcase-fprop): 1.78 file-name new member; latest,
+	latest-sel, mode-line, base, branch members removed.
+	(ah-clearcase-fprop-branch, ah-clearcase-fprop-version-base)
+	(ah-clearcase-fprop-version-number, ah-clearcase-fprop-latest-sel)
+	(ah-clearcase-fprop-latest): 1.78 new functions
+	(ah-clearcase-set-fprop-version-stage-1): 1.78 renamed from
+	ah-clearcase-set-fprop-version, plus don't fill in the removed
+	fields from ah-clearcase-fprop
+	(ah-clearcase-set-fprop-version-stage-2): 1.78 renamef from
+	ah-clearcase-set-fprop-version-simple, plus don't fill in the
+	removed fields from ah-clearcase-fprop
+	(ah-clearcase-prepare-vprop): 1.78 use a simple ah-cleartool call
+	to get the view tag.
+	(ah-clearcase-version-base, ah-clearcase-version-version)
+	(ah-clearcase-version-branch): functions removed
+	(ah-clearcase-maybe-set-vc-state): 1.78 don't set the latest
+	version in the fprop, it will be fetched on-demand by
+	ah-clearcase-fprop-latest
+	(vc-clearcase-registered): 1.78 add the file-name when creating a
+	new fprop.
+	(vc-clearcase-dir-state): function removed, implementation was
+	incomplete anyway.
+	(vc-clearcase-mode-line-string): 1.78 all the mode-line string
+	computation was moved in here.
+	(vc-clearcase-revert): 1.78 changed it so it does not use
+	ah-clearcase-fprop-latest, which requires a cleartool command.
+	(ah-clearcase-function-to-trace): 1.78 bugfix: ah-clearcase-ask
+	was not a function name.
+
 2006-03-28  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-get-branch-attribute): removed

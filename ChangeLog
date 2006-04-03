@@ -1,3 +1,28 @@
+2006-04-03  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool-signal-error)
+	(ah-cleartool-sentinel, ah-clearcase-fprop-branch)
+	(ah-clearcase-fprop-version-base)
+	(ah-clearcase-fprop-version-number, ah-clearcase-fprop-latest-sel)
+	(ah-clearcase-fprop-latest)
+	(ah-clearcase-set-fprop-version-stage-1)
+	(ah-clearcase-set-fprop-version-stage-2)
+	(vc-clearcase-get-label-differences, vc-clearcase-what-version)
+	(vc-clearcase-what-rule, vc-clearcase-what-view-tag)
+	(vc-clearcase-edcs, vc-clearcase-start-view): 1.79 doc update.
+	(ah-clearcase-vob-tag-for-path)
+	(ah-clearcase-collect-labels-sentinel)
+	(ah-clearcase-collect-labels-filter)
+	(ah-clearcase-collect-labels-for-vob)
+	(ah-clearcase-complete-label ah-clearcase-read-label): 1.79 new
+	functions
+	(ah-clearcase-all-labels, ah-clearcase-collect-labels-point): 1.79
+	new variables
+	(ah-clearcase-complete-view-tag): 1.79 renamed from
+	ah-clearcase-view-tag-complete, callers updated
+	(vc-clearcase-label-diff-report): 1.79 use ah-clearcase-read-label
+	when called interactively.
+
 2006-03-30  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool-tq-start, ah-cleartool-ask)

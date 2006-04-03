@@ -427,7 +427,7 @@ have their answer stored here for retrieval by
 (put 'ah-cleartool-error 'error-message "cleartool")
 
 (defun ah-cleartool-signal-error (message)
-  "Signal an error from cleartool.
+  "Parse MESSAGE and signal a cleartool-error.
 MESSAGE is searched for an error from cleartool and that error is
 signaled as an `ah-cleartool-error' error.  If MESSAGE does not
 contain a cleartool error, the entire MESSAGE is signaled.  If
@@ -707,8 +707,8 @@ transaction is complete as funcall(fn closure answer)."
 (defun ah-cleartool-sentinel (process event)
   "Process sentinel for cleartool PROCESS commands.
 Updates the modeline when the cleartool command finishes, calls
-'cleartool-finished-callback' and kills the process buffer when
-'cleartool-kill-buffer-when-done' is set.  EVENT is not used."
+`cleartool-finished-callback' and kills the process buffer when
+`cleartool-kill-buffer-when-done' is set.  EVENT is not used."
   (let ((status  (process-status process))
         (exit-status (process-exit-status process))
         (pbuffer (process-buffer process)))
@@ -1030,19 +1030,19 @@ checkout."
   (string-match "-mkbranch" (ah-clearcase-fprop-what-rule fprop)))
 
 (defun ah-clearcase-fprop-branch (fprop)
-  "Return the branch part of `fprop'.
+  "Return the branch part of FPROP.
 This is the second last element in version path."
   (let ((version (ah-clearcase-fprop-version fprop)))
     (nth 1 (nreverse (split-string version "[\\\\/]")))))
 
 (defun ah-clearcase-fprop-version-base (fprop)
-  "Return the version of `fprop' minus the last element."
+  "Return the version of FPROP minus the last element."
   (let ((version (copy-sequence (ah-clearcase-fprop-version fprop))))
     (when (string-match "[\\\\/][^\\\\/]*$" version)
       (replace-match "" t t version))))
 
 (defun ah-clearcase-fprop-version-number (fprop)
-  "Return the version number of `fprop' (last element in version path).
+  "Return the version number of FPROP (last element in version path).
 If the file is checked out, the version is '.../CHECKEDOUT', in
 that case, we return the version of the parent."
   (let ((version (ah-clearcase-fprop-version fprop)))
@@ -1050,11 +1050,11 @@ that case, we return the version of the parent."
       (match-string 1 version))))
 
 (defsubst ah-clearcase-fprop-latest-sel (fprop)
-  "Return a version selector for the latest version of `fprop'."
+  "Return a version selector for the latest version of FPROP."
   (format "%s/LATEST" (ah-clearcase-fprop-version-base fprop)))
 
 (defun ah-clearcase-fprop-latest (fprop)
-  "Return the latest version of `fprop' on the current branch."
+  "Return the latest version of FPROP on the current branch."
   (ah-cleartool "desc -fmt \"%%Vn\" \"%s@@%s\""
                 (ah-clearcase-fprop-file-name fprop)
                 (ah-clearcase-fprop-latest-sel fprop)))
@@ -1085,7 +1085,7 @@ without having to check first that it exists."
     (setf (ah-clearcase-fprop-revision-list fprop) nil)))
 
 (defun ah-clearcase-set-fprop-version-stage-1 (fprop ls-string)
-  "Set version information in `fprop' from `ls-string'.
+  "Set version information in FPROP from LS-STRING.
 Ls-string is returned by a 'cleartool ls file' command.  From it,
 we detemine the configspec rule, the intial version of the file
 and whether the file is hijacked or in a broken view.
@@ -1108,7 +1108,7 @@ In that case, the version will be adjusted in
               (t nil))))
 
 (defun ah-clearcase-set-fprop-version-stage-2 (fprop version-string)
-  "Set version information in `fprop' from `version-string'.
+  "Set version information in FPROP from VERSION-STRING.
 Version string is returned by the following command:
 
     cleartool desc -fmt \"%Vn %PVn %Rf\" file
@@ -1254,6 +1254,229 @@ command).  VIEW can be either a view-tag name or a vprop."
           (when (string= vtag view-tag)
             (ah-clearcase-maybe-set-vc-state file 'force)
             (vc-resynch-buffer file t t)))))))
+
+;;;; Read a view-tag from the minibuffer with completion
+
+;;; Since the number of accessible views can be quite large (2607 of
+;;; them on my site, according to 'cleartool lsview -short | wc -l'),
+;;; we ask cleartool for the list of views in the background and
+;;; prompt the user for the view name.  Completion will become
+;;; available when the command completes, but the user can start
+;;; typing immediately.  In addition, we don't remove the old view
+;;; obarray so, on a second read, the user can use the old list for
+;;; completion, until the new list becomes available -- this is ok
+;;; considering that the list of views does not change very often.
+
+(defvar ah-clearcase-edcs-all-view-tags nil
+  "An obarray of all known view-tags (stored as symbols).")
+
+(defvar  ah-clearcase-edcs-all-view-tags-tid nil
+  "Transaction ID to wait for fetching all view-tags.")
+
+(defun ah-clearcase-complete-view-tag (string predicate flag)
+  "Completion function for reading a view-tag name.
+See `completing-read' for the meanings of STRING, PREDICATE and
+FLAG."
+  ;; Note that we cannot pass ah-clearcase-edcs-all-view-tags to
+  ;; completing-read because its value will be set asynchronously when
+  ;; the cleartool ask command finishes.  Thus, we simply check the
+  ;; flag and call the proper function (which completing-read would
+  ;; call if we would pass ah-clearcase-edcs-all-view-tags directly to
+  ;; it.
+  (let ((completion-fn (cond ((eq flag t) 'all-completions)
+                             ((eq flag 'lambda)
+                              ;; test-completion does not exist in emacs 21.
+                              '(lambda (x l &optional p) (intern-soft x l)))
+                             ((null flag) 'try-completion)
+                             (t (error "unknwn value for flag %S" flag)))))
+    (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
+
+
+(defun ah-clearcase-read-view-tag (prompt &optional initial)
+  "Read a view tag from the minibuffer and return it.
+PROMPT is displayed to the user; INITIAL, when non-nil is the
+initial view tag name presented to the user.
+
+This function will provide a completing-read with the list of
+available view tags in the system.  It does however read the view
+tags asynchronously so they might not be available immediately as
+the user hits the TAB key.
+
+This implementation was chosen to improve responsiveness, if the
+user wants to accept INITIAL or wants to type in the name of the
+view, he can do so without waiting for the full list of view tags
+to be read from cleartool."
+
+  ;; start reading the view-tags. By the time the user decides what
+  ;; view-tag it wants, we may have the answer already.  Note that the
+  ;; previous view tag list still exists and the user can perform
+  ;; completions form that one.
+  (setq ah-clearcase-edcs-all-view-tags-tid
+        (ah-cleartool-ask
+         "lsview -short" 'nowait nil
+         '(lambda (x view-tags)
+           (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
+           (dolist (vtag (split-string view-tags "[\n\r]+"))
+             (intern vtag ah-clearcase-edcs-all-view-tags)))))
+
+  (completing-read prompt 'ah-clearcase-complete-view-tag nil nil initial))
+
+;;;; Read a label form the minibuffer with completion.
+
+;;; Since the number of labels in a VOB can be quite large (17076 of
+;;; them according to 'cleartool lstype -kind lbtype | wc -l') We use
+;;; the same ideea as for reading the view-tags, with the following
+;;; exceptions:
+;;;
+;;; 1/ We cannot use the cleartool lstype command as it is too slow.
+;;; We must use a cleartool dump command and parse its output.
+;;;
+;;; 2/ Since the output of the dump command is large, we don't use the
+;;; transaction queue to cleartool or the subprocess interface,
+;;; instead we start the cleartool process ourselves and filter its
+;;; output.
+;;;
+;;; The list of labels is reset at each read, and populated on the
+;;; fly.  During the first few seconds of the read, not all the labels
+;;; will be available.
+
+(defun ah-clearcase-vob-tag-for-path (path)
+  "Return the vob tag in which `path' resides.
+This can be used to obtain the vob-tag required for the
+`ah-clearcase-read-label' function."
+  (setq path (expand-file-name path))
+  (unless (file-exists-p path)
+    (error "%s does not exist" path))
+  (let ((dir (if (file-directory-p path)
+                 path
+                 (file-name-directory path))))
+    (ah-cleartool "cd \"%s\"" dir)
+    (let ((view-root (ah-cleartool "pwv -root")))
+      (let ((path-elements (split-string path "[\\\\\\/]"))
+            (view-root-elements (split-string view-root "[\\\\\\/]")))
+        (concat "/" (nth (length view-root-elements) path-elements))))))
+
+(defvar ah-clearcase-all-labels nil
+  "An obarray containing all labels (stored as symbols)")
+
+(defvar ah-clearcase-collect-labels-point nil
+  "The position in the buffer where we left the processing")
+
+(defun ah-clearcase-collect-labels-sentinel (process event)
+  "Sentinel for the cleartool dump command.
+Cleans up after cleartool exits."
+  (when (memq (process-status process) '(signal exit))
+    (let ((buffer (process-buffer process)))
+      (unless (= (process-exit-status process) 0)
+        (message "non-zero exit code form cleartool while reading labels"))
+      (unless (null (buffer-name buffer))
+        ;; if we finished collecting labels from the cleartool output,
+        ;; kill the process buffer.
+        (if (process-get process 'ah-clearcase-collect-labels-done)
+            (kill-buffer buffer))))))
+
+(defun ah-clearcase-collect-labels-filter (process string)
+"The filter function for the cleartool dump command.
+Parses the output and populates ah-clearcase-all-labels with the
+labels it finds."
+  (with-current-buffer (process-buffer process)
+    ;; We should be the only ones controlling the buffer, we don't
+    ;; save-excursion.
+
+    ;; insert the string into the buffer
+    (goto-char (point-max))
+    (insert string)
+
+    ;; if we haven't found the start of the label section yet, look
+    ;; for it.
+    (when (null ah-clearcase-collect-labels-point)
+      (goto-char (point-min))
+      (when (re-search-forward "^label type objects:" nil 'noerror)
+        (forward-line 1)
+        (setq ah-clearcase-collect-labels-point (point))))
+
+    (unless (null ah-clearcase-collect-labels-point)
+      (goto-char ah-clearcase-collect-labels-point)
+      (let ((limit
+             (re-search-forward "^[a-zA-Z]\\(:?.*\\):\\s *$" nil 'noerror)))
+        (goto-char ah-clearcase-collect-labels-point)
+        (catch 'finished
+          (while t
+            (forward-line 1)
+            (let ((next-line (point)))
+              (when (or (eq next-line ah-clearcase-collect-labels-point)
+                        (and limit (>= next-line limit)))
+                (throw 'finished t))
+              ;; if we are here, we have a complete line
+              (forward-line -1)
+              (when (looking-at "^\\s +[0-9]+\\s +\\([-_.a-zA-Z0-9]+\\)")
+                (intern (match-string 1) ah-clearcase-all-labels))
+              (goto-char (setq ah-clearcase-collect-labels-point next-line)))))
+
+        (if limit
+            ;; Cleartool finished the labels section.  If cleartool
+            ;; terminated, we kill the buffer, otherwise we set the
+            ;; process property 'ah-clearcase-collect-labels-done to t
+            (if (eq (process-status process) 'run)
+                (process-put process 'ah-clearcase-collect-labels-done t)
+                ;; the process has finished, kill it
+                (progn
+                  (unless (= (process-exit-status process) 0)
+                    (message
+                     "non-zero exit code form cleartool while reading labels"))
+                  (kill-buffer (current-buffer))))
+            ;; cleartool is still sending us data...
+            (progn
+              (delete-region (point-min) ah-clearcase-collect-labels-point)
+              (setq ah-clearcase-collect-labels-point (point-min))))))))
+
+(defun ah-clearcase-collect-labels-for-vob (vob-tag)
+  "Start the process of collecting the labels in VOB-TAG.
+The labels will become available as
+`ah-clearcase-collect-labels-filter' parses them."
+  (let* ((buffer (generate-new-buffer "*cleartool-dump-vob*"))
+         (process (start-process "cleartool-dump-vob" buffer
+                                 ah-clearcase-cleartool-program
+                                 "dump" "-long" (concat "vob:" vob-tag))))
+    (with-current-buffer buffer
+      (buffer-disable-undo)
+      (setq ah-clearcase-all-labels (make-vector 63 0))
+      (set (make-local-variable 'ah-clearcase-collect-labels-point) nil)
+      (set-process-filter process 'ah-clearcase-collect-labels-filter)
+      (set-process-sentinel process 'ah-clearcase-collect-labels-sentinel))))
+
+(defun ah-clearcase-complete-label (string predicate flag)
+  "The completion function on the `ah-clearcase-all-labels'."
+  ;; Note that we cannot pass ah-clearcase-all-labels to completing-read
+  ;; because its value will be set asynchronously when the cleartool
+  ;; ask command finishes.  Thus, we simply check the flag and call
+  ;; the proper function (which completing-read would call if we would
+  ;; pass ah-clearcase-edcs-all-view-tags directly to it.
+  (let ((completion-fn (cond ((eq flag t) 'all-completions)
+                             ((eq flag 'lambda)
+                              ;; test-completion does not exist in emacs 21.
+                              '(lambda (x l &optional p) (intern-soft x l)))
+                             ((null flag) 'try-completion)
+                             (t (error "unknwn value for flag %S" flag)))))
+    (funcall completion-fn string ah-clearcase-all-labels predicate)))
+
+(defun ah-clearcase-read-label (vob-tag prompt &optional initial)
+  "Read a label from the minibuffer and return it.
+VOB-TAG is the VOB from which we provide the completion, PROMPT
+is displayed to the user; INITIAL, when non-nil is the initial
+view tag name presented to the user.
+
+This function will provide completions for the labels in VOB-TAG,
+but since they are read asynchronously, they might not become
+available immediately.  Also the list of labels is populated
+incrementally so completion is provided from an incomplete list
+for the first few seconds -- this can be quite annoying actually.
+
+This implementation has been chosen to improve responsiveness, as
+the number of labels can be quite large and cleartool is slow at
+printing them all."
+  (ah-clearcase-collect-labels-for-vob vob-tag)
+  (completing-read prompt 'ah-clearcase-complete-label nil nil initial))
 
 
 ;;;; Vc interface + some helpers
@@ -2224,14 +2447,14 @@ Both in the working area and in the repository are renamed."
 ;;;; A library of clearcase utilities
 
 (defun vc-clearcase-get-label-differences (dir label-1 label-2)
-  "Return the changed files in `dir' between `label-1' and `label-2'.
+  "Return the changed files in DIR between LABEL-1 and LABEL-2.
 A list is returned, each element is another list of
 
   (file version-1 version-2)
 
-Where version-1 is the version attached to label-1 (or the string
+Where version-1 is the version attached to LABEL-1 (or the string
 *no version* if there is no version for that label.  version-2 is
-the same for label-2.
+the same for LABEL-2.
 
 The list of files is not returned in any particular order."
   (setq dir (expand-file-name dir))
@@ -2341,7 +2564,7 @@ The list of files is not returned in any particular order."
 ;;;; Additional vc clearcase commands (for files)
 
 (defun vc-clearcase-what-version (file)
-  "Show what is the version of `file'."
+  "Show what is the version of FILE."
   (interactive (list (buffer-file-name (current-buffer))))
   (if (and (stringp file) (vc-clearcase-registered file))
       (progn
@@ -2359,7 +2582,7 @@ The list of files is not returned in any particular order."
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-what-rule (file)
-  "Show the configspec rule for `file'."
+  "Show the configspec rule for FILE."
   (interactive (list (buffer-file-name (current-buffer))))
   (if (and (stringp file) (vc-clearcase-registered file))
       (progn
@@ -2372,7 +2595,7 @@ The list of files is not returned in any particular order."
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-what-view-tag (file)
-  "Show view-tag for `file'."
+  "Show view in which FILE resides."
   (interactive (list (buffer-file-name (current-buffer))))
   (if (and (stringp file) (vc-clearcase-registered file))
       (progn
@@ -2477,7 +2700,12 @@ are made to the views)."
 A report is prepared in the *label-diff-report* buffer for the
 files in `dir' that have different revisions between `label-1'
 and `label-2'."
-  (interactive "DReport on directory: \nsLabel 1: \nsLabel 2: ")
+  (interactive
+   (let* ((d (read-directory-name "Report on directory: " nil nil t))
+          (vob-tag (ah-clearcase-vob-tag-for-path d))
+          (l1 (ah-clearcase-read-label vob-tag "Label 1 (newer): "))
+          (l2 (ah-clearcase-read-label vob-tag "Label 2 (older): ")))
+     (list d l1 l2)))
   (setq dir (expand-file-name dir))
   (let ((diff (vc-clearcase-get-label-differences dir label-1 label-2))
         ;; the format string for a line in the report
@@ -2633,65 +2861,10 @@ view accessible from this machine."
 (modify-syntax-entry ?\# "<" ah-clearcase-edcs-mode-syntax-table)
 (modify-syntax-entry ?\n ">" ah-clearcase-edcs-mode-syntax-table)
 
-(defvar ah-clearcase-edcs-all-view-tags nil
-  "An obarray of all viewtags on this server as symbols.")
-
-(defvar  ah-clearcase-edcs-all-view-tags-tid nil
-  "Transaction ID to wait for fetching all view-tags.")
-
-(defun ah-clearcase-view-tag-complete (string predicate flag)
-  "Completion function for entering a view-tag.
-See `completing-read' for the meanings of STRING, PREDICATE and
-FLAG."
-  ;; Note that we cannot pass ah-clearcase-edcs-all-view-tags to
-  ;; completing-read because its value will be set asynchronously when
-  ;; the cleartool ask command finishes.  Thus, we simply check the
-  ;; flag and call the proper function (which completing-read would
-  ;; call if we would pass ah-clearcase-edcs-all-view-tags directly to
-  ;; it.
-  (let ((completion-fn (cond ((eq flag t) 'all-completions)
-                             ((eq flag 'lambda)
-                              ;; test-completion does not exist in emacs 21.
-                              '(lambda (x l &optional p) (intern-soft x l)))
-                             ((null flag) 'try-completion)
-                             (t (error "unknwn value for flag %S" flag)))))
-    (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
-
-
-(defun ah-clearcase-read-view-tag (prompt &optional initial)
-  "Read a view tag from the minibuffer and return it.
-`prompt' is displayed to the user, `initial', when non-nil is the
-initial view tag name presented to the user.
-
-This function will provide a completing-read with the list of
-available view tags in the system.  It does however read the view
-tags asynchronously so they might not be available immediately as
-the user hits the TAB key.
-
-This implementation was chosen to improve responsiveness, if the
-user wants to accept `initial' or wants to type in the name of
-the view, he can do so without waiting for the full list of view
-tags to be read from cleartool (on my site we have around 4000
-views, which is quite large)"
-
-  ;; start reading the view-tags. By the time the user decides what
-  ;; view-tag it wants, we may have the answer already.  Note that the
-  ;; previous view tag list still exists and the user can perform
-  ;; completions form that one.
-  (setq ah-clearcase-edcs-all-view-tags-tid
-        (ah-cleartool-ask
-         "lsview -short" 'nowait nil
-         '(lambda (x view-tags)
-           (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
-           (dolist (vtag (split-string view-tags "[\n\r]+"))
-             (intern vtag ah-clearcase-edcs-all-view-tags)))))
-
-  (completing-read prompt 'ah-clearcase-view-tag-complete nil nil initial))
-
 
 ;;;###autoload
 (defun vc-clearcase-edcs (view-tag)
-  "Fetch the config spec for `view-tag' and pop up a buffer with it.
+  "Fetch the config spec for VIEW-TAG and pop up a buffer with it.
 In interactive mode, prompts for a view-tag name with the default
 of the current file's view-tag."
   (interactive
@@ -2719,7 +2892,7 @@ of the current file's view-tag."
 
 ;;;###autoload
 (defun vc-clearcase-start-view (view-tag)
-  "Start the dynamic view for `view-tag'.
+  "Start the dynamic view for VIEW-TAG.
 In interactive mode, prompts for a view-tag name."
   (interactive (list (ah-clearcase-read-view-tag "Start dynamic view: ")))
   (message "Starting %s dynamic view..." view-tag)

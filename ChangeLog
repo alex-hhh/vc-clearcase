@@ -6,9 +6,9 @@
 	on unix platforms as well.
 	(ah-clearcase-collect-labels-finished): 1.80 new variable.
 	(ah-clearcase-collect-labels-sentinel): 1.80 don't use process-get
-	as it is not available in GNU Emacs 22.3.
+	as it is not available in GNU Emacs 21
 	(ah-clearcase-collect-labels-filter): 1.80 don't use process-put
-	as it is not available in GNU Emacs 22.3.
+	as it is not available in GNU Emacs 21
 	(ah-clearcase-collect-labels-for-vob): 1.80 set
 	ah-clearcase-collect-labels-finished as buffer local.
 	(ah-clearcase-read-label): 1.80 doc update, plus new function
@@ -16,7 +16,7 @@
 	(vc-create-snapshot): 1.80 advise it to provide completion on
 	label names for ClearCase files.
 	(vc-clearcase-label-diff-report): 1.80 don't use
-	read-directory-name as it is not available on GNU Emacs 22.3
+	read-directory-name as it is not available on GNU Emacs 21
 
 2006-04-03  Alexandru Harsanyi  <harsanyi@mac.com>
 

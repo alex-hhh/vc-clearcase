@@ -1341,7 +1341,7 @@ to be read from cleartool."
 ;;; will be available.
 
 (defun ah-clearcase-vob-tag-for-path (path)
-  "Return the vob tag in which `path' resides.
+  "Return the vob tag in which PATH resides.
 This can be used to obtain the vob-tag required for the
 `ah-clearcase-read-label' function."
   (setq path (expand-file-name path))
@@ -1353,14 +1353,23 @@ This can be used to obtain the vob-tag required for the
     (ah-cleartool "cd \"%s\"" dir)
     (let ((view-root (ah-cleartool "pwv -root")))
       (let ((path-elements (split-string path "[\\\\\\/]"))
-            (view-root-elements (split-string view-root "[\\\\\\/]")))
-        (concat "/" (nth (length view-root-elements) path-elements))))))
+            (prefix-length (length (split-string view-root "[\\\\\\/]"))))
+        ;; On Windows, the vob tag looks like "/Vob_Name", on Solaris,
+        ;; it is "/vobs/Vob_Name".
+        (concat "/" (nth prefix-length path-elements)
+                (unless (eq system-type 'windows-nt)
+                  (concat "/" (nth (1+ prefix-length) path-elements))))))))
 
 (defvar ah-clearcase-all-labels nil
   "An obarray containing all labels (stored as symbols)")
 
 (defvar ah-clearcase-collect-labels-point nil
   "The position in the buffer where we left the processing")
+
+(defvar ah-clearcase-collect-labels-finished nil
+  "Becomes t when we finished processing the cleartool dump output.
+Used by `ah-clearcase-collect-labels-sentinel' and
+`ah-clearcase-collect-labels-filter' to synchrinize themselves.")
 
 (defun ah-clearcase-collect-labels-sentinel (process event)
   "Sentinel for the cleartool dump command.
@@ -1370,20 +1379,20 @@ Cleans up after cleartool exits."
       (unless (= (process-exit-status process) 0)
         (message "non-zero exit code form cleartool while reading labels"))
       (unless (null (buffer-name buffer))
-        ;; if we finished collecting labels from the cleartool output,
-        ;; kill the process buffer.
-        (if (process-get process 'ah-clearcase-collect-labels-done)
-            (kill-buffer buffer))))))
+        (with-current-buffer buffer
+          (when ah-clearcase-collect-labels-finished
+            ;; if we finished collecting labels from the cleartool
+            ;; output, kill the process buffer.
+            (kill-buffer buffer)))))))
 
 (defun ah-clearcase-collect-labels-filter (process string)
-"The filter function for the cleartool dump command.
+  "The filter function for the cleartool dump command.
 Parses the output and populates ah-clearcase-all-labels with the
 labels it finds."
   (with-current-buffer (process-buffer process)
     ;; We should be the only ones controlling the buffer, we don't
     ;; save-excursion.
 
-    ;; insert the string into the buffer
     (goto-char (point-max))
     (insert string)
 
@@ -1418,7 +1427,7 @@ labels it finds."
             ;; terminated, we kill the buffer, otherwise we set the
             ;; process property 'ah-clearcase-collect-labels-done to t
             (if (eq (process-status process) 'run)
-                (process-put process 'ah-clearcase-collect-labels-done t)
+                (setq ah-clearcase-collect-labels-finished t)
                 ;; the process has finished, kill it
                 (progn
                   (unless (= (process-exit-status process) 0)
@@ -1430,18 +1439,19 @@ labels it finds."
               (delete-region (point-min) ah-clearcase-collect-labels-point)
               (setq ah-clearcase-collect-labels-point (point-min))))))))
 
-(defun ah-clearcase-collect-labels-for-vob (vob-tag)
-  "Start the process of collecting the labels in VOB-TAG.
+(defun ah-clearcase-collect-labels-for-vob (vob)
+  "Start the process of collecting the labels in VOB.
 The labels will become available as
 `ah-clearcase-collect-labels-filter' parses them."
   (let* ((buffer (generate-new-buffer "*cleartool-dump-vob*"))
          (process (start-process "cleartool-dump-vob" buffer
                                  ah-clearcase-cleartool-program
-                                 "dump" "-long" (concat "vob:" vob-tag))))
+                                 "dump" "-long" (concat "vob:" vob))))
     (with-current-buffer buffer
       (buffer-disable-undo)
       (setq ah-clearcase-all-labels (make-vector 63 0))
       (set (make-local-variable 'ah-clearcase-collect-labels-point) nil)
+      (set (make-local-variable 'ah-clearcase-collect-labels-finished) nil)
       (set-process-filter process 'ah-clearcase-collect-labels-filter)
       (set-process-sentinel process 'ah-clearcase-collect-labels-sentinel))))
 
@@ -1460,22 +1470,26 @@ The labels will become available as
                              (t (error "unknwn value for flag %S" flag)))))
     (funcall completion-fn string ah-clearcase-all-labels predicate)))
 
-(defun ah-clearcase-read-label (vob-tag prompt &optional initial)
+(defun ah-clearcase-read-label (prompt vob &optional initial reuse-labels)
   "Read a label from the minibuffer and return it.
-VOB-TAG is the VOB from which we provide the completion, PROMPT
-is displayed to the user; INITIAL, when non-nil is the initial
-view tag name presented to the user.
 
-This function will provide completions for the labels in VOB-TAG,
-but since they are read asynchronously, they might not become
-available immediately.  Also the list of labels is populated
-incrementally so completion is provided from an incomplete list
-for the first few seconds -- this can be quite annoying actually.
+Display PROMPT to the user and read a ClearCase label using the labels
+of VOB as possible completions.  When non-nil, INITIAL, is the initial
+label name presented to the user.
 
-This implementation has been chosen to improve responsiveness, as
-the number of labels can be quite large and cleartool is slow at
-printing them all."
-  (ah-clearcase-collect-labels-for-vob vob-tag)
+Before promping the user, an asynchronous cleartool dump command will
+be started to fetch the list of labels.  The list of labels is
+populated incrementally, so completion is provided from an incomplete
+list for the first few seconds.  This implementation has been chosen
+to improve responsiveness, but it can be quite annoying.
+
+When REUSE-LABELS is non-nil, the previous list of labels will be used
+for completion, without starting a cleartool dump command.  This
+option should be used when a function needs to read several labels
+from the user, in which case starting several cleartool commands is a
+vaste of resources."
+  (unless reuse-labels
+    (ah-clearcase-collect-labels-for-vob vob))
   (completing-read prompt 'ah-clearcase-complete-label nil nil initial))
 
 
@@ -1590,6 +1604,24 @@ comment file is removed."
       (setf comment (ah-clearcase-fprop-comment fprop))
       (setf initial-contents t))))
 (ad-activate 'vc-start-entry)
+
+(defadvice vc-create-snapshot
+    (before ah-clearcase-provide-label-completion first
+            (dir name branchp))
+  "Override the interactive form so that we have label completion."
+  (interactive
+   (let* ((d (read-file-name "Directory: "
+                             default-directory default-directory t))
+          (vob (condition-case nil
+                   (ah-clearcase-vob-tag-for-path
+                    (if (file-directory-p d) d (file-name-directory d)))
+                 (ah-cleartool-error nil))))
+     (list d (if vob
+                 (ah-clearcase-read-label "Label: " vob)
+                 (read-string "New snapshot name: "))
+           current-prefix-arg))))
+
+(ad-activate 'vc-create-snapshot)
 
 
 
@@ -2701,12 +2733,15 @@ A report is prepared in the *label-diff-report* buffer for the
 files in `dir' that have different revisions between `label-1'
 and `label-2'."
   (interactive
-   (let* ((d (read-directory-name "Report on directory: " nil nil t))
-          (vob-tag (ah-clearcase-vob-tag-for-path d))
-          (l1 (ah-clearcase-read-label vob-tag "Label 1 (newer): "))
-          (l2 (ah-clearcase-read-label vob-tag "Label 2 (older): ")))
-     (list d l1 l2)))
+   (let ((d (read-file-name "Report on directory: "
+                            default-directory default-directory t nil)))
+     (assert (file-directory-p d))
+     (let* ((vob (ah-clearcase-vob-tag-for-path d))
+            (l1 (ah-clearcase-read-label "Label 1 (newer): " vob))
+            (l2 (ah-clearcase-read-label "Label 2 (older): " vob nil t)))
+       (list d l1 l2))))
   (setq dir (expand-file-name dir))
+  (message "Fetching label differencess...")
   (let ((diff (vc-clearcase-get-label-differences dir label-1 label-2))
         ;; the format string for a line in the report
         line-fmt)
@@ -2744,7 +2779,8 @@ and `label-2'."
 
       (goto-char (point-min))
       (buffer-enable-undo)
-      (pop-to-buffer (current-buffer)))))
+      (pop-to-buffer (current-buffer))))
+  (message "Fetching label differencess...done."))
 
 ;;;###autoload
 (defun vc-clearcase-list-view-private-files (dir)
@@ -2968,7 +3004,7 @@ In interactive mode, prompts for a view-tag name."
   "Return the clearcase version as a string.
 This is the string returned by the cleartool -version command."
   (with-temp-buffer
-      (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
+    (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
     (ah-cleartool-do "-version" nil (current-buffer))
     (catch 'done (while t (sit-for 0.1)))
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))

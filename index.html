@@ -31,6 +31,14 @@ has been tested with Clearcase on Windows XP and Solaris.
   communicates with the cleartool process using a pipe and uses
   various caching techniques to improve responsiveness.
 
+  <li> Label name completion is provided for vc-create-snapshot and
+  vc-clearcase-label-diff-report.  This works quickly with large
+  number of labels (more than 17076 of them at my site).
+
+  <li> View-tag completion is provided for vc-clearcase-edcs (Edit
+  Configspec).  Again, this works quickly with large numbers of views
+  (more than 2600 at my site).
+
   <li> Being a back-end to vc.el, all packages that use vc.el work with
   ClearCase files (for example the ediff package and add-log).
 

@@ -273,8 +273,6 @@
 ;; at checkout or no comments at checkout).  Being able to specify
 ;; these values on a 'per VOB path' basis would be nice.
 ;;
-;; - vc-clearcase-dir-state is both inefficient and incomplete
-;;
 
 
 ;;;;; Known bugs:

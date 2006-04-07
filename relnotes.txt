@@ -1,4 +1,11 @@
 
+Release 1.82
+
+The main improvement in this release is the ability to complete label
+names for vc-create-snapshot and vc-clearcase-label-diff-report.  A
+new vc-clearcase-start-view function is provided (bound to C-x v f),
+plus some other minor updates.  See ChangeLog for more details.
+
 Release 1.69
 
 This is the first public release of vc-clearcase.el.  I have used it

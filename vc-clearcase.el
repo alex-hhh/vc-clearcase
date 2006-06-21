@@ -1,20 +1,20 @@
 ;; vc-clearcase.el --- support for ClearCase version control system
 ;;
-;;     Copyright (C) 2006 Alexandru Harsanyi
+;; Copyright (C) 2006 Alexandru Harsanyi
 ;;
-;;     This program is free software; you can redistribute it and/or modify
-;;     it under the terms of the GNU General Public License as published by
-;;     the Free Software Foundation; either version 2 of the License, or
-;;     (at your option) any later version.
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 2 of the License, or
+;; (at your option) any later version.
 ;;
-;;     This program is distributed in the hope that it will be useful,
-;;     but WITHOUT ANY WARRANTY; without even the implied warranty of
-;;     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;;     GNU General Public License for more details.
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
 ;;
-;;     You should have received a copy of the GNU General Public License
-;;     along with this program; if not, write to the Free Software
-;;     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+;; You should have received a copy of the GNU General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ;;
 
 ;; Author: Alexandru Harsanyi (haral@users.sourceforge.net)
@@ -37,28 +37,85 @@
 
 ;;;;; Installation:
 ;;
-;; 1/ Put this file somewhere in your load-path and byte-compile it.
+;; To use this package you need to put it somewhere in your load-path
+;; (for example the site-lisp directory), byte compile it, than add
+;; the follwing line to your ~/.emacs file:
 ;;
-;; 2/ Open open vc-clearcase.el in Emacs, than execute the code below.
-;; This will create a file named vc-clearcase-auto.el containing the
-;; autoloads for the file.
+;;     (require 'vc-clearcase)
 ;;
-;; (with-current-buffer (get-buffer "vc-clearcase.el")
-;;   (let* ((file (buffer-file-name (current-buffer)))
-;;          (dir (file-name-directory file))
-;;          (generated-autoload-file
-;;           (expand-file-name "vc-clearcase-auto.el" dir)))
-;;     (update-file-autoloads file)))
-;;
-;; 3/ Add the following line to your .emacs file:
-;;
-;; (load "vc-clearcase-auto")
-;;
-;; If you don't want to generate autoloads, you will have to add the
-;; symbol CLEARCASE to `vc-handled-backends' via customize, to tell
-;; the vc package about the new backend (the autoloads above do that
-;; automatically for you.)
+;; You can also generate autoloads for the functions in this file,
+;; this will delay loading vc-clearcase.el until it is actually
+;; needed.  
 
+;; The code below will byte-compile vc-clearcase.el and generate the
+;; autoloads in a file named vc-clearcase-auto.el in the same
+;; directory as vc-clearcase.el. If you don't have vc-clearcase.el
+;; opened, or multiple copies of it are opened, we ask for the file
+;; name explicitely.
+;;
+;; After the code below runs, the compilation results will be in a
+;; buffer named "*Compile-Log* (which you can switch to).  The
+;; vc-clearcase-auto.el file will be saved.
+;;
+;; After you generated the vc-clearcase-auto.el file, you need to add
+;; the follwing line to ~/.emacs:
+;;
+;;    (load "vc-clearcase-auto")  
+;;
+;; To evaluate the code below, copy it into the *scratch* buffer,
+;; remove the comments, move the cursor at the end of it and type C-x
+;; C-e
+;;
+;; There are two versions of the code, this is the Emacs 22 version:
+;;
+;; (save-window-excursion
+;;   (require 'autoload)
+;;   (with-current-buffer
+;;       (or (get-buffer "vc-clearcase.el")
+;;           (find-file
+;;            (read-file-name "Find vc-clearcase.el: " nil nil 'must-match)))
+;;     (let* ((file (buffer-file-name (current-buffer)))
+;;            (base (file-name-nondirectory file))
+;;            (dir (file-name-directory file))
+;;            (generated-autoload-file
+;;             (expand-file-name "vc-clearcase-auto.el" dir)))
+;;       (unless (equal base "vc-clearcase.el")
+;;         (error "Expecting a file named vc-clearcase.el, got %s" base))
+;;       ;; byte-compile-file returns nil if there were errors
+;;       (unless (byte-compile-file file)
+;;         (error
+;;          "Failed to compile %s, check the *Compile-Log* buffer for errors"
+;;          file))
+;;       ;; update-file-autoloads returns nil if no autoloads were found.
+;;       (when (update-file-autoloads file 'save-after)
+;;         (error "Failed to find autoloads in %s" file)))))
+;;
+;; This is the Emacs 21 version:
+;;
+;; (save-window-excursion
+;;   (require 'autoload)
+;;   (with-current-buffer
+;;       (or (get-buffer "vc-clearcase.el")
+;;           (find-file
+;;            (read-file-name "Find vc-clearcase.el: " nil nil 'must-match)))
+;;     (let* ((file (buffer-file-name (current-buffer)))
+;;            (base (file-name-nondirectory file))
+;;            (dir (file-name-directory file))
+;;            (generated-autoload-file
+;;             (expand-file-name "vc-clearcase-auto.el" dir)))
+;;       (unless (equal base "vc-clearcase.el")
+;;         (error "Expecting a file named vc-clearcase.el, got %s" base))
+;;       ;; byte-compile-file returns nil if there were errors
+;;       (unless (byte-compile-file file)
+;;         (error
+;;          "Failed to compile %s, check the *Compile-Log* buffer for errors"
+;;          file))
+;;       (with-current-buffer (find-file generated-autoload-file)
+;;         (erase-buffer)
+;;         (insert "\f")
+;;         (generate-file-autoloads file)
+;;         (save-buffer)))))
+;;
 
 ;;;;; Implementation notes:
 ;;
@@ -303,7 +360,9 @@
 
 (eval-when-compile
   (require 'cl)
-  (require 'cc-defs))                   ; for c-point
+  (require 'cc-defs)                    ; for c-point
+  (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
+  )
 
 (defconst vc-clearcase-cvsid
   "$Id$")

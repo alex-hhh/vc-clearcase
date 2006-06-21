@@ -45,7 +45,7 @@
 ;;
 ;; You can also generate autoloads for the functions in this file,
 ;; this will delay loading vc-clearcase.el until it is actually
-;; needed.  
+;; needed.
 
 ;; The code below will byte-compile vc-clearcase.el and generate the
 ;; autoloads in a file named vc-clearcase-auto.el in the same
@@ -60,7 +60,7 @@
 ;; After you generated the vc-clearcase-auto.el file, you need to add
 ;; the follwing line to ~/.emacs:
 ;;
-;;    (load "vc-clearcase-auto")  
+;;    (load "vc-clearcase-auto")
 ;;
 ;; To evaluate the code below, copy it into the *scratch* buffer,
 ;; remove the comments, move the cursor at the end of it and type C-x

@@ -1,0 +1,19 @@
+-*- outline -*-
+
+This is the list of known bugs in vc-clearcase.el
+
+* When trying to merge revisions (`vc-merge') on a file that is not
+checked-out, vc asks for a checkout, but that the comment window pops
+up, and vc-merge assumes the file was already checked out.  We need to
+do an automatic checkout in this case, but how do we detect it?
+
+* `vc-clearcase-merge' and `vc-clearcase-merge-news' can only succeed
+They signal an error if the merge is not trivial.  clearcase merge has
+no equivalent of the CVS conflict markers (that I know of).  Also, the
+vc package can only resolve CVS style conflicts.
+
+* vc-clearcase-checkout will run the vc-before-checkin-hook
+This is because vc-clearcase-checkout will call vc-start-entry to get
+the checkout message.  The functionality in vc-start-entry is not
+trivial, and I don't want to reproduce it.  A possible solution is to
+read the checkout mesage from the minibuffer.

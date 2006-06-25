@@ -41,7 +41,8 @@ sites will have different needs.  (This is implemented, but it applies
 a fixed set of replacements).
 
 ** update vc-clearcase-merge to only add merge hyperlinks
-instead of doing actual merges when the prefix arg is specified.  This will require a change to vc-clearcase-merge (see note).
+instead of doing actual merges when the prefix arg is specified.  This
+will require a change to vc-clearcase-merge (see note).
 
 ** add a config variable that specifies the default checkout mode 
 (reserved or unreserved) and default comment policy (comments at

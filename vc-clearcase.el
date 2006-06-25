@@ -305,47 +305,6 @@
 ;; - vc-clearcase-edcs
 ;; - vc-clearcase-start-view
 
-
-;;;;; Todo:
-;;
-;; - allow expanding of revision strings to avoid the need to type a
-;; full path.  The idea is: if revision is a number, it should expand
-;; to the file's base + that number, if the revision is name/number we
-;; should search for 'name' as a branch and use that revision
-;; (involves finding out about all the branches), and if the revision
-;; starts with a '/' just leave it in place.
-;;
-;; - provide filter functions for the mode-line string to reduce its
-;; length.  For example, VTK_Iteration12_patch should be reduced to
-;; VTK_I~12_pat.  This should be configurable, as other sites will
-;; have different needs.  (This is implemented, but it applies a fixed
-;; set of replacements).
-;;
-;; - update vc-clearcase-merge to only add merge hyperlinks instead of
-;; doing actual merges when the prefix arg is specified.  fix
-;; vc-clearcase-merge (see note)
-;;
-;; - add a configuration variable that specifies the default checkout
-;; mode (reserved or unreserved) and default comment policy (comments
-;; at checkout or no comments at checkout).  Being able to specify
-;; these values on a 'per VOB path' basis would be nice.
-;;
-
-
-;;;;; Known bugs:
-;;
-;; When trying to merge revisions (`vc-merge') on a file that is not
-;; checked-out, vc asks for a checkout, but that the comment window
-;; pops up, and vc-merge assumes the file was already checked out.  We
-;; need to do an automatic checkout in this case, but how do we detect
-;; it?
-;;
-;; `vc-clearcase-merge' and `vc-clearcase-merge-news' can only succeed
-;; (they signal an error if the merge is not trivial).  clearcase
-;; merge has no equivalent of the CVS conflict markers (that I know
-;; of) and also the vc package can only resolve CVS style conflicts.
-;;
-
 ;;; History:
 ;;
 

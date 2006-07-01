@@ -1962,16 +1962,21 @@ otherwise return nil."
             (cons (nth 3 elements) (nth 2 elements)))
           nil))))
 
-;; TODO: We should accept several checkout modes:
-;;
-;; 1/ Do we want a checkout comment (-cfile) or not (-nc)
-;;
-;; 2/ Do we want to go exclusive reserved, exclusive unreserved or try
-;; reserved than unreserved
-;;
-;; Since the VC code might call this function and assumes we won't
-;; bother the user, only -nc -unreserved can provide that.
-;;
+(defcustom vc-clearcase-checkout-comment-type 'normal
+  "The type of comments expected from the user on checkout.
+The value of this variable should be one of the three symbols:
+
+normal -- a buffer will be used to enter a comment, just like for
+          file checkin,
+
+brief -- the comment will be read from the minibuffer,
+
+none -- no comment will be used on checkout."
+  :type '(choice
+          (const :tag "Normal" normal)
+          (const :tag "Brief" brief)
+          (const :tag "None" none))
+  :group 'vc-clearcase)
 
 (defun vc-clearcase-checkout (file &optional editable rev destfile)
   "Checkout FILE as per the checkout specification in vc.el.
@@ -2025,8 +2030,12 @@ This method does three completely different things:
                   ;; reserved.
                   (setq checkout 'ah-clearcase-finish-checkout-reserved)))))
        (if checkout
-           (vc-start-entry
-            file rev nil nil "Enter a checkout comment" checkout)
+           (ecase vc-clearcase-checkout-comment-type
+             ('normal (vc-start-entry
+                       file rev nil nil "Enter a checkout comment" checkout))
+             ('brief (let ((comment (read-string "Enter a checkout comment: ")))
+                       (funcall checkout file rev comment)))
+             ('none (funcall checkout file rev "")))
            (message "Aborted."))))
     ((and (not editable) destfile)
      ;; Check out an arbitrary version to the specified file
@@ -2362,15 +2371,15 @@ When BUFFER is nil, the current buffer is used."
 
 (defcustom ah-clearcase-no-label-action 'ask
   "What to do when we are asked to apply a label that does not exist.
+There are three possible values for this variable:
 
-When 'error, an error will be signalled when we are asked to
-apply a non existent label.
+'error -- an error will be signalled when we are asked to apply a
+          non existent label.
 
-When 'create, we will automatically create the label if it does
-not exist.
+'create -- the label will be created if it does not exist.
 
-When 'ask, we will ask the user whether she wants to create the
-label or not.
+'ask -- ask the user whether she wants to create the label or
+not.
 
 NOTE: in ClearCase a label exists independentlty from the files
 it is applied to.  A label must be created first before it can be

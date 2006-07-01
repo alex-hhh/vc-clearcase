@@ -1,3 +1,12 @@
+2006-07-01  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-checkout-comment-type): 1.85 new
+	variable.
+	(vc-clearcase-checkout): 1.85 use the value of
+	vc-clearcase-checkout-comment-type to decide whether to ask for a
+	checkout comment or not.
+	(ah-clearcase-no-label-action): 1.85 doc fix.
+
 2006-06-25  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.84 todo and known bugs sections moved into

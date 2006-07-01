@@ -45,7 +45,5 @@ instead of doing actual merges when the prefix arg is specified.  This
 will require a change to vc-clearcase-merge (see note).
 
 ** add a config variable that specifies the default checkout mode 
-(reserved or unreserved) and default comment policy (comments at
-checkout or no comments at checkout).  Being able to specify these
-values on a 'per VOB path' basis would be nice.
-
+(reserved or unreserved).  Being able to specify these values on a
+'per VOB path' basis would be nice.

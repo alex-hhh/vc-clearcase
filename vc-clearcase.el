@@ -1978,6 +1978,26 @@ none -- no comment will be used on checkout."
           (const :tag "None" none))
   :group 'vc-clearcase)
 
+(defcustom vc-clearcase-checkout-policy 'heuristic
+  "The type of checkout to perform in `vc-clearcase-checkout'.
+The value of this variable should be one of the three symbols:
+
+heuristic -- a heuristic is used to determine the checkout model.
+         By default it tries to do a reserved checkout, but if
+         `vc-clearcase-checkout' determines that the unreserverd
+         checkout will fail it will do an unreserved checkout.
+
+reserved -- always attempt to do a reserved checkout.  This might
+         fail if someone else has the file checked out reserved
+         or we don't checkout the latest revision on the branch.
+
+unreserved -- always do an unreserved checkout."
+  :type '(choice
+          (const :tag "Heuristic" heuristic)
+          (const :tag "Always Reserved" reserved)
+          (const :tag "Always Unreserved" unreserved))
+  :group 'vc-clearcase)
+
 (defun vc-clearcase-checkout (file &optional editable rev destfile)
   "Checkout FILE as per the checkout specification in vc.el.
 See the vc.el `vc-checkout' documentation for the meaning of
@@ -2002,33 +2022,39 @@ This method does three completely different things:
             checkout)
        ;; need to find out if we have to checkout reserved or
        ;; unreserved.
-       (cond
-         ;; if the checkout will create a branch, checkout reserved
-         ((ah-clearcase-fprop-checkout-will-branch-p fprop)
-          (setq checkout 'ah-clearcase-finish-checkout-reserved))
+       (ecase vc-clearcase-checkout-policy
+         ('reserved (setq checkout 'ah-clearcase-finish-checkout-reserved))
+         ('unreserved (setq checkout 'ah-clearcase-finish-checkout-unreserved))
+         ('heuristic
+          (cond
+            ;; if the checkout will create a branch, checkout reserved
+            ((ah-clearcase-fprop-checkout-will-branch-p fprop)
+             (setq checkout 'ah-clearcase-finish-checkout-reserved))
 
-         ;; if we are not latest on branch and we are asked to checkout
-         ;; this version (eq rev nil), we checkout unseserved.
-         ((and (null rev)
-               (not (string= (ah-clearcase-fprop-latest fprop)
-                             (ah-clearcase-fprop-version fprop))))
-          ;; patch rev first
-          (setq rev (ah-clearcase-fprop-version fprop))
-          (setq checkout 'ah-clearcase-finish-checkout-unreserved))
+            ;; if we are not latest on branch and we are asked to
+            ;; checkout this version (eq rev nil), we checkout
+            ;; unseserved.
+            ((and (null rev)
+                  (not (string= (ah-clearcase-fprop-latest fprop)
+                                (ah-clearcase-fprop-version fprop))))
+             ;; patch rev first
+             (setq rev (ah-clearcase-fprop-version fprop))
+             (setq checkout 'ah-clearcase-finish-checkout-unreserved))
 
-         ;; if someone else has checked out this revision in reserved
-         ;; mode, ask the user if he wants an unreserved checkout.
-         (t (let ((user-and-view (ah-clearcase-revision-reserved-p file)))
-              (if user-and-view
-                  (when (yes-or-no-p
-                         (concat
-                          "This revision is checked out reserved by "
-                          (car user-and-view) "in" (cdr user-and-view)
-                          ".  Checkout unreserved? "))
-                    (setq checkout 'ah-clearcase-finish-checkout-unreserved))
-                  ;; no one has this version checked out, checkout
-                  ;; reserved.
-                  (setq checkout 'ah-clearcase-finish-checkout-reserved)))))
+            ;; if someone else has checked out this revision in
+            ;; reserved mode, ask the user if he wants an unreserved
+            ;; checkout.
+            (t (let ((user-and-view (ah-clearcase-revision-reserved-p file)))
+                 (if user-and-view
+                     (when (yes-or-no-p
+                            (concat
+                             "This revision is checked out reserved by "
+                             (car user-and-view) "in" (cdr user-and-view)
+                             ".  Checkout unreserved? "))
+                       (setq checkout 'ah-clearcase-finish-checkout-unreserved))
+                     ;; no one has this version checked out, checkout
+                     ;; reserved.
+                     (setq checkout 'ah-clearcase-finish-checkout-reserved)))))))
        (if checkout
            (ecase vc-clearcase-checkout-comment-type
              ('normal (vc-start-entry

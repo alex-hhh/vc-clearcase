@@ -1,0 +1,24 @@
+
+Installation instructions for vc-clearcase.el
+---------------------------------------------
+
+Quick installation:
+
+1/ Copy this directory under the site-lisp directory of your GNU/Emacs
+installation
+
+2/ Byte compile vc-clearcase.el.  You can do that from emacs by
+opening vc-clearcase.el and selecting the "Emacs-Lisp/Byte-Compile
+this File" menu.  From the command prompt you can byte compile it like
+this:
+
+    % emacs -batch -f batch-byte-compile vc-clearcase.el
+
+3/ Add the following line to your ~/.emacs.el file:
+
+   (load "vc-clearcase-auto")
+
+For a longer discution in installing vc-clearcase.el including how to
+re-generate the autoloads file, see the "Installation" section in
+vc-clearcase.el
+

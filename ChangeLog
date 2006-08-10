@@ -1,3 +1,14 @@
+2006-08-10  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-checkout-comment-type): 1.87
+	renamed from vc-clearcase-checkout-comment-type.  Users updated
+	(ah-clearcase-checkout-policy): 1.87 renamed from
+	vc-clearcase-checkout-policy.  Users updated.
+	(ah-clearcase-confirm-label-move): 1.87 new variable
+	(vc-clearcase-create-snapshot): 1.87 use
+	ah-clearcase-confirm-label-move
+	(vc-clearcase-report-bug): 1.87 add new variables to the report
+
 2006-07-09  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-checkout-policy): 1.86 new

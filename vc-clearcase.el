@@ -1962,7 +1962,7 @@ otherwise return nil."
             (cons (nth 3 elements) (nth 2 elements)))
           nil))))
 
-(defcustom vc-clearcase-checkout-comment-type 'normal
+(defcustom ah-clearcase-checkout-comment-type 'normal
   "The type of comments expected from the user on checkout.
 The value of this variable should be one of the three symbols:
 
@@ -1978,7 +1978,7 @@ none -- no comment will be used on checkout."
           (const :tag "None" none))
   :group 'vc-clearcase)
 
-(defcustom vc-clearcase-checkout-policy 'heuristic
+(defcustom ah-clearcase-checkout-policy 'heuristic
   "The type of checkout to perform in `vc-clearcase-checkout'.
 The value of this variable should be one of the three symbols:
 
@@ -2022,7 +2022,7 @@ This method does three completely different things:
             checkout)
        ;; need to find out if we have to checkout reserved or
        ;; unreserved.
-       (ecase vc-clearcase-checkout-policy
+       (ecase ah-clearcase-checkout-policy
          ('reserved (setq checkout 'ah-clearcase-finish-checkout-reserved))
          ('unreserved (setq checkout 'ah-clearcase-finish-checkout-unreserved))
          ('heuristic
@@ -2056,7 +2056,7 @@ This method does three completely different things:
                      ;; reserved.
                      (setq checkout 'ah-clearcase-finish-checkout-reserved)))))))
        (if checkout
-           (ecase vc-clearcase-checkout-comment-type
+           (ecase ah-clearcase-checkout-comment-type
              ('normal (vc-start-entry
                        file rev nil nil "Enter a checkout comment" checkout))
              ('brief (let ((comment (read-string "Enter a checkout comment: ")))
@@ -2415,6 +2415,19 @@ applied."
           (const :tag "Ask the user" ask))
   :group 'vc-clearcase)
 
+(defcustom ah-clearcase-confirm-label-move t
+  "When not nil, ask the user to confirm a label move.
+The vc-clearcase-create-snapshot function will not move the label
+unless the snapshot is initiated with an universal
+argument (C-u).  When this variable is not nil,
+vc-clearcase-create-snapshot will ask the user to confirm the
+label move.
+
+The reason for this variable is to remind the CVS user that C-u
+C-x v s will not create a branch in ClearCase."
+  :type 'boolean
+  :group 'vc-clearcase)
+
 (defun vc-clearcase-create-snapshot (dir name branchp)
   "Label all files under DIR using NAME as the label.
 
@@ -2430,7 +2443,9 @@ to that directory.  This means that you can select this version
 of the sources with this single line in the configspec:
 
 element * NAME -nocheckout"
-  (when (and branchp (not (yes-or-no-p "Move existing label? ")))
+  (when (and branchp 
+             ah-clearcase-confirm-label-move
+             (not (yes-or-no-p "Move existing label? ")))
     (error "Aborted"))
   (setq dir (expand-file-name dir))
   (ah-cleartool "cd \"%s\"" (file-name-directory dir))
@@ -3075,6 +3090,9 @@ This is the string returned by the cleartool -version command."
         ah-cleartool-idle-timeout
         ah-cleartool-save-stop-data
         ah-clearcase-rmbranch-on-revert-flag
+        ah-clearcase-checkout-comment-type
+        ah-clearcase-checkout-policy
+        ah-clearcase-confirm-label-move
         ah-clearcase-diff-format
         ah-clearcase-diff-cleanup-flag
         ah-clearcase-no-label-action

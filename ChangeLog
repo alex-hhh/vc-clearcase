@@ -1,3 +1,15 @@
+2006-10-03  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase): 1.88 add autoload cookie for the
+	vc-clearcase group
+	(ah-cleartool-tq-sentinel): 1.88 use message instead of error to
+	report that the cleartool buffer was killed.  Perform cleanup even
+	when the buffer was killed.
+	(ah-cleartool-tq-stop): 1.88 make sure we clean up properly even
+	when some buffers are killed.
+	(ah-cleartool-tq-maybe-start): 1.88 ckeck if someone killed the
+	tq-buffer and recover properly
+
 2006-08-10  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-checkout-comment-type): 1.87
@@ -128,7 +140,7 @@
 	version in the revision list.
 	(vc-clearcase-get-label-differences): 1.76 use a loop to collect
 	the results.
-	
+
 	* vc-clearcase.el: 1.76 The lisp-indent-function properties for the
 	macros are now in the file rather than in the Local Variables
 	section.
@@ -192,7 +204,7 @@
 
 	* vc-clearcase.el: 1.68 applied GPL licence to the file, added the
 	sourceforge address for the vc-clearcase project
-	
+
 	Initial public release
 
 2006-01-30  Alexandru Harsanyi  <harsanyi@mac.com>

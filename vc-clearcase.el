@@ -328,6 +328,7 @@
 
 (defconst vc-clearcase-maintainer-address "haral@users.sourceforge.net")
 
+;;;###autoload
 (defgroup vc-clearcase nil
   "Support for the ClearCase version control system."
   :group 'tools)
@@ -463,10 +464,10 @@ Cleans up properly if cleartool exits.  EVENT is not used."
         (exit-status (process-exit-status process))
         (pbuffer (process-buffer process)))
     (when (memq status '(signal exit))
-      (if (null (buffer-name pbuffer))
-          (error "Cleartool process buffer was killed")
-          (ah-cleartool-tq-stop)
-          (kill-buffer pbuffer)))))
+      (when (null (buffer-name pbuffer))
+        (message "Cleartool process buffer was killed"))
+      (ah-cleartool-tq-stop)
+      (kill-buffer pbuffer))))
 
 (defun ah-cleartool-tq-start ()
   "Start the transaction queue to cleartool."
@@ -501,38 +502,51 @@ The report is appended to the *cleartool-aborts* buffer."
 (defun ah-cleartool-tq-stop ()
   "Stop the transaction queue to cleartool and kill cleartool."
   (when ah-cleartool-tq
-    (when ah-cleartool-save-stop-data
-      (with-current-buffer (get-buffer-create "*cleartool-aborts*")
-        (insert "\n\f\n" (current-time-string) "\n"
-                (format "ah-cleartool-ctid: %d\n" ah-cleartool-ctid)
-                (format "ah-cleartool-ntid: %d\n" ah-cleartool-ntid)
-                (format "ah-cleartool-next-command: %d\n"
-                        ah-cleartool-next-command))
-        (insert "ah-cleartool-terr:\n")
-        (dolist (x ah-cleartool-terr)
-          (insert (format "    %d    %s\n" (car x) (cdr x))))
-        (insert "\nah-cleartool-tresults:\n")
-        (dolist (x ah-cleartool-tresults)
-          (insert (format "    %d    %s\n" (car x) (cdr x))))
-        (insert "\ntq-buffer:")
-        (insert
-         (with-current-buffer (tq-buffer ah-cleartool-tq)
-           (buffer-substring-no-properties (point-min) (point-max))))))
-    (tq-close ah-cleartool-tq)
-    ;; (kill-buffer (process-buffer (tq-process ah-cleartool-tq)))
-    ;; (kill-buffer (tq-buffer ah-cleartool-tq))
-    (setq ah-cleartool-next-command 0)
-    (setq ah-cleartool-tq nil)
+    (unwind-protect
+         (when ah-cleartool-save-stop-data
+           (with-current-buffer (get-buffer-create "*cleartool-aborts*")
+             (insert "\n\f\n" (current-time-string) "\n"
+                     (format "ah-cleartool-ctid: %d\n" ah-cleartool-ctid)
+                     (format "ah-cleartool-ntid: %d\n" ah-cleartool-ntid)
+                     (format "ah-cleartool-next-command: %d\n"
+                             ah-cleartool-next-command))
+             (insert "ah-cleartool-terr:\n")
+             (dolist (x ah-cleartool-terr)
+               (insert (format "    %d    %s\n" (car x) (cdr x))))
+             (insert "\nah-cleartool-tresults:\n")
+             (dolist (x ah-cleartool-tresults)
+               (insert (format "    %d    %s\n" (car x) (cdr x))))
+             (insert "\ntq-buffer:")
+             (let ((b (tq-buffer ah-cleartool-tq)))
+               (if (and b (buffer-name b))
+                   (insert
+                    (with-current-buffer (tq-buffer ah-cleartool-tq)
+                      (buffer-substring-no-properties (point-min) (point-max))))
+                   (insert "*** tq-buffer was killed ***")))))
 
-    ;; mark all pending transactions as aborted
-    (while (< ah-cleartool-ctid (1- ah-cleartool-ntid))
-      (incf ah-cleartool-ctid)
-      (push (cons ah-cleartool-ctid "cleartool command was aborted")
-            ah-cleartool-terr))))
+      ;; Bug 1564792: make sure we run this part even if the code
+      ;; above fails.
+
+      (tq-close ah-cleartool-tq)
+      (setq ah-cleartool-next-command 0)
+      (setq ah-cleartool-tq nil)
+
+      ;; mark all pending transactions as aborted
+      (while (< ah-cleartool-ctid (1- ah-cleartool-ntid))
+        (incf ah-cleartool-ctid)
+        (push (cons ah-cleartool-ctid "cleartool command was aborted")
+              ah-cleartool-terr)))))
 
 (defsubst ah-cleartool-tq-maybe-start ()
   "Start the transaction queue to cleartool, if not already started."
-  (unless ah-cleartool-tq
+  (unless (and ah-cleartool-tq
+               ;; Bug 1564792: check if someone killed the tq buffer.
+               (let ((b (tq-buffer ah-cleartool-tq)))
+                 (if (and b (buffer-name b))
+                     t
+                     (message "cleartool tq-buffer was killed")
+                     nil)))
+    (setq ah-cleartool-tq nil)
     (ah-cleartool-tq-start))
   ah-cleartool-tq)
 
@@ -1671,30 +1685,30 @@ version."
     (if (ah-clearcase-fprop-initialized-p fprop)
         t
         (ignore-cleartool-errors
-          (unless fprop (setq fprop (ah-clearcase-make-fprop :file-name file)))
-          (let ((ls-result (ah-cleartool "ls \"%s\"" file)))
-            (if (string-match "Rule: \\(.*\\)$" ls-result)
-                ;; file is registered
-                (progn
-                  (ah-clearcase-set-fprop-version-stage-1 fprop ls-result)
-                  ;; anticipate that the version will be needed
-                  ;; shortly, so ask for it.  When a file is
-                  ;; hijacked, do the desc command on the version
-                  ;; extended name of the file, as cleartool will
-                  ;; return nothing for the hijacked version...
-                  (let ((pname
-                         (if (ah-clearcase-fprop-hijacked-p fprop)
-                             (concat file "@@"
-                                     (ah-clearcase-fprop-version fprop))
-                             file)))
-                    (setf (ah-clearcase-fprop-version-tid fprop)
-                          (ah-cleartool-ask
-                           (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-                           'nowait fprop
-                           'ah-clearcase-set-fprop-version-stage-2))
-                    (vc-file-setprop file 'vc-clearcase-fprop fprop))
-                  t)                    ;file is registered
-                nil)))                  ;file is not registered
+         (unless fprop (setq fprop (ah-clearcase-make-fprop :file-name file)))
+         (let ((ls-result (ah-cleartool "ls \"%s\"" file)))
+           (if (string-match "Rule: \\(.*\\)$" ls-result)
+               ;; file is registered
+               (progn
+                 (ah-clearcase-set-fprop-version-stage-1 fprop ls-result)
+                 ;; anticipate that the version will be needed
+                 ;; shortly, so ask for it.  When a file is
+                 ;; hijacked, do the desc command on the version
+                 ;; extended name of the file, as cleartool will
+                 ;; return nothing for the hijacked version...
+                 (let ((pname
+                        (if (ah-clearcase-fprop-hijacked-p fprop)
+                            (concat file "@@"
+                                    (ah-clearcase-fprop-version fprop))
+                            file)))
+                   (setf (ah-clearcase-fprop-version-tid fprop)
+                         (ah-cleartool-ask
+                          (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+                          'nowait fprop
+                          'ah-clearcase-set-fprop-version-stage-2))
+                   (vc-file-setprop file 'vc-clearcase-fprop fprop))
+                 t)                     ;file is registered
+               nil)))                   ;file is not registered
         )))
 
 
@@ -2443,7 +2457,7 @@ to that directory.  This means that you can select this version
 of the sources with this single line in the configspec:
 
 element * NAME -nocheckout"
-  (when (and branchp 
+  (when (and branchp
              ah-clearcase-confirm-label-move
              (not (yes-or-no-p "Move existing label? ")))
     (error "Aborted"))
@@ -2475,12 +2489,12 @@ element * NAME -nocheckout"
     (when dir?                     ; apply label to parent directories
       (message "Applying label to parent directories...")
       (ignore-cleartool-errors
-        (while t                 ; until cleartool will throw an error
-          (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-          (setq dir (file-name-directory dir))
-          (ah-cleartool
-           "mklabel -nc %s lbtype:%s \"%s\""
-           (if branchp "-replace" "") name dir)))))
+       (while t                  ; until cleartool will throw an error
+         (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+         (setq dir (file-name-directory dir))
+         (ah-cleartool
+          "mklabel -nc %s lbtype:%s \"%s\""
+          (if branchp "-replace" "") name dir)))))
   (message "Finished applying label"))
 
 

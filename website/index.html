@@ -1,0 +1,82 @@
+<html>
+<head>
+<title>vc-clearcase project homepage</title>
+</head>
+
+<h1>vc-clearcase project homepage</h1>
+
+This is the homepage for the vc-clearcase project, which provides
+integration with ClearCase for GNU Emacs.  Please visit the
+SourceForge.net homepage for the project
+<a href="http://sourceforge.net/projects/vc-clearcase/">here</a>.
+
+
+
+<h2>vc-clearcase.el</h2>
+
+The package supports full VC functionality and also adds some
+ClearCase specific functionality like updating static views, edit a
+view's configspec, list checkouts and start the version tree browser
+GUI on a file.  Once the package is loaded, these additional commands
+will show up in the Tools/Version Control menu.
+
+This version works with GNU Emacs 21 and the current CVS version and
+has been tested with Clearcase on Windows XP and Solaris.
+
+
+<h3>Highlights of the package:</h3>
+
+<ul>
+  <li> Version control operations are very responsive.  The package
+  communicates with the cleartool process using a pipe and uses
+  various caching techniques to improve responsiveness.
+
+  <li> Label name completion is provided for vc-create-snapshot and
+  vc-clearcase-label-diff-report.  This works quickly with large
+  number of labels (more than 17076 of them at my site).
+
+  <li> View-tag completion is provided for vc-clearcase-edcs (Edit
+  Configspec).  Again, this works quickly with large numbers of views
+  (more than 2600 at my site).
+
+  <li> Being a back-end to vc.el, all packages that use vc.el work with
+  ClearCase files (for example the ediff package and add-log).
+
+  <li> The annotate mode allows navigating the versions of an
+  annotated file and diff-ing these versions (vc.el from CVS GNU Emacs
+  is required for this) in addition to the nice highlighting that
+  vc.el provides.
+
+  <li> The package provides an easy to use interface to cleartool (see
+  the ah-cleartool/ah-cleartool-do functions).  This allows
+  implementing complex operations on ClearCase files in Emacs-Lisp
+  (see vc-clearcase-label-diff-report for an example).
+</ul>
+
+<h3>Feedback</h3>
+
+This is the first public release of vc-clearcase.el.  I have used it
+privately for more than a year without any problems, but I'm
+interested in any feedback (good or bad) about it.  You can send me an
+email
+at <a
+href="mailto:haral@users.sourceforge.net">haral@users.sourceforge.net</a>,
+or you can submit a bug
+report <a
+href="http://sourceforge.net/tracker/?group_id=160898&atid=817687">here</a>.
+
+<hr>
+
+Please visit the SourceForge.net homepage for the project
+<a href="http://sourceforge.net/projects/vc-clearcase/">here</a>.
+
+<br><br>
+<body>
+  <a href="http://sourceforge.net">
+    <img src="http://sflogo.sourceforge.net/sflogo.php?group_id=160898&amp;type=2"
+         width="125" height="37" border="0"
+         alt="SourceForge.net Logo"/>
+  </a>
+</body>
+
+</html>

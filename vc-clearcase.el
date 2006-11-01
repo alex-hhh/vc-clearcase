@@ -317,6 +317,12 @@
 (require 'vc-hooks)
 (require 'vc)
 
+;; This is present in Emacs 22.  If it is available, we provide
+;; 'hyperlinks' in the *label-diff-report* buffer.
+(unless (featurep 'button)
+  (load "button" 'nomessage 'noerror))
+
+
 (eval-when-compile
   (require 'cl)
   (require 'cc-defs)                    ; for c-point
@@ -2806,6 +2812,21 @@ are made to the views)."
           ;; from this view?
           )))))
 
+(when (fboundp 'define-button-type)
+  (define-button-type 'vc-clearcase-start-ediff-button
+      'face 'default
+      'help-echo "mouse-2, RET: Compare the two file revisions with Ediff"
+      'follow-link t
+      'action (lambda (button)
+                (let ((file-name (button-get button 'file-name))
+                      (revision-1 (button-get button 'revision-1))
+                      (revision-2 (button-get button 'revision-2)))
+                  (with-current-buffer (find-file-noselect file-name)
+                    (funcall
+                     (intern (format "ediff-%S-internal" ediff-version-control-package))
+                     revision-1 revision-2 nil))))
+      'skip t))
+
 ;;;###autoload
 (defun vc-clearcase-label-diff-report (dir label-1 label-2)
   "Report the changed file revisions between labels.
@@ -2831,7 +2852,7 @@ and `label-2'."
        maximize (length rev-1) into lb1-len
        maximize (length rev-2) into lb2-len
        finally do
-       (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds\n"
+       (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds"
                               file-len lb1-len lb2-len)))
 
     (with-current-buffer (get-buffer-create "*label-diff-report*")
@@ -2850,12 +2871,20 @@ and `label-2'."
                       dir label-1 label-2))
       (let ((header (format line-fmt 0 "File" label-1 label-2)))
         (insert header)
+        (insert "\n")
         (insert (make-string (length header) ?=)))
       (insert "\n")
 
       (loop for (file rev-1 rev-2) in diff
          count 1 into pos
-         do (insert (format line-fmt pos file rev-1 rev-2)))
+         do (progn
+              (if (fboundp 'insert-text-button)
+                  (insert-text-button
+                   (format line-fmt pos file rev-1 rev-2)
+                   'type 'vc-clearcase-start-ediff-button
+                   'file-name file 'revision-1 rev-1 'revision-2 rev-2)
+                  (insert (format line-fmt pos file rev-1 rev-2)))
+              (insert "\n")))
 
       (goto-char (point-min))
       (buffer-enable-undo)

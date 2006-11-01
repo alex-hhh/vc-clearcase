@@ -1,3 +1,13 @@
+2006-11-01  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.89 load the "button" library if it is
+	available.
+	(vc-clearcase-start-ediff-button): 1.89 define as a button to
+	start an ediff session for a file printed in a label difference
+	report.
+	(vc-clearcase-label-diff-report): 1.89 use buttons for all files
+	reported on.
+
 2006-10-03  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase): 1.88 add autoload cookie for the

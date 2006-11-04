@@ -1,3 +1,8 @@
+2006-11-04  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-what-version): 1.90 save the
+	version in the kill ring in addition to displaying it to the user.
+
 2006-11-01  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.89 load the "button" library if it is

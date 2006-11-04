@@ -2682,7 +2682,16 @@ The list of files is not returned in any particular order."
 ;;;; Additional vc clearcase commands (for files)
 
 (defun vc-clearcase-what-version (file)
-  "Show what is the version of FILE."
+  "Show the version of FILE and save the version in the kill ring.
+
+HINT: You can use this function to get the current version of the
+file when the version string is too long to type (and in
+ClearCase it usually is).  For example, when comparing files
+using \\[ediff-revision] you can the current revision of the file
+in the kill ring using \\[vc-clearcase-what-version], than when
+\\[ediff-revision] asks for a version number you can use \\[yank]
+to to put it into the minibuffer and edit it rather than typing
+the whole revision string."
   (interactive (list (buffer-file-name (current-buffer))))
   (if (and (stringp file) (vc-clearcase-registered file))
       (progn
@@ -2690,6 +2699,7 @@ The list of files is not returned in any particular order."
         (let* ((fprop (ah-clearcase-file-fprop file))
                (version (ah-clearcase-fprop-version fprop))
                (co-status (ah-clearcase-fprop-status fprop)))
+          (kill-new version)
           (message "File version: %s%s" version
                    (case co-status
                      ('reserved ", checkedout reserved")

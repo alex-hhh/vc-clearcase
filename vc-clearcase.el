@@ -317,6 +317,9 @@
 (require 'vc-hooks)
 (require 'vc)
 
+;; Bug 1608947: This is needed at runtime for the member* call.
+(require 'cl)
+
 ;; This is present in Emacs 22.  If it is available, we provide
 ;; 'hyperlinks' in the *label-diff-report* buffer.
 (unless (featurep 'button)
@@ -324,7 +327,6 @@
 
 
 (eval-when-compile
-  (require 'cl)
   (require 'cc-defs)                    ; for c-point
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
@@ -382,11 +384,11 @@ or if two commands were sent in one go (e.g. \"cd\nls\n\")")
 
 (defconst ah-cleartool-status-rx
   (concat "Command \\([0-9]+\\) returned status \\([0-9]+\\)[ \t\r\n]+"
-          ;; under Windows NT, we communicate with cleartool using
-          ;; pipes (instead of PTY's, and cleartool won't output a
-          ;; prompt...
-          (unless (eq system-type 'windows-nt)
-            "cleartool \\([0-9]+\\)+>[ \t\r\n]+"))
+	  ;; under Windows NT, we communicate with cleartool using
+	  ;; pipes (instead of PTY's, and cleartool won't output a
+	  ;; prompt...
+	  (unless (eq system-type 'windows-nt)
+	    "cleartool \\([0-9]+\\)+>[ \t\r\n]+"))
   "Regexp to match the end of each cleartool result.
 
 If it does not match properly, tq will never pass back the answer
@@ -398,7 +400,7 @@ to us." )
 
 (defconst ah-cleartool-tq-rx
   (concat "\\(" ah-cleartool-status-rx
-          "\\)\\|\\(" ah-cleartool-question-rx "\\)"))
+	  "\\)\\|\\(" ah-cleartool-question-rx "\\)"))
 
 (defcustom ah-cleartool-timeout 20
   "Timeout (in seconds) for cleartool commands.
@@ -457,8 +459,8 @@ contain a cleartool error, the entire MESSAGE is signaled.  If
 multiple cleartool errors are found, the first one is signaled,
 but the string \"(multiple)\" is prepended to it."
   (let* ((tag "cleartool: Error: \\(.*\\)")
-         (pos (string-match tag message))
-         (str (if pos (match-string 1 message) message)))
+	 (pos (string-match tag message))
+	 (str (if pos (match-string 1 message) message)))
     (when (and pos (string-match tag message (1+ pos)))
       (setq str (concat "(multiple) " str)))
     (while t (signal 'ah-cleartool-error (list str)))))
@@ -467,36 +469,36 @@ but the string \"(multiple)\" is prepended to it."
   "Sentinel for the cleartool PROCESS.
 Cleans up properly if cleartool exits.  EVENT is not used."
   (let ((status  (process-status process))
-        (exit-status (process-exit-status process))
-        (pbuffer (process-buffer process)))
+	(exit-status (process-exit-status process))
+	(pbuffer (process-buffer process)))
     (when (memq status '(signal exit))
       (when (null (buffer-name pbuffer))
-        (message "Cleartool process buffer was killed"))
+	(message "Cleartool process buffer was killed"))
       (ah-cleartool-tq-stop)
       (kill-buffer pbuffer))))
 
 (defun ah-cleartool-tq-start ()
   "Start the transaction queue to cleartool."
   (let ((process
-         (start-process "cleartool" " *cleartool*"
-                        ah-clearcase-cleartool-program "-status")))
+	 (start-process "cleartool" " *cleartool*"
+			ah-clearcase-cleartool-program "-status")))
     (when (not (eq system-type 'windows-nt))
       ;; on systems other than windows-nt, cleartool will print a
       ;; prompt when it starts up and tq will complain about it.  In
       ;; these cases, we wait until the prompt is printed, and start
       ;; the tq afterward.
       (with-timeout (5 (error "Timeout waiting for cleartool to start"))
-        (with-current-buffer (get-buffer " *cleartool*")
-          (goto-char (point-min))
-          (while (not (looking-at "cleartool 1> $"))
-            (accept-process-output process 2)
-            (goto-char (point-min)))
-          (erase-buffer))))
+	(with-current-buffer (get-buffer " *cleartool*")
+	  (goto-char (point-min))
+	  (while (not (looking-at "cleartool 1> $"))
+	    (accept-process-output process 2)
+	    (goto-char (point-min)))
+	  (erase-buffer))))
     (set-process-sentinel process 'ah-cleartool-tq-sentinel)
     (process-kill-without-query process nil)
     (setq ah-cleartool-tq (tq-create process)
-          ah-cleartool-next-command 1
-          ah-cleartool-last-command-timestamp (float-time))))
+	  ah-cleartool-next-command 1
+	  ah-cleartool-last-command-timestamp (float-time))))
 
 
 (defcustom ah-cleartool-save-stop-data nil
@@ -509,26 +511,26 @@ The report is appended to the *cleartool-aborts* buffer."
   "Stop the transaction queue to cleartool and kill cleartool."
   (when ah-cleartool-tq
     (unwind-protect
-         (when ah-cleartool-save-stop-data
-           (with-current-buffer (get-buffer-create "*cleartool-aborts*")
-             (insert "\n\f\n" (current-time-string) "\n"
-                     (format "ah-cleartool-ctid: %d\n" ah-cleartool-ctid)
-                     (format "ah-cleartool-ntid: %d\n" ah-cleartool-ntid)
-                     (format "ah-cleartool-next-command: %d\n"
-                             ah-cleartool-next-command))
-             (insert "ah-cleartool-terr:\n")
-             (dolist (x ah-cleartool-terr)
-               (insert (format "    %d    %s\n" (car x) (cdr x))))
-             (insert "\nah-cleartool-tresults:\n")
-             (dolist (x ah-cleartool-tresults)
-               (insert (format "    %d    %s\n" (car x) (cdr x))))
-             (insert "\ntq-buffer:")
-             (let ((b (tq-buffer ah-cleartool-tq)))
-               (if (and b (buffer-name b))
-                   (insert
-                    (with-current-buffer (tq-buffer ah-cleartool-tq)
-                      (buffer-substring-no-properties (point-min) (point-max))))
-                   (insert "*** tq-buffer was killed ***")))))
+	 (when ah-cleartool-save-stop-data
+	   (with-current-buffer (get-buffer-create "*cleartool-aborts*")
+	     (insert "\n\f\n" (current-time-string) "\n"
+		     (format "ah-cleartool-ctid: %d\n" ah-cleartool-ctid)
+		     (format "ah-cleartool-ntid: %d\n" ah-cleartool-ntid)
+		     (format "ah-cleartool-next-command: %d\n"
+			     ah-cleartool-next-command))
+	     (insert "ah-cleartool-terr:\n")
+	     (dolist (x ah-cleartool-terr)
+	       (insert (format "    %d    %s\n" (car x) (cdr x))))
+	     (insert "\nah-cleartool-tresults:\n")
+	     (dolist (x ah-cleartool-tresults)
+	       (insert (format "    %d    %s\n" (car x) (cdr x))))
+	     (insert "\ntq-buffer:")
+	     (let ((b (tq-buffer ah-cleartool-tq)))
+	       (if (and b (buffer-name b))
+		   (insert
+		    (with-current-buffer (tq-buffer ah-cleartool-tq)
+		      (buffer-substring-no-properties (point-min) (point-max))))
+		   (insert "*** tq-buffer was killed ***")))))
 
       ;; Bug 1564792: make sure we run this part even if the code
       ;; above fails.
@@ -539,19 +541,19 @@ The report is appended to the *cleartool-aborts* buffer."
 
       ;; mark all pending transactions as aborted
       (while (< ah-cleartool-ctid (1- ah-cleartool-ntid))
-        (incf ah-cleartool-ctid)
-        (push (cons ah-cleartool-ctid "cleartool command was aborted")
-              ah-cleartool-terr)))))
+	(incf ah-cleartool-ctid)
+	(push (cons ah-cleartool-ctid "cleartool command was aborted")
+	      ah-cleartool-terr)))))
 
 (defsubst ah-cleartool-tq-maybe-start ()
   "Start the transaction queue to cleartool, if not already started."
   (unless (and ah-cleartool-tq
-               ;; Bug 1564792: check if someone killed the tq buffer.
-               (let ((b (tq-buffer ah-cleartool-tq)))
-                 (if (and b (buffer-name b))
-                     t
-                     (message "cleartool tq-buffer was killed")
-                     nil)))
+	       ;; Bug 1564792: check if someone killed the tq buffer.
+	       (let ((b (tq-buffer ah-cleartool-tq)))
+		 (if (and b (buffer-name b))
+		     t
+		     (message "cleartool tq-buffer was killed")
+		     nil)))
     (setq ah-cleartool-tq nil)
     (ah-cleartool-tq-start))
   ah-cleartool-tq)
@@ -576,30 +578,30 @@ callback with the answer."
   ;; NOTE: emacs will save the match data, so we can do regexps
   ;; without the need of a save-match-data form.
   (let ((tid (aref closure 0))
-        (cb-closure (aref closure 1))
-        (cb (aref closure 2)))
+	(cb-closure (aref closure 1))
+	(cb (aref closure 2)))
     (cond ((string-match ah-cleartool-status-rx answer)
-           (let ((cmd (string-to-number (match-string 1 answer)))
-                 (status (string-to-number (match-string 2 answer))))
-             (unless (= ah-cleartool-next-command cmd)
-               ;; transaction queue is out of sync, stop it
-               (ah-cleartool-tq-stop)
-               (error "Unexpected command index received"))
-             ;; it's the command we're expecting
-             (incf ah-cleartool-next-command)
-             (let ((result (replace-match "" t t answer)))
-               (setq ah-cleartool-ctid tid) ; assume tid's always grow
-               (cond ((> status 0)
-                      (push (cons tid result) ah-cleartool-terr))
-                     (cb             ; do we have a callback function?
-                      (funcall cb cb-closure result))
-                     (t
-                      (push (cons tid result) ah-cleartool-tresults))))))
-          ((string-match ah-cleartool-question-rx answer)
-           (push (cons tid answer) ah-cleartool-terr))
-          (t
-           (error
-            "Answer does not have a status in ah-cleartool-tq-handler")))))
+	   (let ((cmd (string-to-number (match-string 1 answer)))
+		 (status (string-to-number (match-string 2 answer))))
+	     (unless (= ah-cleartool-next-command cmd)
+	       ;; transaction queue is out of sync, stop it
+	       (ah-cleartool-tq-stop)
+	       (error "Unexpected command index received"))
+	     ;; it's the command we're expecting
+	     (incf ah-cleartool-next-command)
+	     (let ((result (replace-match "" t t answer)))
+	       (setq ah-cleartool-ctid tid) ; assume tid's always grow
+	       (cond ((> status 0)
+		      (push (cons tid result) ah-cleartool-terr))
+		     (cb             ; do we have a callback function?
+		      (funcall cb cb-closure result))
+		     (t
+		      (push (cons tid result) ah-cleartool-tresults))))))
+	  ((string-match ah-cleartool-question-rx answer)
+	   (push (cons tid answer) ah-cleartool-terr))
+	  (t
+	   (error
+	    "Answer does not have a status in ah-cleartool-tq-handler")))))
 
 (defun ah-cleartool-wait-for (tid &optional timeout)
   "Wait for TID to complete, return the result or signal an error.
@@ -627,35 +629,35 @@ callback function if that is available."
   ;; lots of data and takes longer than our timeout.
   (while (< ah-cleartool-ctid tid)
     (let (received-some-data
-          (cleartool-process (tq-process ah-cleartool-tq)))
+	  (cleartool-process (tq-process ah-cleartool-tq)))
       (with-timeout ((or timeout ah-cleartool-timeout))
-        (while (< ah-cleartool-ctid tid)
-          (setq received-some-data
-                (or received-some-data
-                    ;; will return t if some data was received
-                    (accept-process-output cleartool-process 2)))
+	(while (< ah-cleartool-ctid tid)
+	  (setq received-some-data
+		(or received-some-data
+		    ;; will return t if some data was received
+		    (accept-process-output cleartool-process 2)))
 
-          ;; Hmm, sometimes the input from cleartool is not processed
-          ;; in accept-process-output and we need to call sit-for with
-          ;; a non zero argument.  This occurs when we 'uncheckout' a
-          ;; revision.  It will loop forever (outer while) since
-          ;; `ah-cleartool-tq-handler' is not called to increment
-          ;; `ah-cleartool-ctid'.  There's some race condition here,
-          ;; but I'm not sure what it is.  Do not remove the sit-for
-          ;; call without understanding what it does.  If you remove
-          ;; it, it will work in 99% of the cases and fail
-          ;; mysteriously in 1%.
-          (when (< ah-cleartool-ctid tid)
-            (sit-for 0.1))))
+	  ;; Hmm, sometimes the input from cleartool is not processed
+	  ;; in accept-process-output and we need to call sit-for with
+	  ;; a non zero argument.  This occurs when we 'uncheckout' a
+	  ;; revision.  It will loop forever (outer while) since
+	  ;; `ah-cleartool-tq-handler' is not called to increment
+	  ;; `ah-cleartool-ctid'.  There's some race condition here,
+	  ;; but I'm not sure what it is.  Do not remove the sit-for
+	  ;; call without understanding what it does.  If you remove
+	  ;; it, it will work in 99% of the cases and fail
+	  ;; mysteriously in 1%.
+	  (when (< ah-cleartool-ctid tid)
+	    (sit-for 0.1))))
 
       (when (and (not received-some-data)
-                 (< ah-cleartool-ctid tid))
-        ;; so our transaction is not yet complete and cleartool
-        ;; hasn't written anything for us.  Assume that cleartool
-        ;; is hung and kill it.
-        (ah-cleartool-tq-stop)
-        (ah-cleartool-tq-start)
-        (error "Cleartool timed out"))))
+		 (< ah-cleartool-ctid tid))
+	;; so our transaction is not yet complete and cleartool
+	;; hasn't written anything for us.  Assume that cleartool
+	;; is hung and kill it.
+	(ah-cleartool-tq-stop)
+	(ah-cleartool-tq-start)
+	(error "Cleartool timed out"))))
 
   ;; if we are here, the transaction is complete.
 
@@ -668,14 +670,14 @@ callback function if that is available."
   ;; else search for a result
   (let ((result (assq tid ah-cleartool-tresults)))
     (if result
-        ;; if we have a result, delete it from the list and return it
-        (progn
-          (setq ah-cleartool-tresults
-                (assq-delete-all tid ah-cleartool-tresults))
-          (cdr result))
-        ;; else return t, meaning that the transaction is complete but
-        ;; it returned no data.
-        t)))
+	;; if we have a result, delete it from the list and return it
+	(progn
+	  (setq ah-cleartool-tresults
+		(assq-delete-all tid ah-cleartool-tresults))
+	  (cdr result))
+	;; else return t, meaning that the transaction is complete but
+	;; it returned no data.
+	t)))
 
 (defun ah-cleartool-ask (question &optional wait closure fn)
   "Enqueue QUESTION to the cleartool-tq.
@@ -687,7 +689,7 @@ id is returned (you will have to wait for it yourself).  If
 CLOSURE and FN are specified, fn will be called when the
 transaction is complete as funcall(fn closure answer)."
   (when (> (- (float-time) ah-cleartool-last-command-timestamp)
-           ah-cleartool-idle-timeout)
+	   ah-cleartool-idle-timeout)
     (message "Cleartool is idle for too long, restarting...")
     (let ((ah-cleartool-save-stop-data nil))
       ;; stop cleartool without dumping state to the
@@ -696,13 +698,13 @@ transaction is complete as funcall(fn closure answer)."
   (setq ah-cleartool-last-command-timestamp (float-time))
   (ah-cleartool-tq-maybe-start)
   (let ((tid ah-cleartool-ntid)
-        (command (concat question "\n")))
+	(command (concat question "\n")))
     (incf ah-cleartool-ntid)
     (tq-enqueue ah-cleartool-tq command ah-cleartool-tq-rx
-                (vector tid closure fn) 'ah-cleartool-tq-handler)
+		(vector tid closure fn) 'ah-cleartool-tq-handler)
     (if (eq wait 'nowait)
-        tid
-        (ah-cleartool-wait-for tid))))
+	tid
+	(ah-cleartool-wait-for tid))))
 
 (defsubst ah-cleartool (string &rest objects)
   "Shorthand for (ah-clartool-ask (format ... ))."
@@ -732,12 +734,12 @@ transaction is complete as funcall(fn closure answer)."
   ;; make the above variables buffer local and attach permanent-local
   ;; to them
   (mapcar (lambda (x)
-            (make-variable-buffer-local x)
-            (put x 'permanent-local t))
-          '(ah-cleartool-mode-line
-            ah-cleartool-finished-function
-            ah-cleartool-kill-buffer-when-done
-            ah-cleartool-last-command))
+	    (make-variable-buffer-local x)
+	    (put x 'permanent-local t))
+	  '(ah-cleartool-mode-line
+	    ah-cleartool-finished-function
+	    ah-cleartool-kill-buffer-when-done
+	    ah-cleartool-last-command))
   )
 
 (defun ah-cleartool-sentinel (process event)
@@ -746,20 +748,20 @@ Updates the modeline when the cleartool command finishes, calls
 `cleartool-finished-callback' and kills the process buffer when
 `cleartool-kill-buffer-when-done' is set.  EVENT is not used."
   (let ((status  (process-status process))
-        (exit-status (process-exit-status process))
-        (pbuffer (process-buffer process)))
+	(exit-status (process-exit-status process))
+	(pbuffer (process-buffer process)))
     (when (memq status '(signal exit))
       (if (null (buffer-name pbuffer))
-          (message "Cleartool process buffer was killed")
-          (with-current-buffer pbuffer
-            (setq ah-cleartool-mode-line
-                  (format "%s [%d]" (symbol-name status) exit-status))
-            (force-mode-line-update)
-            (when ah-cleartool-finished-function
-              (funcall ah-cleartool-finished-function))
-            (delete-process process)
-            (when ah-cleartool-kill-buffer-when-done
-              (kill-buffer nil)))))))
+	  (message "Cleartool process buffer was killed")
+	  (with-current-buffer pbuffer
+	    (setq ah-cleartool-mode-line
+		  (format "%s [%d]" (symbol-name status) exit-status))
+	    (force-mode-line-update)
+	    (when ah-cleartool-finished-function
+	      (funcall ah-cleartool-finished-function))
+	    (delete-process process)
+	    (when ah-cleartool-kill-buffer-when-done
+	      (kill-buffer nil)))))))
 
 
 (defun ah-cleartool-do (cmd args buffer)
@@ -791,16 +793,16 @@ In addition, the buffer local variable
 `ah-cleartool-last-command' is set to the command and arguments
 that were run to create this buffer."
   (let ((name (format "cleartool-%s" cmd))
-        (args1 (cons cmd args)))
+	(args1 (cons cmd args)))
     (let ((process (apply 'start-process name buffer
-                          ah-clearcase-cleartool-program args1)))
+			  ah-clearcase-cleartool-program args1)))
       (with-current-buffer (process-buffer process)
-        (set-process-sentinel process 'ah-cleartool-sentinel)
-        (setq ah-cleartool-mode-line "run")
-        (setq mode-line-process '(" cleartool: " ah-cleartool-mode-line))
-        (force-mode-line-update)
-        (setq ah-cleartool-last-command (copy-sequence args1))
-        process))))
+	(set-process-sentinel process 'ah-cleartool-sentinel)
+	(setq ah-cleartool-mode-line "run")
+	(setq mode-line-process '(" cleartool: " ah-cleartool-mode-line))
+	(force-mode-line-update)
+	(setq ah-cleartool-last-command (copy-sequence args1))
+	process))))
 
 
 ;;;; Clearcase Log View mode
@@ -811,10 +813,10 @@ that were run to create this buffer."
 
 (defvar ah-clearcase-lshistory-fmt
   (concat "----------\n"
-          "version: %Vn\n"
-          "user: %u; what: %e; date: %Sd\n"
-          "labels: %l\n\n"
-          "%c")
+	  "version: %Vn\n"
+	  "user: %u; what: %e; date: %Sd\n"
+	  "labels: %l\n\n"
+	  "%c")
   "Format string to use when listing file history.")
 
 (defconst ah-clearcase-log-view-font-lock-keywords
@@ -833,9 +835,9 @@ that were run to create this buffer."
     (end-of-line))
   (if (re-search-backward ah-clearcase-record-separator-rx (point-min) 'noerror)
       (progn
-        (goto-char (match-beginning 0))
-        (forward-line 1)
-        (beginning-of-line))
+	(goto-char (match-beginning 0))
+	(forward-line 1)
+	(beginning-of-line))
       (goto-char (point-min))))
 
 (defun ah-clearcase-log-view-eor ()
@@ -845,8 +847,8 @@ that were run to create this buffer."
     (end-of-line))
   (if (re-search-forward ah-clearcase-record-separator-rx (point-max) 'noerror)
       (progn
-        (goto-char (match-beginning 0))
-        (forward-char -1))
+	(goto-char (match-beginning 0))
+	(forward-char -1))
       (goto-char (point-max))))
 
 (defun ah-clearcase-log-view-record-field (field-name)
@@ -858,26 +860,26 @@ found, nil is returned."
   (save-match-data
     (save-excursion
       (let ((field-re (format "\\<%s:\\s-+" field-name))
-            (limit (progn (ah-clearcase-log-view-eor) (point)))
-            start end)
-        (ah-clearcase-log-view-bor)
-        (when (re-search-forward field-re limit 'noerror)
-          (progn
-            (setq start (match-end 0))
-            (setq end
-                  (if (looking-at "(")
-                      ;; If the field value is enclosed in
-                      ;; parenthesis, the value is the SEXP
-                      (progn
-                        (setq start (1+ start))
-                        (forward-sexp)
-                        (forward-char -1)
-                        (point))
-                      ;; else, a field value ends at the end of line or
-                      ;; at the ';' char
-                      (when (re-search-forward ";\\|$" limit 'noerror)
-                        (match-beginning 0))))
-            (buffer-substring-no-properties start end)))))))
+	    (limit (progn (ah-clearcase-log-view-eor) (point)))
+	    start end)
+	(ah-clearcase-log-view-bor)
+	(when (re-search-forward field-re limit 'noerror)
+	  (progn
+	    (setq start (match-end 0))
+	    (setq end
+		  (if (looking-at "(")
+		      ;; If the field value is enclosed in
+		      ;; parenthesis, the value is the SEXP
+		      (progn
+			(setq start (1+ start))
+			(forward-sexp)
+			(forward-char -1)
+			(point))
+		      ;; else, a field value ends at the end of line or
+		      ;; at the ';' char
+		      (when (re-search-forward ";\\|$" limit 'noerror)
+			(match-beginning 0))))
+	    (buffer-substring-no-properties start end)))))))
 
 (defun ah-clearcase-log-view-again ()
   "Re-run the cleartool command that generated this log."
@@ -886,8 +888,8 @@ found, nil is returned."
     (let ((inhibit-read-only t))
       (erase-buffer))
     (ah-cleartool-do (car ah-cleartool-last-command)
-                     (cdr ah-cleartool-last-command)
-                     (current-buffer))))
+		     (cdr ah-cleartool-last-command)
+		     (current-buffer))))
 
 (defun ah-clearcase-log-view-forward-record (num-records)
   "Move forward NUM-RECORDS, if negative, move backward.
@@ -895,15 +897,15 @@ Return the number of records actually moved."
   (interactive "p")
   (multiple-value-bind (search-fn limit adjust)
       (if (>= num-records 0)
-          (list 're-search-forward (point-max) 1)
-          (list 're-search-backward (point-min) -1))
+	  (list 're-search-forward (point-max) 1)
+	  (list 're-search-backward (point-min) -1))
     (if (funcall search-fn ah-clearcase-record-separator-rx limit 'noerror
-                 (abs num-records))
-        (progn
-          (forward-line adjust)
-          (ah-clearcase-log-view-bor)
-          t)
-        nil)))
+		 (abs num-records))
+	(progn
+	  (forward-line adjust)
+	  (ah-clearcase-log-view-bor)
+	  t)
+	nil)))
 
 (defun ah-clearcase-log-view-backward-record (num-records)
   "Move backwards NUM-RECORDS, if positive, move forward."
@@ -918,21 +920,21 @@ NOTE: you can only move forward if the current version is on the
 version path of the current file."
   (interactive "p")
   (let ((version (ah-clearcase-log-view-record-field "version"))
-        (move-version-fn (if (>= num 0) 'vc-clearcase-next-version
-                             'vc-clearcase-previous-version))
-        (file (with-current-buffer vc-parent-buffer
-                (buffer-file-name))))
+	(move-version-fn (if (>= num 0) 'vc-clearcase-next-version
+			     'vc-clearcase-previous-version))
+	(file (with-current-buffer vc-parent-buffer
+		(buffer-file-name))))
 
     (if (or (null version) (string= version ""))
-        (message "No version record in the current field")
-        (catch 'exit
-          (dotimes (i (abs num))
-            (when (null version)
-              (throw 'exit nil))
-            (setq version (funcall move-version-fn file version))))
-        (if (null version)
-            (message "End of version chain")
-            (vc-clearcase-show-log-entry version)))))
+	(message "No version record in the current field")
+	(catch 'exit
+	  (dotimes (i (abs num))
+	    (when (null version)
+	      (throw 'exit nil))
+	    (setq version (funcall move-version-fn file version))))
+	(if (null version)
+	    (message "End of version chain")
+	    (vc-clearcase-show-log-entry version)))))
 
 (defun ah-clearcase-log-view-backward-version (num)
   "Visit the log record previous NUM versions from the current record.
@@ -945,22 +947,22 @@ Will move to the next record if NUM is negative."
   (interactive)
   (let ((file-name (ah-clearcase-log-view-record-field "file")))
     (if file-name
-        (if (file-exists-p file-name)
-            (switch-to-buffer (find-file-noselect file-name))
-            (message "File %s does not exist" file-name))
-        (message "No file found in record"))))
+	(if (file-exists-p file-name)
+	    (switch-to-buffer (find-file-noselect file-name))
+	    (message "File %s does not exist" file-name))
+	(message "No file found in record"))))
 
 
 (defun ah-clearcase-log-view-wash-record ()
   "Fill the comment part of a log record."
   (let ((inhibit-read-only t)
-        (start (progn (ah-clearcase-log-view-bor) (point)))
-        (end (progn (ah-clearcase-log-view-eor) (point))))
+	(start (progn (ah-clearcase-log-view-bor) (point)))
+	(end (progn (ah-clearcase-log-view-eor) (point))))
     (goto-char start)
     (when (re-search-forward "^$" end)
       (let ((cstart (match-end 0)))
-        (goto-char cstart)
-        (fill-region (point) end)))))
+	(goto-char cstart)
+	(fill-region (point) end)))))
 
 (defun ah-clearcase-log-view-wash-log ()
   "Wash the whole log file."
@@ -982,16 +984,16 @@ Will move to the next record if NUM is negative."
   (setq buffer-read-only t))
 
 (easy-mmode-defmap ah-clearcase-log-view-mode-map
-                   '(("n" . ah-clearcase-log-view-forward-record)
-                     ("p" . ah-clearcase-log-view-backward-record)
-                     ("N" . ah-clearcase-log-view-forward-version)
-                     ("P" . ah-clearcase-log-view-backward-version)
-                     ("\M-a" . ah-clearcase-log-view-bor)
-                     ("\M-e" . ah-clearcase-log-view-eor)
-                     ("g" . ah-clearcase-log-view-again)
-                     ("f" . ah-clearcase-log-view-visit-file)
-                     ("w" . ah-clearcase-log-view-wash-log))
-                   "Mode map for Clearcase Log View mode")
+		   '(("n" . ah-clearcase-log-view-forward-record)
+		     ("p" . ah-clearcase-log-view-backward-record)
+		     ("N" . ah-clearcase-log-view-forward-version)
+		     ("P" . ah-clearcase-log-view-backward-version)
+		     ("\M-a" . ah-clearcase-log-view-bor)
+		     ("\M-e" . ah-clearcase-log-view-eor)
+		     ("g" . ah-clearcase-log-view-again)
+		     ("f" . ah-clearcase-log-view-visit-file)
+		     ("w" . ah-clearcase-log-view-wash-log))
+		   "Mode map for Clearcase Log View mode")
 
 
 ;;;; Clearcase file properties
@@ -1004,8 +1006,8 @@ Will move to the next record if NUM is negative."
 ;; return derived information from a fprop.
 
 (defstruct (ah-clearcase-fprop
-             (:constructor ah-clearcase-make-fprop)
-             (:copier ah-clearcase-copy-fprop))
+	     (:constructor ah-clearcase-make-fprop)
+	     (:copier ah-clearcase-copy-fprop))
 
   file-name                      ; the file name this fprop belongs to
 
@@ -1036,8 +1038,8 @@ FPROP can be nil, meaning it is not initialized."
   ;; we use an if form to return t or nil instead of the version
   ;; string or tid.
   (if (and fprop
-           (or (ah-clearcase-fprop-version fprop)
-               (ah-clearcase-fprop-version-tid fprop)))
+	   (or (ah-clearcase-fprop-version fprop)
+	       (ah-clearcase-fprop-version-tid fprop)))
       t
       nil))
 
@@ -1092,8 +1094,8 @@ that case, we return the version of the parent."
 (defun ah-clearcase-fprop-latest (fprop)
   "Return the latest version of FPROP on the current branch."
   (ah-cleartool "desc -fmt \"%%Vn\" \"%s@@%s\""
-                (ah-clearcase-fprop-file-name fprop)
-                (ah-clearcase-fprop-latest-sel fprop)))
+		(ah-clearcase-fprop-file-name fprop)
+		(ah-clearcase-fprop-latest-sel fprop)))
 
 (defun ah-clearcase-wash-mode-line (mode-line)
   "Make the MODE-LINE string shorter.
@@ -1139,9 +1141,9 @@ In that case, the version will be adjusted in
   ;; The ls string will also tell us when something is wrong with the
   ;; file.
   (setf (ah-clearcase-fprop-status fprop)
-        (cond ((string-match "hijacked" ls-string) 'hijacked)
-              ((string-match "rule info unavailable" ls-string) 'broken-view)
-              (t nil))))
+	(cond ((string-match "hijacked" ls-string) 'hijacked)
+	      ((string-match "rule info unavailable" ls-string) 'broken-view)
+	      (t nil))))
 
 (defun ah-clearcase-set-fprop-version-stage-2 (fprop version-string)
   "Set version information in FPROP from VERSION-STRING.
@@ -1154,21 +1156,21 @@ of the file.  If the file is checked out, we set its version to
 the parent version, to conform to vc.el semantics."
   (let ((fver-raw (split-string version-string)))
     (let ((fver (nth 0 fver-raw))       ; file version
-          (pver (nth 1 fver-raw))       ; parent version
-          (co-mode (let ((co-mode-raw (nth 2 fver-raw)))
-                     (cond ((null co-mode-raw) nil)
-                           ((string= co-mode-raw "reserved") 'reserved)
-                           ((string= co-mode-raw "unreserved") 'unreserved)
-                           (t 'unknown)))))
+	  (pver (nth 1 fver-raw))       ; parent version
+	  (co-mode (let ((co-mode-raw (nth 2 fver-raw)))
+		     (cond ((null co-mode-raw) nil)
+			   ((string= co-mode-raw "reserved") 'reserved)
+			   ((string= co-mode-raw "unreserved") 'unreserved)
+			   (t 'unknown)))))
       (when co-mode
-        ;; The semantics of vc.el requires that the workfile version
-        ;; be the parent version if the file is checked out.
-        (setf (ah-clearcase-fprop-version fprop) pver))
+	;; The semantics of vc.el requires that the workfile version
+	;; be the parent version if the file is checked out.
+	(setf (ah-clearcase-fprop-version fprop) pver))
       (setf (ah-clearcase-fprop-parent fprop) pver)
       ;; a hijacked file should keep its existing checkout status and
       ;; modeline (set by ah-clearcase-set-fprop-version-stage-1)
       (unless (memq (ah-clearcase-fprop-status fprop) '(hijacked broken-view))
-        (setf (ah-clearcase-fprop-status fprop) co-mode)))))
+	(setf (ah-clearcase-fprop-status fprop) co-mode)))))
 
 
 
@@ -1176,8 +1178,8 @@ the parent version, to conform to vc.el semantics."
 ;;;; Clearcase view-tag properties
 
 (defstruct (ah-clearcase-vprop
-             (:constructor ah-clearcase-make-vprop)
-             (:copier ah-clearcase-copy-vprop))
+	     (:constructor ah-clearcase-make-vprop)
+	     (:copier ah-clearcase-copy-vprop))
   name
   root                                  ; for snapshot views only
   type                                  ; (nil 'snapshot 'dynamic)
@@ -1205,23 +1207,23 @@ create a new vprop for it."
   ;; only way to get the current view and its root directory
   (ah-cleartool "cd \"%s\"" (file-name-directory file))
   (setf (ah-clearcase-fprop-view-tag fprop)
-        (replace-regexp-in-string "[\n\r]+" "" (ah-cleartool "pwv -short")))
+	(replace-regexp-in-string "[\n\r]+" "" (ah-cleartool "pwv -short")))
   (let ((vprop (ah-clearcase-get-vprop fprop)))
     (unless (ah-clearcase-vprop-type vprop)
       ;; This is the first time we see this view, collect some info on it
       (let ((lsview (ah-cleartool "lsview %s" (ah-clearcase-vprop-name vprop))))
-        (setf (ah-clearcase-vprop-type vprop)
-              ;; the first char in a lsview listing is '*'.  At least at
-              ;; our site...  I think the '*' means the view is started,
-              ;; but that's the same thing for us... (since we are
-              ;; visiting a file in this view, it must be started)
-              (if (char-equal ?* (aref lsview 0)) 'dynamic 'snapshot)))
+	(setf (ah-clearcase-vprop-type vprop)
+	      ;; the first char in a lsview listing is '*'.  At least at
+	      ;; our site...  I think the '*' means the view is started,
+	      ;; but that's the same thing for us... (since we are
+	      ;; visiting a file in this view, it must be started)
+	      (if (char-equal ?* (aref lsview 0)) 'dynamic 'snapshot)))
       (when (ah-clearcase-snapshot-view-p vprop)
-        (ah-cleartool-ask
-         "pwv -root" 'nowait vprop
-         '(lambda (vprop root-dir)
-           (let ((root (replace-regexp-in-string "[\n\r]+" "" root-dir)))
-             (setf (ah-clearcase-vprop-root vprop) root))))))))
+	(ah-cleartool-ask
+	 "pwv -root" 'nowait vprop
+	 '(lambda (vprop root-dir)
+	   (let ((root (replace-regexp-in-string "[\n\r]+" "" root-dir)))
+	     (setf (ah-clearcase-vprop-root vprop) root))))))))
 
 (defun ah-clearcase-get-vprop (view-tag)
   "Return the vprop struct associated with VIEW-TAG.
@@ -1238,24 +1240,24 @@ returned (if no such vprop exists, it is created first)
   (if (ah-clearcase-vprop-p view-tag)
       view-tag                          ; case 1/
       (let* ((vtag (cond ((stringp view-tag) view-tag)
-                         ((ah-clearcase-fprop-p view-tag)
-                          (ah-clearcase-fprop-view-tag view-tag))
-                         (t (error "Unknown type for VIEW-TAG"))))
-             ;; find or create a new vprop
-             (vprop (car (or (member* vtag ah-clearcase-all-vprops
-                                      :key 'ah-clearcase-vprop-name
-                                      :test 'equal)
-                             (push (ah-clearcase-make-vprop :name vtag)
-                                   ah-clearcase-all-vprops)))))
+			 ((ah-clearcase-fprop-p view-tag)
+			  (ah-clearcase-fprop-view-tag view-tag))
+			 (t (error "Unknown type for VIEW-TAG"))))
+	     ;; find or create a new vprop
+	     (vprop (car (or (member* vtag ah-clearcase-all-vprops
+				      :key 'ah-clearcase-vprop-name
+				      :test 'equal)
+			     (push (ah-clearcase-make-vprop :name vtag)
+				   ah-clearcase-all-vprops)))))
 
-        ;; find out if this is a started dynamic view.  This allows to
-        ;; set configspec in dynamic views without having to declare
-        ;; them first.  NOTE: maybe we could start it if it is not?
-        (let ((vinfo (ignore-errors (ah-cleartool "lsview %s" vtag))))
-          (when (and vinfo (char-equal ?* (aref vinfo 0)))
-            ;; we have a started dynamic view
-            (setf (ah-clearcase-vprop-type vprop) 'dynamic)))
-        vprop)))
+	;; find out if this is a started dynamic view.  This allows to
+	;; set configspec in dynamic views without having to declare
+	;; them first.  NOTE: maybe we could start it if it is not?
+	(let ((vinfo (ignore-errors (ah-cleartool "lsview %s" vtag))))
+	  (when (and vinfo (char-equal ?* (aref vinfo 0)))
+	    ;; we have a started dynamic view
+	    (setf (ah-clearcase-vprop-type vprop) 'dynamic)))
+	vprop)))
 
 (defun ah-clearcase-declare-view (view-tag type &optional root)
   "Declare a VIEW-TAG as a view of TYPE 'snapshot or 'dynamic.
@@ -1284,12 +1286,12 @@ command).  VIEW can be either a view-tag name or a vprop."
       ;; figuring out that he just changed the view and he had
       ;; modified files in it...
       (unless (buffer-modified-p buffer)
-        (let* ((file (buffer-file-name buffer))
-               (fprop (ah-clearcase-file-fprop file))
-               (vtag (ah-clearcase-fprop-view-tag fprop)))
-          (when (string= vtag view-tag)
-            (ah-clearcase-maybe-set-vc-state file 'force)
-            (vc-resynch-buffer file t t)))))))
+	(let* ((file (buffer-file-name buffer))
+	       (fprop (ah-clearcase-file-fprop file))
+	       (vtag (ah-clearcase-fprop-view-tag fprop)))
+	  (when (string= vtag view-tag)
+	    (ah-clearcase-maybe-set-vc-state file 'force)
+	    (vc-resynch-buffer file t t)))))))
 
 ;;;; Read a view-tag from the minibuffer with completion
 
@@ -1320,11 +1322,11 @@ FLAG."
   ;; call if we would pass ah-clearcase-edcs-all-view-tags directly to
   ;; it.
   (let ((completion-fn (cond ((eq flag t) 'all-completions)
-                             ((eq flag 'lambda)
-                              ;; test-completion does not exist in emacs 21.
-                              '(lambda (x l &optional p) (intern-soft x l)))
-                             ((null flag) 'try-completion)
-                             (t (error "unknwn value for flag %S" flag)))))
+			     ((eq flag 'lambda)
+			      ;; test-completion does not exist in emacs 21.
+			      '(lambda (x l &optional p) (intern-soft x l)))
+			     ((null flag) 'try-completion)
+			     (t (error "unknwn value for flag %S" flag)))))
     (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
 
 
@@ -1348,12 +1350,12 @@ to be read from cleartool."
   ;; previous view tag list still exists and the user can perform
   ;; completions form that one.
   (setq ah-clearcase-edcs-all-view-tags-tid
-        (ah-cleartool-ask
-         "lsview -short" 'nowait nil
-         '(lambda (x view-tags)
-           (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
-           (dolist (vtag (split-string view-tags "[\n\r]+"))
-             (intern vtag ah-clearcase-edcs-all-view-tags)))))
+	(ah-cleartool-ask
+	 "lsview -short" 'nowait nil
+	 '(lambda (x view-tags)
+	   (setq ah-clearcase-edcs-all-view-tags (make-vector 31 0))
+	   (dolist (vtag (split-string view-tags "[\n\r]+"))
+	     (intern vtag ah-clearcase-edcs-all-view-tags)))))
 
   (completing-read prompt 'ah-clearcase-complete-view-tag nil nil initial))
 
@@ -1384,17 +1386,17 @@ This can be used to obtain the vob-tag required for the
   (unless (file-exists-p path)
     (error "%s does not exist" path))
   (let ((dir (if (file-directory-p path)
-                 path
-                 (file-name-directory path))))
+		 path
+		 (file-name-directory path))))
     (ah-cleartool "cd \"%s\"" dir)
     (let ((view-root (ah-cleartool "pwv -root")))
       (let ((path-elements (split-string path "[\\\\\\/]"))
-            (prefix-length (length (split-string view-root "[\\\\\\/]"))))
-        ;; On Windows, the vob tag looks like "/Vob_Name", on Solaris,
-        ;; it is "/vobs/Vob_Name".
-        (concat "/" (nth prefix-length path-elements)
-                (unless (eq system-type 'windows-nt)
-                  (concat "/" (nth (1+ prefix-length) path-elements))))))))
+	    (prefix-length (length (split-string view-root "[\\\\\\/]"))))
+	;; On Windows, the vob tag looks like "/Vob_Name", on Solaris,
+	;; it is "/vobs/Vob_Name".
+	(concat "/" (nth prefix-length path-elements)
+		(unless (eq system-type 'windows-nt)
+		  (concat "/" (nth (1+ prefix-length) path-elements))))))))
 
 (defvar ah-clearcase-all-labels nil
   "An obarray containing all labels (stored as symbols)")
@@ -1413,13 +1415,13 @@ Cleans up after cleartool exits."
   (when (memq (process-status process) '(signal exit))
     (let ((buffer (process-buffer process)))
       (unless (= (process-exit-status process) 0)
-        (message "non-zero exit code form cleartool while reading labels"))
+	(message "non-zero exit code form cleartool while reading labels"))
       (unless (null (buffer-name buffer))
-        (with-current-buffer buffer
-          (when ah-clearcase-collect-labels-finished
-            ;; if we finished collecting labels from the cleartool
-            ;; output, kill the process buffer.
-            (kill-buffer buffer)))))))
+	(with-current-buffer buffer
+	  (when ah-clearcase-collect-labels-finished
+	    ;; if we finished collecting labels from the cleartool
+	    ;; output, kill the process buffer.
+	    (kill-buffer buffer)))))))
 
 (defun ah-clearcase-collect-labels-filter (process string)
   "The filter function for the cleartool dump command.
@@ -1437,52 +1439,52 @@ labels it finds."
     (when (null ah-clearcase-collect-labels-point)
       (goto-char (point-min))
       (when (re-search-forward "^label type objects:" nil 'noerror)
-        (forward-line 1)
-        (setq ah-clearcase-collect-labels-point (point))))
+	(forward-line 1)
+	(setq ah-clearcase-collect-labels-point (point))))
 
     (unless (null ah-clearcase-collect-labels-point)
       (goto-char ah-clearcase-collect-labels-point)
       (let ((limit
-             (re-search-forward "^[a-zA-Z]\\(:?.*\\):\\s *$" nil 'noerror)))
-        (goto-char ah-clearcase-collect-labels-point)
-        (catch 'finished
-          (while t
-            (forward-line 1)
-            (let ((next-line (point)))
-              (when (or (eq next-line ah-clearcase-collect-labels-point)
-                        (and limit (>= next-line limit)))
-                (throw 'finished t))
-              ;; if we are here, we have a complete line
-              (forward-line -1)
-              (when (looking-at "^\\s +[0-9]+\\s +\\([-_.a-zA-Z0-9]+\\)")
-                (intern (match-string 1) ah-clearcase-all-labels))
-              (goto-char (setq ah-clearcase-collect-labels-point next-line)))))
+	     (re-search-forward "^[a-zA-Z]\\(:?.*\\):\\s *$" nil 'noerror)))
+	(goto-char ah-clearcase-collect-labels-point)
+	(catch 'finished
+	  (while t
+	    (forward-line 1)
+	    (let ((next-line (point)))
+	      (when (or (eq next-line ah-clearcase-collect-labels-point)
+			(and limit (>= next-line limit)))
+		(throw 'finished t))
+	      ;; if we are here, we have a complete line
+	      (forward-line -1)
+	      (when (looking-at "^\\s +[0-9]+\\s +\\([-_.a-zA-Z0-9]+\\)")
+		(intern (match-string 1) ah-clearcase-all-labels))
+	      (goto-char (setq ah-clearcase-collect-labels-point next-line)))))
 
-        (if limit
-            ;; Cleartool finished the labels section.  If cleartool
-            ;; terminated, we kill the buffer, otherwise we set the
-            ;; process property 'ah-clearcase-collect-labels-done to t
-            (if (eq (process-status process) 'run)
-                (setq ah-clearcase-collect-labels-finished t)
-                ;; the process has finished, kill it
-                (progn
-                  (unless (= (process-exit-status process) 0)
-                    (message
-                     "non-zero exit code form cleartool while reading labels"))
-                  (kill-buffer (current-buffer))))
-            ;; cleartool is still sending us data...
-            (progn
-              (delete-region (point-min) ah-clearcase-collect-labels-point)
-              (setq ah-clearcase-collect-labels-point (point-min))))))))
+	(if limit
+	    ;; Cleartool finished the labels section.  If cleartool
+	    ;; terminated, we kill the buffer, otherwise we set the
+	    ;; process property 'ah-clearcase-collect-labels-done to t
+	    (if (eq (process-status process) 'run)
+		(setq ah-clearcase-collect-labels-finished t)
+		;; the process has finished, kill it
+		(progn
+		  (unless (= (process-exit-status process) 0)
+		    (message
+		     "non-zero exit code form cleartool while reading labels"))
+		  (kill-buffer (current-buffer))))
+	    ;; cleartool is still sending us data...
+	    (progn
+	      (delete-region (point-min) ah-clearcase-collect-labels-point)
+	      (setq ah-clearcase-collect-labels-point (point-min))))))))
 
 (defun ah-clearcase-collect-labels-for-vob (vob)
   "Start the process of collecting the labels in VOB.
 The labels will become available as
 `ah-clearcase-collect-labels-filter' parses them."
   (let* ((buffer (generate-new-buffer "*cleartool-dump-vob*"))
-         (process (start-process "cleartool-dump-vob" buffer
-                                 ah-clearcase-cleartool-program
-                                 "dump" "-long" (concat "vob:" vob))))
+	 (process (start-process "cleartool-dump-vob" buffer
+				 ah-clearcase-cleartool-program
+				 "dump" "-long" (concat "vob:" vob))))
     (with-current-buffer buffer
       (buffer-disable-undo)
       (setq ah-clearcase-all-labels (make-vector 63 0))
@@ -1499,11 +1501,11 @@ The labels will become available as
   ;; the proper function (which completing-read would call if we would
   ;; pass ah-clearcase-edcs-all-view-tags directly to it.
   (let ((completion-fn (cond ((eq flag t) 'all-completions)
-                             ((eq flag 'lambda)
-                              ;; test-completion does not exist in emacs 21.
-                              '(lambda (x l &optional p) (intern-soft x l)))
-                             ((null flag) 'try-completion)
-                             (t (error "unknwn value for flag %S" flag)))))
+			     ((eq flag 'lambda)
+			      ;; test-completion does not exist in emacs 21.
+			      '(lambda (x l &optional p) (intern-soft x l)))
+			     ((null flag) 'try-completion)
+			     (t (error "unknwn value for flag %S" flag)))))
     (funcall completion-fn string ah-clearcase-all-labels predicate)))
 
 (defun ah-clearcase-read-label (prompt vob &optional initial reuse-labels)
@@ -1537,7 +1539,7 @@ If FORCE is not nil, always read the properties."
   (let ((fprop (ah-clearcase-file-fprop file)))
     (when force (ah-clearcase-reset-fprop fprop))
     (when (or (ah-clearcase-fprop-initialized-p fprop)
-              (vc-clearcase-registered file))
+	      (vc-clearcase-registered file))
       (unless fprop (setq fprop (ah-clearcase-file-fprop file)))
       (ah-cleartool-wait-for (ah-clearcase-fprop-version-tid fprop))
       ;; finally prepare a vprop structure for the file's view, but
@@ -1545,7 +1547,7 @@ If FORCE is not nil, always read the properties."
       ;; the view of the file to ever change, so we ignore the 'force
       ;; option.
       (unless (ah-clearcase-fprop-view-tag fprop)
-        (ah-clearcase-prepare-vprop file fprop)))))
+	(ah-clearcase-prepare-vprop file fprop)))))
 
 
 (eval-when-compile
@@ -1559,21 +1561,21 @@ If THING was checked out by us, we check it back in.  THING can
 be either a file or a directory."
     ;; NOTE: we could use make-symbol with the same effect
     (let ((checkout-needed (gensym))
-          (real-thing (gensym)))
+	  (real-thing (gensym)))
       `(let* ((,real-thing ,thing)
-              (,checkout-needed
-               (string=
-                (ah-cleartool "desc -fmt \"%%Rf\" \"%s\"" ,real-thing)
-                "")))
-         (unwind-protect
-              (progn
-                (when ,checkout-needed
-                  (message "Checking out %s" ,real-thing)
-                  (ah-cleartool "checkout -reserved -nc \"%s\"" ,real-thing))
-                ,@forms)
-           (when ,checkout-needed
-             (message "Checking in %s" ,real-thing)
-             (ah-cleartool "checkin -nc \"%s\"" ,real-thing))))))
+	      (,checkout-needed
+	       (string=
+		(ah-cleartool "desc -fmt \"%%Rf\" \"%s\"" ,real-thing)
+		"")))
+	 (unwind-protect
+	      (progn
+		(when ,checkout-needed
+		  (message "Checking out %s" ,real-thing)
+		  (ah-cleartool "checkout -reserved -nc \"%s\"" ,real-thing))
+		,@forms)
+	   (when ,checkout-needed
+	     (message "Checking in %s" ,real-thing)
+	     (ah-cleartool "checkin -nc \"%s\"" ,real-thing))))))
 
   (defmacro with-clearcase-cfile (comment-vars &rest forms)
     "Save a comment in a temporary file, than execute `FORMS'.
@@ -1592,20 +1594,20 @@ comment file is removed."
     (unless (symbolp (car comment-vars))
       (error "(car comment-vars) is not a symbol"))
     (let ((cfile (car comment-vars))
-          (ctext (cadr comment-vars)))
+	  (ctext (cadr comment-vars)))
       `(let ((,cfile
-              (make-temp-name (concat temporary-file-directory "clearcase-"))))
-         (unwind-protect
-              (progn
-                (with-temp-file ,cfile
-                  (insert ,ctext))      ; ctext evaluated once, here
-                ,@forms)
-           (delete-file ,cfile)))))
+	      (make-temp-name (concat temporary-file-directory "clearcase-"))))
+	 (unwind-protect
+	      (progn
+		(with-temp-file ,cfile
+		  (insert ,ctext))      ; ctext evaluated once, here
+		,@forms)
+	   (delete-file ,cfile)))))
 
   (defmacro ignore-cleartool-errors (&rest forms)
     "Execute forms, trapping any cleartool errors and ignoring them"
     `(condition-case nil
-         (progn ,@forms)
+	 (progn ,@forms)
        (ah-cleartool-error nil)))
 
   )                                     ; eval-when-compile
@@ -1622,16 +1624,16 @@ comment file is removed."
   "Cleanup rev of \\ and / so it can be stored as a filename."
   (when (string-match "~.*~" ad-return-value)
     (let ((start (match-beginning 0))
-          (data (match-string 0 ad-return-value)))
+	  (data (match-string 0 ad-return-value)))
       (setq data (replace-regexp-in-string "[\\\\/]" "~" data))
       (setq ad-return-value
-            (concat (substring ad-return-value 0 start) data))))
+	    (concat (substring ad-return-value 0 start) data))))
   ad-return-value)
 (ad-activate 'vc-version-backup-file-name)
 
 (defadvice vc-start-entry
     (before ah-clearcase-prepare-checkin-comment
-            (file rev comment initial-contents msg action &optional after-hook))
+	    (file rev comment initial-contents msg action &optional after-hook))
   "Insert an initial comment when checking-in files."
   (let ((fprop (ah-clearcase-file-fprop file)))
     (when (and fprop (ah-clearcase-fprop-checkedout-p fprop))
@@ -1643,19 +1645,19 @@ comment file is removed."
 
 (defadvice vc-create-snapshot
     (before ah-clearcase-provide-label-completion first
-            (dir name branchp))
+	    (dir name branchp))
   "Override the interactive form so that we have label completion."
   (interactive
    (let* ((d (read-file-name "Directory: "
-                             default-directory default-directory t))
-          (vob (condition-case nil
-                   (ah-clearcase-vob-tag-for-path
-                    (if (file-directory-p d) d (file-name-directory d)))
-                 (ah-cleartool-error nil))))
+			     default-directory default-directory t))
+	  (vob (condition-case nil
+		   (ah-clearcase-vob-tag-for-path
+		    (if (file-directory-p d) d (file-name-directory d)))
+		 (ah-cleartool-error nil))))
      (list d (if vob
-                 (ah-clearcase-read-label "Label: " vob)
-                 (read-string "New snapshot name: "))
-           current-prefix-arg))))
+		 (ah-clearcase-read-label "Label: " vob)
+		 (read-string "New snapshot name: "))
+	   current-prefix-arg))))
 
 (ad-activate 'vc-create-snapshot)
 
@@ -1689,33 +1691,33 @@ version."
   ;; already, return t
   (let ((fprop (ah-clearcase-file-fprop file)))
     (if (ah-clearcase-fprop-initialized-p fprop)
-        t
-        (ignore-cleartool-errors
-         (unless fprop (setq fprop (ah-clearcase-make-fprop :file-name file)))
-         (let ((ls-result (ah-cleartool "ls \"%s\"" file)))
-           (if (string-match "Rule: \\(.*\\)$" ls-result)
-               ;; file is registered
-               (progn
-                 (ah-clearcase-set-fprop-version-stage-1 fprop ls-result)
-                 ;; anticipate that the version will be needed
-                 ;; shortly, so ask for it.  When a file is
-                 ;; hijacked, do the desc command on the version
-                 ;; extended name of the file, as cleartool will
-                 ;; return nothing for the hijacked version...
-                 (let ((pname
-                        (if (ah-clearcase-fprop-hijacked-p fprop)
-                            (concat file "@@"
-                                    (ah-clearcase-fprop-version fprop))
-                            file)))
-                   (setf (ah-clearcase-fprop-version-tid fprop)
-                         (ah-cleartool-ask
-                          (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-                          'nowait fprop
-                          'ah-clearcase-set-fprop-version-stage-2))
-                   (vc-file-setprop file 'vc-clearcase-fprop fprop))
-                 t)                     ;file is registered
-               nil)))                   ;file is not registered
-        )))
+	t
+	(ignore-cleartool-errors
+	 (unless fprop (setq fprop (ah-clearcase-make-fprop :file-name file)))
+	 (let ((ls-result (ah-cleartool "ls \"%s\"" file)))
+	   (if (string-match "Rule: \\(.*\\)$" ls-result)
+	       ;; file is registered
+	       (progn
+		 (ah-clearcase-set-fprop-version-stage-1 fprop ls-result)
+		 ;; anticipate that the version will be needed
+		 ;; shortly, so ask for it.  When a file is
+		 ;; hijacked, do the desc command on the version
+		 ;; extended name of the file, as cleartool will
+		 ;; return nothing for the hijacked version...
+		 (let ((pname
+			(if (ah-clearcase-fprop-hijacked-p fprop)
+			    (concat file "@@"
+				    (ah-clearcase-fprop-version fprop))
+			    file)))
+		   (setf (ah-clearcase-fprop-version-tid fprop)
+			 (ah-cleartool-ask
+			  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+			  'nowait fprop
+			  'ah-clearcase-set-fprop-version-stage-2))
+		   (vc-file-setprop file 'vc-clearcase-fprop fprop))
+		 t)                     ;file is registered
+	       nil)))                   ;file is not registered
+	)))
 
 
 (defun vc-clearcase-state (file)
@@ -1758,17 +1760,17 @@ checked it out.
     ;; with an error telling the user to update his view.
 
     (when (and (ah-clearcase-snapshot-view-p fprop)
-               (ah-clearcase-fprop-broken-view-p fprop))
+	       (ah-clearcase-fprop-broken-view-p fprop))
       (error "Snapshot view is inconsistent, run an update"))
 
     ;; We anticipate that the file's checkout comment might be needed
     ;; shortly so ask for it before we return the state
     (when (ah-clearcase-fprop-checkedout-p fprop)
       (setf (ah-clearcase-fprop-comment-tid fprop)
-            (ah-cleartool-ask
-             (format "desc -fmt \"%%c\" \"%s\"" file) 'nowait fprop
-             '(lambda (fprop comment)
-               (setf (ah-clearcase-fprop-comment fprop) comment)))))
+	    (ah-cleartool-ask
+	     (format "desc -fmt \"%%c\" \"%s\"" file) 'nowait fprop
+	     '(lambda (fprop comment)
+	       (setf (ah-clearcase-fprop-comment fprop) comment)))))
 
     ;; return the state.  The heuristic already gives all the
     ;; information we need.
@@ -1783,17 +1785,17 @@ information."
   (ah-clearcase-maybe-set-vc-state file)
   (let ((fprop (ah-clearcase-file-fprop file)))
     (if (ah-clearcase-fprop-hijacked-p fprop)
-        'unlocked-changes
-        (if (ah-clearcase-fprop-checkedout-p fprop)
-            (if (string= (ah-clearcase-fprop-latest fprop)
-                         (ah-clearcase-fprop-parent fprop))
-                'edited
-                'needs-merge)
-            (if (or (ah-clearcase-fprop-checkout-will-branch-p fprop)
-                    (string= (ah-clearcase-fprop-latest fprop)
-                             (ah-clearcase-fprop-version fprop)))
-                'up-to-date
-                'needs-patch)))))
+	'unlocked-changes
+	(if (ah-clearcase-fprop-checkedout-p fprop)
+	    (if (string= (ah-clearcase-fprop-latest fprop)
+			 (ah-clearcase-fprop-parent fprop))
+		'edited
+		'needs-merge)
+	    (if (or (ah-clearcase-fprop-checkout-will-branch-p fprop)
+		    (string= (ah-clearcase-fprop-latest fprop)
+			     (ah-clearcase-fprop-version fprop)))
+		'up-to-date
+		'needs-patch)))))
 
 (defun vc-clearcase-workfile-version (file)
   "Return the workfile version of FILE.
@@ -1808,7 +1810,7 @@ separate version, so we return the parent version in that case."
   (ah-clearcase-maybe-set-vc-state file)
   (let ((fprop (ah-clearcase-file-fprop file)))
     (string= (ah-clearcase-fprop-version fprop)
-             (ah-clearcase-fprop-latest fprop))))
+	     (ah-clearcase-fprop-latest fprop))))
 
 (defun vc-clearcase-checkout-model (file)
   "Checkout model for ClearCase is always locking for every FILE."
@@ -1818,8 +1820,8 @@ separate version, so we return the parent version in that case."
   "Is FILE un-changed?"
   (setq file (expand-file-name file))
   (let ((diff
-         (ah-cleartool
-          "diff -predecessor -options -headers_only \"%s\"" file)))
+	 (ah-cleartool
+	  "diff -predecessor -options -headers_only \"%s\"" file)))
     (string= diff "Files are identical\n"))
 
   ;; NOTE: apparently, the -status_only does not work: it returns
@@ -1837,8 +1839,8 @@ separate version, so we return the parent version in that case."
   "Return the mode line string for FILE."
   (ah-clearcase-maybe-set-vc-state file)
   (let* ((fprop (ah-clearcase-file-fprop file))
-         (branch (ah-clearcase-fprop-branch fprop))
-         (version-number (ah-clearcase-fprop-version-number fprop)))
+	 (branch (ah-clearcase-fprop-branch fprop))
+	 (version-number (ah-clearcase-fprop-version-number fprop)))
     (ah-clearcase-wash-mode-line
      (case (ah-clearcase-fprop-status fprop)
        ('hijacked "Cc:HIJACKED")
@@ -1872,14 +1874,14 @@ returns a 'pathname not within a VOB' error message."
   (setq file (expand-file-name file))
   (if (file-exists-p file)
       (let ((case-fold-search t))
-        (condition-case msg
-            (if (ah-cleartool "ls \"%s\"" file)
-                t
-                nil)                    ; never reached
-          (ah-cleartool-error
-           (if (string-match "Pathname is not within a VOB:" (cadr msg))
-               nil
-               t))))))
+	(condition-case msg
+	    (if (ah-cleartool "ls \"%s\"" file)
+		t
+		nil)                    ; never reached
+	  (ah-cleartool-error
+	   (if (string-match "Pathname is not within a VOB:" (cadr msg))
+	       nil
+	       t))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
@@ -1918,10 +1920,10 @@ meaning in ClearCase."
     ;; refuse to get the version into an existing file.
     (delete-file tmpfile)
     (unwind-protect
-         (progn
-           (ah-clearcase-find-version-helper file rev tmpfile)
-           (with-current-buffer buffer
-             (insert-file-contents-literally tmpfile)))
+	 (progn
+	   (ah-clearcase-find-version-helper file rev tmpfile)
+	   (with-current-buffer buffer
+	     (insert-file-contents-literally tmpfile)))
       (delete-file tmpfile))))
 
 
@@ -1939,12 +1941,12 @@ be 'reserved or 'unreserved."
 
   (with-clearcase-cfile (comment-file comment)
     (let ((pname (if rev (concat file "@@" rev) file))
-          (options (concat "-ptime "
-                           "-cfile " comment-file
-                           " " (when rev "-version ")))
-          (co-mode (if (eq mode 'reserved) "-reserved " "-unreserved "))
-          ;; increase the cleartool timeout for the checkout operation
-          (ah-cleartool-timeout (* 1.5 ah-cleartool-timeout)))
+	  (options (concat "-ptime "
+			   "-cfile " comment-file
+			   " " (when rev "-version ")))
+	  (co-mode (if (eq mode 'reserved) "-reserved " "-unreserved "))
+	  ;; increase the cleartool timeout for the checkout operation
+	  (ah-cleartool-timeout (* 1.5 ah-cleartool-timeout)))
       ;; NOTE: if this fails, we should prompt the user to checkout
       ;; unreserved.
       (ah-cleartool "checkout %s %s \"%s\"" co-mode options pname))
@@ -1967,35 +1969,35 @@ be 'reserved or 'unreserved."
 If yes, return the user and view that has the reserved checkout,
 otherwise return nil."
   (let ((fprop (ah-clearcase-file-fprop file))
-        (checkouts
-         (split-string
-          (ah-cleartool "lsco -fmt \"%%PVn %%Rf %%Tf %%u\\n\" \"%s\"" file)
-          "[\n\r]+")))
+	(checkouts
+	 (split-string
+	  (ah-cleartool "lsco -fmt \"%%PVn %%Rf %%Tf %%u\\n\" \"%s\"" file)
+	  "[\n\r]+")))
     (let* ((match (concat (ah-clearcase-fprop-version fprop) " reserved"))
-           (len (length match))
-           (rev (catch 'found
-                  (dolist (c checkouts)
-                    (when (eq (compare-strings match 0 len c 0 len) t)
-                      (throw 'found c))))))
+	   (len (length match))
+	   (rev (catch 'found
+		  (dolist (c checkouts)
+		    (when (eq (compare-strings match 0 len c 0 len) t)
+		      (throw 'found c))))))
       (if rev
-          (let ((elements (split-string rev)))
-            (cons (nth 3 elements) (nth 2 elements)))
-          nil))))
+	  (let ((elements (split-string rev)))
+	    (cons (nth 3 elements) (nth 2 elements)))
+	  nil))))
 
 (defcustom ah-clearcase-checkout-comment-type 'normal
   "The type of comments expected from the user on checkout.
 The value of this variable should be one of the three symbols:
 
 normal -- a buffer will be used to enter a comment, just like for
-          file checkin,
+	  file checkin,
 
 brief -- the comment will be read from the minibuffer,
 
 none -- no comment will be used on checkout."
   :type '(choice
-          (const :tag "Normal" normal)
-          (const :tag "Brief" brief)
-          (const :tag "None" none))
+	  (const :tag "Normal" normal)
+	  (const :tag "Brief" brief)
+	  (const :tag "None" none))
   :group 'vc-clearcase)
 
 (defcustom ah-clearcase-checkout-policy 'heuristic
@@ -2003,19 +2005,19 @@ none -- no comment will be used on checkout."
 The value of this variable should be one of the three symbols:
 
 heuristic -- a heuristic is used to determine the checkout model.
-         By default it tries to do a reserved checkout, but if
-         `vc-clearcase-checkout' determines that the unreserverd
-         checkout will fail it will do an unreserved checkout.
+	 By default it tries to do a reserved checkout, but if
+	 `vc-clearcase-checkout' determines that the unreserverd
+	 checkout will fail it will do an unreserved checkout.
 
 reserved -- always attempt to do a reserved checkout.  This might
-         fail if someone else has the file checked out reserved
-         or we don't checkout the latest revision on the branch.
+	 fail if someone else has the file checked out reserved
+	 or we don't checkout the latest revision on the branch.
 
 unreserved -- always do an unreserved checkout."
   :type '(choice
-          (const :tag "Heuristic" heuristic)
-          (const :tag "Always Reserved" reserved)
-          (const :tag "Always Unreserved" unreserved))
+	  (const :tag "Heuristic" heuristic)
+	  (const :tag "Always Reserved" reserved)
+	  (const :tag "Always Unreserved" unreserved))
   :group 'vc-clearcase)
 
 (defun vc-clearcase-checkout (file &optional editable rev destfile)
@@ -2039,50 +2041,50 @@ This method does three completely different things:
     (editable
      ;; this is the real checkout operation
      (let* ((fprop (ah-clearcase-file-fprop file))
-            checkout)
+	    checkout)
        ;; need to find out if we have to checkout reserved or
        ;; unreserved.
        (ecase ah-clearcase-checkout-policy
-         ('reserved (setq checkout 'ah-clearcase-finish-checkout-reserved))
-         ('unreserved (setq checkout 'ah-clearcase-finish-checkout-unreserved))
-         ('heuristic
-          (cond
-            ;; if the checkout will create a branch, checkout reserved
-            ((ah-clearcase-fprop-checkout-will-branch-p fprop)
-             (setq checkout 'ah-clearcase-finish-checkout-reserved))
+	 ('reserved (setq checkout 'ah-clearcase-finish-checkout-reserved))
+	 ('unreserved (setq checkout 'ah-clearcase-finish-checkout-unreserved))
+	 ('heuristic
+	  (cond
+	    ;; if the checkout will create a branch, checkout reserved
+	    ((ah-clearcase-fprop-checkout-will-branch-p fprop)
+	     (setq checkout 'ah-clearcase-finish-checkout-reserved))
 
-            ;; if we are not latest on branch and we are asked to
-            ;; checkout this version (eq rev nil), we checkout
-            ;; unseserved.
-            ((and (null rev)
-                  (not (string= (ah-clearcase-fprop-latest fprop)
-                                (ah-clearcase-fprop-version fprop))))
-             ;; patch rev first
-             (setq rev (ah-clearcase-fprop-version fprop))
-             (setq checkout 'ah-clearcase-finish-checkout-unreserved))
+	    ;; if we are not latest on branch and we are asked to
+	    ;; checkout this version (eq rev nil), we checkout
+	    ;; unseserved.
+	    ((and (null rev)
+		  (not (string= (ah-clearcase-fprop-latest fprop)
+				(ah-clearcase-fprop-version fprop))))
+	     ;; patch rev first
+	     (setq rev (ah-clearcase-fprop-version fprop))
+	     (setq checkout 'ah-clearcase-finish-checkout-unreserved))
 
-            ;; if someone else has checked out this revision in
-            ;; reserved mode, ask the user if he wants an unreserved
-            ;; checkout.
-            (t (let ((user-and-view (ah-clearcase-revision-reserved-p file)))
-                 (if user-and-view
-                     (when (yes-or-no-p
-                            (concat
-                             "This revision is checked out reserved by "
-                             (car user-and-view) "in" (cdr user-and-view)
-                             ".  Checkout unreserved? "))
-                       (setq checkout 'ah-clearcase-finish-checkout-unreserved))
-                     ;; no one has this version checked out, checkout
-                     ;; reserved.
-                     (setq checkout 'ah-clearcase-finish-checkout-reserved)))))))
+	    ;; if someone else has checked out this revision in
+	    ;; reserved mode, ask the user if he wants an unreserved
+	    ;; checkout.
+	    (t (let ((user-and-view (ah-clearcase-revision-reserved-p file)))
+		 (if user-and-view
+		     (when (yes-or-no-p
+			    (concat
+			     "This revision is checked out reserved by "
+			     (car user-and-view) "in" (cdr user-and-view)
+			     ".  Checkout unreserved? "))
+		       (setq checkout 'ah-clearcase-finish-checkout-unreserved))
+		     ;; no one has this version checked out, checkout
+		     ;; reserved.
+		     (setq checkout 'ah-clearcase-finish-checkout-reserved)))))))
        (if checkout
-           (ecase ah-clearcase-checkout-comment-type
-             ('normal (vc-start-entry
-                       file rev nil nil "Enter a checkout comment" checkout))
-             ('brief (let ((comment (read-string "Enter a checkout comment: ")))
-                       (funcall checkout file rev comment)))
-             ('none (funcall checkout file rev "")))
-           (message "Aborted."))))
+	   (ecase ah-clearcase-checkout-comment-type
+	     ('normal (vc-start-entry
+		       file rev nil nil "Enter a checkout comment" checkout))
+	     ('brief (let ((comment (read-string "Enter a checkout comment: ")))
+		       (funcall checkout file rev comment)))
+	     ('none (funcall checkout file rev "")))
+	   (message "Aborted."))))
     ((and (not editable) destfile)
      ;; Check out an arbitrary version to the specified file
      (ah-clearcase-find-version-helper file rev destfile))
@@ -2090,15 +2092,15 @@ This method does three completely different things:
      ;; Update the file in the view (no-op in dynamic views)
      (let ((update-result (ah-cleartool "update -rename \"%s\"" file)))
        (when (string-match
-              "^Update log has been written to .*$" update-result)
-         (message (match-string 0 update-result)))
+	      "^Update log has been written to .*$" update-result)
+	 (message (match-string 0 update-result)))
        (ah-clearcase-maybe-set-vc-state file 'force)
        (vc-resynch-buffer file t t)))
     ((not editable)                  ; last case left for not editable
      (error "Cannot to update to a specific revision"))
     (t
      (error "Bad param combinations in vc-clearcase-checkout: %S %S %S"
-            editable rev destfile))))
+	    editable rev destfile))))
 
 (defcustom ah-clearcase-rmbranch-on-revert-flag t
   "Non-nil means remove a branch when a revert leaves no versions on it.
@@ -2117,11 +2119,11 @@ CONTENTS-DONE is ignored. The
 `ah-clearcase-rmbranch-on-revert-flag' is honoured."
   (setq file (expand-file-name file))
   (let* ((fprop (ah-clearcase-file-fprop file))
-         (empty-branch-p (equal "0" (ah-clearcase-fprop-version-number fprop))))
+	 (empty-branch-p (equal "0" (ah-clearcase-fprop-version-number fprop))))
     (ah-cleartool "uncheckout -keep \"%s\"" file)
     (when (and empty-branch-p ah-clearcase-rmbranch-on-revert-flag)
       (let ((base (ah-clearcase-fprop-version-base fprop)))
-        (ah-cleartool "rmbranch -force -nc \"%s@@%s\"" file base)))
+	(ah-cleartool "rmbranch -force -nc \"%s@@%s\"" file base)))
     (ah-clearcase-maybe-set-vc-state file 'force)))
 
 
@@ -2135,33 +2137,33 @@ checked out.  We need to do an automatic checkout in this case,
 but how do we detect it?"
   (setq file (expand-file-name file))
   (let ((merge-status
-         (ah-cleartool
-          "merge -abort -insert -to \"%s\" -ver %s %s" file rev1 rev2)))
+	 (ah-cleartool
+	  "merge -abort -insert -to \"%s\" -ver %s %s" file rev1 rev2)))
     (with-current-buffer (get-buffer-create "*vc-merge-result*")
       (let ((inhibit-read-only t))
-        (insert merge-status)
-        (switch-to-buffer-other-window (current-buffer) 'norecord)
-        (shrink-window-if-larger-than-buffer)))
+	(insert merge-status)
+	(switch-to-buffer-other-window (current-buffer) 'norecord)
+	(shrink-window-if-larger-than-buffer)))
     0))                                 ; return success
 
 (defun vc-clearcase-merge-news (file)
   "Merge the new versions in FILE."
   (setq file (expand-file-name file))
   (let ((latest (concat file "@@"
-                        (ah-clearcase-fprop-latest-sel
-                         (ah-clearcase-file-fprop file)))))
+			(ah-clearcase-fprop-latest-sel
+			 (ah-clearcase-file-fprop file)))))
     (message "Merging LATEST into this version")
     ;; NOTE: we abort if anything goes wrong with the merge.  Let the
     ;; error propagate to the vc package.  If we just return 1, it
     ;; will try to invoke smerge-mode or ediff, expecting CVS-like
     ;; conflict markers.
     (let ((merge-status
-           (ah-cleartool "merge -abort -to \"%s\" \"%s\"" file latest)))
+	   (ah-cleartool "merge -abort -to \"%s\" \"%s\"" file latest)))
       (with-current-buffer (get-buffer-create "*vc-merge-result*")
-        (let ((inhibit-read-only t))
-          (insert merge-status)
-          (switch-to-buffer-other-window (current-buffer) 'norecord)
-          (shrink-window-if-larger-than-buffer)))
+	(let ((inhibit-read-only t))
+	  (insert merge-status)
+	  (switch-to-buffer-other-window (current-buffer) 'norecord)
+	  (shrink-window-if-larger-than-buffer)))
       0)))                              ; return success
 
 
@@ -2185,22 +2187,22 @@ for Clearcase registered files."
     (vc-setup-buffer buf)
     (with-current-buffer buf
       (let ((inhibit-read-only t))
-        (erase-buffer)
-        (ah-clearcase-log-view-mode)
-        (let* ((args (list "-fmt" ah-clearcase-lshistory-fmt file))
-               (process (ah-cleartool-do "lshistory"
-                                         (if current-prefix-arg
-                                             (cons "-minor" args)
-                                             args)
-                                         (current-buffer))))
-          (setq ah-clearcase-file-name file)
-          (setq ah-cleartool-finished-function
-                '(lambda ()
-                  (let ((fprop
-                         (ah-clearcase-file-fprop ah-clearcase-file-name)))
-                    (vc-clearcase-show-log-entry
-                     (ah-clearcase-fprop-version fprop)))))
-          (switch-to-buffer-other-window (process-buffer process)))))))
+	(erase-buffer)
+	(ah-clearcase-log-view-mode)
+	(let* ((args (list "-fmt" ah-clearcase-lshistory-fmt file))
+	       (process (ah-cleartool-do "lshistory"
+					 (if current-prefix-arg
+					     (cons "-minor" args)
+					     args)
+					 (current-buffer))))
+	  (setq ah-clearcase-file-name file)
+	  (setq ah-cleartool-finished-function
+		'(lambda ()
+		  (let ((fprop
+			 (ah-clearcase-file-fprop ah-clearcase-file-name)))
+		    (vc-clearcase-show-log-entry
+		     (ah-clearcase-fprop-version fprop)))))
+	  (switch-to-buffer-other-window (process-buffer process)))))))
 
 (defadvice vc-print-log (around ah-clearcase-print-log-advice)
   "On Clearcase files, call 'vc-clearcase-print-log' directly.
@@ -2208,8 +2210,8 @@ On all other files call the normal `vc-print-log'."
   (vc-ensure-vc-buffer)
   (let ((file buffer-file-name))
     (if (vc-clearcase-registered file)
-        (vc-clearcase-print-log file)
-        ad-do-it)))
+	(vc-clearcase-print-log file)
+	ad-do-it)))
 (ad-activate 'vc-print-log)
 
 (defun vc-clearcase-show-log-entry (version)
@@ -2217,21 +2219,21 @@ On all other files call the normal `vc-print-log'."
 Only works for the clearcase log format defined in
 `ah-clearcase-lshistory-fmt'."
   (let ((regexp
-         (concat "^version: "
-                 (replace-regexp-in-string "[\\\\/]" "[\\\\/]" version)
-                 "\\>"))
-        pos)
+	 (concat "^version: "
+		 (replace-regexp-in-string "[\\\\/]" "[\\\\/]" version)
+		 "\\>"))
+	pos)
     (save-excursion
       (goto-char (point-min))
       (when (re-search-forward regexp (point-max) 'noerror)
-        (setq pos (match-beginning 0))))
+	(setq pos (match-beginning 0))))
     (when pos (goto-char pos))))
 
 
 (defcustom ah-clearcase-diff-format 'diff
   "Format of the output by the cleartool diff command."
   :type '(choice (const :tag "Diff Format" diff)
-          (const :tag "Serial Format" serial))
+	  (const :tag "Serial Format" serial))
   :group 'vc-clearcase)
 
 (defcustom ah-clearcase-diff-cleanup-flag t
@@ -2248,35 +2250,35 @@ Only works for the clearcase log format defined in
     (ah-cleartool "cd \"%s\"" (file-name-directory file))
     (setq file (file-name-nondirectory file))
     (let ((fver1 (concat file "@@" rev1))
-          (fver2 (if rev2 (concat file "@@" rev2) file)))
+	  (fver2 (if rev2 (concat file "@@" rev2) file)))
       (with-current-buffer (get-buffer-create "*vc-diff*")
-        (message "Comparing file revisions...")
-        (let ((inhibit-read-only t))
-          (erase-buffer)
-          (let* ((diff-format (ecase ah-clearcase-diff-format
-                                ('diff "-diff_format")
-                                ('serial "-serial_format")))
-                 (diff (ah-cleartool
-                        "diff %s \"%s\" \"%s\""
-                        diff-format fver1 fver2)))
-            (insert diff)
-            (when ah-clearcase-diff-cleanup-flag
-              (goto-char (point-min))
-              (while (re-search-forward "\r$" nil t)
-                (replace-match "" nil nil)))
-            (goto-char (point-min))
+	(message "Comparing file revisions...")
+	(let ((inhibit-read-only t))
+	  (erase-buffer)
+	  (let* ((diff-format (ecase ah-clearcase-diff-format
+				('diff "-diff_format")
+				('serial "-serial_format")))
+		 (diff (ah-cleartool
+			"diff %s \"%s\" \"%s\""
+			diff-format fver1 fver2)))
+	    (insert diff)
+	    (when ah-clearcase-diff-cleanup-flag
+	      (goto-char (point-min))
+	      (while (re-search-forward "\r$" nil t)
+		(replace-match "" nil nil)))
+	    (goto-char (point-min))
 
-            (not
-             ;; the way we determine whether the files are identical
-             ;; depends on the diff format we use.
-             (ecase ah-clearcase-diff-format
-               ('diff
-                ;; diff format has an empty buffer
-                (equal (point-min) (point-max)))
-               ('serial
-                ;; serial format prints "Files are identical", so
-                ;; we look for that.
-                (looking-at "Files are identical"))))))))))
+	    (not
+	     ;; the way we determine whether the files are identical
+	     ;; depends on the diff format we use.
+	     (ecase ah-clearcase-diff-format
+	       ('diff
+		;; diff format has an empty buffer
+		(equal (point-min) (point-max)))
+	       ('serial
+		;; serial format prints "Files are identical", so
+		;; we look for that.
+		(looking-at "Files are identical"))))))))))
 
 
 (defun vc-clearcase-annotate-command (file buf rev)
@@ -2288,18 +2290,18 @@ will ask if you want to display the deleted sections as well."
     (vc-setup-buffer buf)
     (with-current-buffer buf
       (let ((fmt-args '("-fmt" "%-9.9Sd %-4.4u %Sn |"))
-            (rm-args (when (and current-prefix-arg
-                                (y-or-n-p "Show deleted sections? "))
-                       '("-rm" "-rmfmt" "D %-9.9Sd %-4.4u |"))))
-        (ah-cleartool-do
-         "annotate"
-         (append fmt-args rm-args `("-out" "-" "-nheader" ,pname))
-         buf)
-        (setq ah-cleartool-finished-function
-              '(lambda ()
-                (let ((buffer (current-buffer)))
-                  (ah-clearcase-annotate-post-process buffer)
-                  (ah-clearcase-annotate-mark-deleted buffer))))))))
+	    (rm-args (when (and current-prefix-arg
+				(y-or-n-p "Show deleted sections? "))
+		       '("-rm" "-rmfmt" "D %-9.9Sd %-4.4u |"))))
+	(ah-cleartool-do
+	 "annotate"
+	 (append fmt-args rm-args `("-out" "-" "-nheader" ,pname))
+	 buf)
+	(setq ah-cleartool-finished-function
+	      '(lambda ()
+		(let ((buffer (current-buffer)))
+		  (ah-clearcase-annotate-post-process buffer)
+		  (ah-clearcase-annotate-mark-deleted buffer))))))))
 
 (defun vc-clearcase-annotate-difference (point)
   "Return the age in days of POINT."
@@ -2317,7 +2319,7 @@ will ask if you want to display the deleted sections as well."
   (progn
     (unless (intern-soft 'ah-clearcase-deleted-face)
       (let ((face (make-face 'ah-clearcase-deleted-face)))
-        (set-face-attribute face nil :strike-through t)))
+	(set-face-attribute face nil :strike-through t)))
     'ah-clearcase-deleted-face))
 
 (defconst ah-clearcase-annotate-months
@@ -2333,12 +2335,12 @@ will ask if you want to display the deleted sections as well."
 NOTE: we don't use `vc-annotate-convert-time' since it is not
 available in Emacs 21."
   (when (and (stringp time-str)
-             (string-match ah-clearcase-annotate-date-rx time-str))
+	     (string-match ah-clearcase-annotate-date-rx time-str))
     (let ((day (string-to-number (match-string 1 time-str)))
-          (month
-           (cdr (assoc (match-string 2 time-str)
-                       ah-clearcase-annotate-months)))
-          (year (string-to-number (match-string 3 time-str))))
+	  (month
+	   (cdr (assoc (match-string 2 time-str)
+		       ah-clearcase-annotate-months)))
+	  (year (string-to-number (match-string 3 time-str))))
       (incf year (if (< year 70) 2000 1900))
       (/ (float-time (encode-time 0 0 0 day month year)) 24 3600))))
 
@@ -2349,59 +2351,59 @@ These will be stored as properties, so
 and `vc-clearcase-annotate-revision-atline' work fast."
   (with-current-buffer buffer
     (let ((inhibit-read-only t)
-          (date-rx "^[0-9]+-[A-Za-z]+-[0-9]+")
-          (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|"))
+	  (date-rx "^[0-9]+-[A-Za-z]+-[0-9]+")
+	  (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|"))
       ;; Step 1: parse the buffer and annotate the text with the time
       ;; and revision number of each line
       (goto-char (point-max))
       (let ((now (/ (float-time) 24 3600))
-            (beg (point))
-            (end (point))
-            time-str revision-str time age)
-        (while (re-search-backward date-rx nil 'noerror)
-          (setq time-str (match-string-no-properties 0))
-          (setq time (ah-clearcase-annotate-mktime time-str))
-          (setq age (- now time))
+	    (beg (point))
+	    (end (point))
+	    time-str revision-str time age)
+	(while (re-search-backward date-rx nil 'noerror)
+	  (setq time-str (match-string-no-properties 0))
+	  (setq time (ah-clearcase-annotate-mktime time-str))
+	  (setq age (- now time))
 
-          (when (re-search-forward version-rx (c-point 'eol) 'noerror)
-            (setq revision-str (match-string-no-properties 1)))
+	  (when (re-search-forward version-rx (c-point 'eol) 'noerror)
+	    (setq revision-str (match-string-no-properties 1)))
 
-          (beginning-of-line)
-          (setq beg (point))
-          (put-text-property beg end 'vc-clearcase-time time)
-          (put-text-property beg end 'vc-clearcase-age age)
-          (put-text-property beg end 'vc-clearcase-revision revision-str)
-          (setq end (1- beg))))
+	  (beginning-of-line)
+	  (setq beg (point))
+	  (put-text-property beg end 'vc-clearcase-time time)
+	  (put-text-property beg end 'vc-clearcase-age age)
+	  (put-text-property beg end 'vc-clearcase-revision revision-str)
+	  (setq end (1- beg))))
       ;; Step 2: all the '|' markers in continuation lines
       (goto-char (point-min))
       (while (re-search-forward "^ +\\. +|" nil t)
-        (let* ((bol (c-point 'bol))
-               (time (get-text-property bol 'vc-clearcase-time))
-               (age (get-text-property bol 'vc-clearcase-age))
-               (revision (get-text-property bol 'vc-clearcase-revision))
-               (str "                 .                  |")
-               (max (1- (length str))))
-          (put-text-property 0 max 'vc-clearcase-time time str)
-          (put-text-property 0 max 'vc-clearcase-age age str)
-          (put-text-property 0 max 'vc-clearcase-revision revision str)
-          (replace-match str nil nil)))
+	(let* ((bol (c-point 'bol))
+	       (time (get-text-property bol 'vc-clearcase-time))
+	       (age (get-text-property bol 'vc-clearcase-age))
+	       (revision (get-text-property bol 'vc-clearcase-revision))
+	       (str "                 .                  |")
+	       (max (1- (length str))))
+	  (put-text-property 0 max 'vc-clearcase-time time str)
+	  (put-text-property 0 max 'vc-clearcase-age age str)
+	  (put-text-property 0 max 'vc-clearcase-revision revision str)
+	  (replace-match str nil nil)))
       ;; Step 3: truncate or expand all the version numbers
       (goto-char (point-min))
       (while (re-search-forward version-rx nil t)
-        (let* ((str (match-string-no-properties 1))
-               max
-               (bol (c-point 'bol))
-               (time (get-text-property bol 'vc-clearcase-time))
-               (age (get-text-property bol 'vc-clearcase-age))
-               (revision (get-text-property bol 'vc-clearcase-revision)))
-          (when (> (length str) 20)
-            (setq str (substring str -20 (length str))))
-          (setq str (format " %20s |" str))
-          (setq max (length str))
-          (put-text-property 0 max 'vc-clearcase-time time str)
-          (put-text-property 0 max 'vc-clearcase-age age str)
-          (put-text-property 0 max 'vc-clearcase-revision revision str)
-          (replace-match str nil t))))))
+	(let* ((str (match-string-no-properties 1))
+	       max
+	       (bol (c-point 'bol))
+	       (time (get-text-property bol 'vc-clearcase-time))
+	       (age (get-text-property bol 'vc-clearcase-age))
+	       (revision (get-text-property bol 'vc-clearcase-revision)))
+	  (when (> (length str) 20)
+	    (setq str (substring str -20 (length str))))
+	  (setq str (format " %20s |" str))
+	  (setq max (length str))
+	  (put-text-property 0 max 'vc-clearcase-time time str)
+	  (put-text-property 0 max 'vc-clearcase-age age str)
+	  (put-text-property 0 max 'vc-clearcase-revision revision str)
+	  (replace-match str nil t))))))
 
 
 (defun ah-clearcase-annotate-mark-deleted (buffer)
@@ -2410,17 +2412,17 @@ When BUFFER is nil, the current buffer is used."
   (with-current-buffer buffer
     (save-excursion
       (let ((inhibit-read-only t))
-        (goto-char (point-min))
-        (while (re-search-forward ".*|D .*|\\(.*\\)\\s-*$" nil 'noerror)
-          (put-text-property (match-beginning 1) (match-end 1)
-                             'face '(:strike-through t)))))))
+	(goto-char (point-min))
+	(while (re-search-forward ".*|D .*|\\(.*\\)\\s-*$" nil 'noerror)
+	  (put-text-property (match-beginning 1) (match-end 1)
+			     'face '(:strike-through t)))))))
 
 (defcustom ah-clearcase-no-label-action 'ask
   "What to do when we are asked to apply a label that does not exist.
 There are three possible values for this variable:
 
 'error -- an error will be signalled when we are asked to apply a
-          non existent label.
+	  non existent label.
 
 'create -- the label will be created if it does not exist.
 
@@ -2431,8 +2433,8 @@ NOTE: in ClearCase a label exists independentlty from the files
 it is applied to.  A label must be created first before it can be
 applied."
   :type '(choice (const :tag "Signal error" error)
-          (const :tag "Automatically create it" create)
-          (const :tag "Ask the user" ask))
+	  (const :tag "Automatically create it" create)
+	  (const :tag "Ask the user" ask))
   :group 'vc-clearcase)
 
 (defcustom ah-clearcase-confirm-label-move t
@@ -2464,8 +2466,8 @@ of the sources with this single line in the configspec:
 
 element * NAME -nocheckout"
   (when (and branchp
-             ah-clearcase-confirm-label-move
-             (not (yes-or-no-p "Move existing label? ")))
+	     ah-clearcase-confirm-label-move
+	     (not (yes-or-no-p "Move existing label? ")))
     (error "Aborted"))
   (setq dir (expand-file-name dir))
   (ah-cleartool "cd \"%s\"" (file-name-directory dir))
@@ -2474,17 +2476,17 @@ element * NAME -nocheckout"
       (ah-cleartool "desc -fmt \"ok\" lbtype:%s" name)
     (ah-cleartool-error
      (let ((should-create
-            (ecase ah-clearcase-no-label-action
-              ('create t)
-              ('error nil)
-              ('ask (yes-or-no-p
-                     (format "Label %s does not exist.  Create it? " name))))))
+	    (ecase ah-clearcase-no-label-action
+	      ('create t)
+	      ('error nil)
+	      ('ask (yes-or-no-p
+		     (format "Label %s does not exist.  Create it? " name))))))
        (if should-create
-           (progn
-             (message "Creating label %s" name)
-             (ah-cleartool "mklbtype -ordinary -nc lbtype:%s" name)
-             (message nil))
-           (error "Label %s does not exist and will not create it." name)))))
+	   (progn
+	     (message "Creating label %s" name)
+	     (ah-cleartool "mklbtype -ordinary -nc lbtype:%s" name)
+	     (message nil))
+	   (error "Label %s does not exist and will not create it." name)))))
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
     ;; NOTE: the mklabel command might fail if some files are
@@ -2496,11 +2498,11 @@ element * NAME -nocheckout"
       (message "Applying label to parent directories...")
       (ignore-cleartool-errors
        (while t                  ; until cleartool will throw an error
-         (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-         (setq dir (file-name-directory dir))
-         (ah-cleartool
-          "mklabel -nc %s lbtype:%s \"%s\""
-          (if branchp "-replace" "") name dir)))))
+	 (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	 (setq dir (file-name-directory dir))
+	 (ah-cleartool
+	  "mklabel -nc %s lbtype:%s \"%s\""
+	  (if branchp "-replace" "") name dir)))))
   (message "Finished applying label"))
 
 
@@ -2514,10 +2516,10 @@ Return nil if no such revision exists."
   ;; is identical to the original version in the parent branch...
   (let ((prev (ah-cleartool "desc -fmt \"%%PVn\" \"%s@@%s\"" file rev)))
     (if (string= prev "")
-        nil
-        (if (string-match "[\\/]0$" prev)
-            (vc-clearcase-previous-version file prev)
-            prev))))
+	nil
+	(if (string-match "[\\/]0$" prev)
+	    (vc-clearcase-previous-version file prev)
+	    prev))))
 
 (defun vc-clearcase-next-version (file rev)
   "Return the FILE revision that follows the revision REV.
@@ -2531,18 +2533,18 @@ Return nil if no such revision exists."
   ;;
   ;; To speed up the search, we use the revision-list in fprop.
   (let* ((fprop (ah-clearcase-file-fprop file))
-         (revision-list (ah-clearcase-fprop-revision-list fprop)))
+	 (revision-list (ah-clearcase-fprop-revision-list fprop)))
     (unless revision-list
       ;; If we don't have a revision list, build one now
       (message "Building revision list...")
       (let* ((prev (ah-clearcase-fprop-latest fprop)))
-        (setq revision-list (list prev))
-        (while (not (string= prev ""))
-          (setq prev (ah-cleartool "desc -fmt \"%%PVn\" \"%s@@%s\"" file prev))
-          (unless (or (string= prev "") (string-match "[\\/]0$" prev))
-            (setq revision-list (cons prev revision-list))))
-        (setf (ah-clearcase-fprop-revision-list fprop) revision-list)
-        (message "Building revision list...done.")))
+	(setq revision-list (list prev))
+	(while (not (string= prev ""))
+	  (setq prev (ah-cleartool "desc -fmt \"%%PVn\" \"%s@@%s\"" file prev))
+	  (unless (or (string= prev "") (string-match "[\\/]0$" prev))
+	    (setq revision-list (cons prev revision-list))))
+	(setf (ah-clearcase-fprop-revision-list fprop) revision-list)
+	(message "Building revision list...done.")))
     (car (cdr-safe (member rev revision-list)))))
 
 ;;; NOTE: for some reason, the renamed file does not show up as a
@@ -2557,9 +2559,9 @@ Both in the working area and in the repository are renamed."
   (with-clearcase-checkout (file-name-directory old)
     (with-clearcase-checkout (file-name-directory new)
       (with-clearcase-cfile (comment-file
-                             (format "*renamed from %s to %s*" old new))
-        ;; let the cleartool error be directly reported
-        (ah-cleartool "mv -cfile %s \"%s\" \"%s\"" comment-file old new)))))
+			     (format "*renamed from %s to %s*" old new))
+	;; let the cleartool error be directly reported
+	(ah-cleartool "mv -cfile %s \"%s\" \"%s\"" comment-file old new)))))
 
 
 ;;;; A library of clearcase utilities
@@ -2582,17 +2584,17 @@ The list of files is not returned in any particular order."
   (ah-cleartool "desc -fmt \"ok\" lbtype:%s" label-2)
 
   (let ((buf1 (get-buffer-create " *ah-clearcase-label-1*"))
-        (buf2 (get-buffer-create " *ah-clearcase-label-2*"))
+	(buf2 (get-buffer-create " *ah-clearcase-label-2*"))
 
-        ;; Will hold the file report.  KEY is file-name, VALUE is
-        ;; (cons label-1-version label-2-version).  If one of the
-        ;; versions does not exist, the string "*no version*" is used
-        ;; instead.
-        (report (make-hash-table :test 'equal))
+	;; Will hold the file report.  KEY is file-name, VALUE is
+	;; (cons label-1-version label-2-version).  If one of the
+	;; versions does not exist, the string "*no version*" is used
+	;; instead.
+	(report (make-hash-table :test 'equal))
 
-        ;; We don't want the full pathname in front of each file so we
-        ;; remove it by skipping SKIP chars.
-        (skip (length dir)))
+	;; We don't want the full pathname in front of each file so we
+	;; remove it by skipping SKIP chars.
+	(skip (length dir)))
 
     ;; Start a cleartool find for label-1
     (with-current-buffer buf1
@@ -2615,26 +2617,26 @@ The list of files is not returned in any particular order."
       ;; we use ignore-errors because the cleartool sentinel deletes
       ;; the process on exit.
       (while (or (ignore-errors (eq (process-status buf1) 'run))
-                 (ignore-errors (eq (process-status buf2) 'run)))
-        (accept-process-output)
-        (sit-for 1)))
+		 (ignore-errors (eq (process-status buf2) 'run)))
+	(accept-process-output)
+	(sit-for 1)))
 
     ;; Process the listed files for label-1.  For each line in the
     ;; buffer, find the file and version and add it to the report.
     (with-current-buffer buf1
       (goto-char (point-min))
       (while (not (= (point) (point-max)))
-        (beginning-of-line)
-        (forward-char skip)
-        (let* ((start (point))
-               (end (progn (end-of-line) (point)))
-               (str (buffer-substring-no-properties start end))
-               (file-and-version (split-string str "@@")))
-          (when (= (length file-and-version) 2)
-            (let ((file (car file-and-version))
-                  (version (cadr file-and-version)))
-              (puthash file (cons version "*no version*") report))))
-        (forward-line 1)))
+	(beginning-of-line)
+	(forward-char skip)
+	(let* ((start (point))
+	       (end (progn (end-of-line) (point)))
+	       (str (buffer-substring-no-properties start end))
+	       (file-and-version (split-string str "@@")))
+	  (when (= (length file-and-version) 2)
+	    (let ((file (car file-and-version))
+		  (version (cadr file-and-version)))
+	      (puthash file (cons version "*no version*") report))))
+	(forward-line 1)))
 
     ;; Process the listed files for label-2.  For each line in the
     ;; buffer, find the file and version than update the report with
@@ -2644,26 +2646,26 @@ The list of files is not returned in any particular order."
     (with-current-buffer buf2
       (goto-char (point-min))
       (while (not (= (point) (point-max)))
-        (beginning-of-line)
-        (forward-char skip)
-        (let* ((start (point))
-               (end (progn (end-of-line) (point)))
-               (str (buffer-substring-no-properties start end))
-               (file-and-version (split-string str "@@")))
-          (when (= (length file-and-version) 2)
-            (let ((file (car file-and-version))
-                  (version (cadr file-and-version)))
-              (let ((ver1 (car (gethash file report))))
-                (cond
-                  ;; no version 1
-                  ((null ver1)
-                   (puthash file (cons "*no version*" version) report))
-                  ;; the two versions are identical
-                  ((string= ver1 version)
-                   (remhash file report))
-                  ;; version 1 exists, add version 2
-                  (t (puthash file (cons ver1 version) report)))))))
-        (forward-line 1)))
+	(beginning-of-line)
+	(forward-char skip)
+	(let* ((start (point))
+	       (end (progn (end-of-line) (point)))
+	       (str (buffer-substring-no-properties start end))
+	       (file-and-version (split-string str "@@")))
+	  (when (= (length file-and-version) 2)
+	    (let ((file (car file-and-version))
+		  (version (cadr file-and-version)))
+	      (let ((ver1 (car (gethash file report))))
+		(cond
+		  ;; no version 1
+		  ((null ver1)
+		   (puthash file (cons "*no version*" version) report))
+		  ;; the two versions are identical
+		  ((string= ver1 version)
+		   (remhash file report))
+		  ;; version 1 exists, add version 2
+		  (t (puthash file (cons ver1 version) report)))))))
+	(forward-line 1)))
 
     ;; cleanup after us.  maybe these should be in an unwind-protect
     (kill-buffer buf1)
@@ -2675,9 +2677,9 @@ The list of files is not returned in any particular order."
     ;; "." not "/" as cleartool prints it.
     (loop for k being the hash-keys of report using (hash-values v)
        collect (list
-                (let ((file (replace-regexp-in-string "\\`[\\\\/]" "" k)))
-                  (if (equal file "") "." file))
-                (car v) (cdr v)))))
+		(let ((file (replace-regexp-in-string "\\`[\\\\/]" "" k)))
+		  (if (equal file "") "." file))
+		(car v) (cdr v)))))
 
 ;;;; Additional vc clearcase commands (for files)
 
@@ -2695,18 +2697,18 @@ the whole revision string."
   (interactive (list (buffer-file-name (current-buffer))))
   (if (and (stringp file) (vc-clearcase-registered file))
       (progn
-        (ah-clearcase-maybe-set-vc-state file)
-        (let* ((fprop (ah-clearcase-file-fprop file))
-               (version (ah-clearcase-fprop-version fprop))
-               (co-status (ah-clearcase-fprop-status fprop)))
-          (kill-new version)
-          (message "File version: %s%s" version
-                   (case co-status
-                     ('reserved ", checkedout reserved")
-                     ('unreserved ", checkedout unreserved")
-                     ('hijacked ", hijacked")
-                     ('broken-view ", broken view")
-                     (t "")))))
+	(ah-clearcase-maybe-set-vc-state file)
+	(let* ((fprop (ah-clearcase-file-fprop file))
+	       (version (ah-clearcase-fprop-version fprop))
+	       (co-status (ah-clearcase-fprop-status fprop)))
+	  (kill-new version)
+	  (message "File version: %s%s" version
+		   (case co-status
+		     ('reserved ", checkedout reserved")
+		     ('unreserved ", checkedout unreserved")
+		     ('hijacked ", hijacked")
+		     ('broken-view ", broken view")
+		     (t "")))))
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-what-rule (file)
@@ -2714,12 +2716,12 @@ the whole revision string."
   (interactive (list (buffer-file-name (current-buffer))))
   (if (and (stringp file) (vc-clearcase-registered file))
       (progn
-        (ah-clearcase-maybe-set-vc-state file)
-        (let ((rule (ah-clearcase-fprop-what-rule
-                     (ah-clearcase-file-fprop file))))
-          (if rule
-              (message "Configspec rule: %s" rule)
-              (message "No configspec rule"))))
+	(ah-clearcase-maybe-set-vc-state file)
+	(let ((rule (ah-clearcase-fprop-what-rule
+		     (ah-clearcase-file-fprop file))))
+	  (if rule
+	      (message "Configspec rule: %s" rule)
+	      (message "No configspec rule"))))
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-what-view-tag (file)
@@ -2727,12 +2729,12 @@ the whole revision string."
   (interactive (list (buffer-file-name (current-buffer))))
   (if (and (stringp file) (vc-clearcase-registered file))
       (progn
-        (ah-clearcase-maybe-set-vc-state file)
-        (let ((view-tag (ah-clearcase-fprop-view-tag
-                         (ah-clearcase-file-fprop file))))
-          (if view-tag
-              (message "View tag: %s" view-tag)
-              (message "View tag not (yet?) known"))))
+	(ah-clearcase-maybe-set-vc-state file)
+	(let ((view-tag (ah-clearcase-fprop-view-tag
+			 (ah-clearcase-file-fprop file))))
+	  (if view-tag
+	      (message "View tag: %s" view-tag)
+	      (message "View tag not (yet?) known"))))
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-gui-vtree-browser (ask-for-file)
@@ -2745,25 +2747,25 @@ be browsed)"
   (let ((file (buffer-file-name (current-buffer))))
     (when ask-for-file
       (setq file
-            (expand-file-name
-             (read-file-name "Browse vtree for: " file file t))))
+	    (expand-file-name
+	     (read-file-name "Browse vtree for: " file file t))))
     (if (and file (vc-clearcase-registered file))
-        (progn
-          (message "Starting Vtree browser...")
-          (start-process-shell-command
-           "Vtree_browser" nil ah-clearcase-vtree-program file))
-        (message "Not a clearcase file"))))
+	(progn
+	  (message "Starting Vtree browser...")
+	  (start-process-shell-command
+	   "Vtree_browser" nil ah-clearcase-vtree-program file))
+	(message "Not a clearcase file"))))
 
 
 ;;;; Additional vc clearcase commands (for directories)
 
 (defconst ah-cleartool-lsco-fmt
   (concat "----------\n"
-          "file: %n\n"
-          "parent-version: %PVn\n"
-          "checkout-status: (%Rf)\n"
-          "user: %u; view: %Tf; date: %Sd (%Ad days ago)\n\n"
-          "%c")
+	  "file: %n\n"
+	  "parent-version: %PVn\n"
+	  "checkout-status: (%Rf)\n"
+	  "user: %u; view: %Tf; date: %Sd (%Ad days ago)\n\n"
+	  "%c")
   "Format string to use when listing checkouts.")
 
 ;;;###autoload
@@ -2778,26 +2780,26 @@ all the views are listed."
     (setq dir (replace-match "" nil nil dir)))
   (setq dir (expand-file-name dir))
   (let ((user-selection
-         (if prefix-arg
-             (let ((u (read-from-minibuffer "User: ")))
-               (unless (string= u "")
-                 (list "-user" u)))
-             (list "-me" "-cview")))
-        (other-options (list "-recurse" "-fmt" ah-cleartool-lsco-fmt dir)))
+	 (if prefix-arg
+	     (let ((u (read-from-minibuffer "User: ")))
+	       (unless (string= u "")
+		 (list "-user" u)))
+	     (list "-me" "-cview")))
+	(other-options (list "-recurse" "-fmt" ah-cleartool-lsco-fmt dir)))
     (with-current-buffer (get-buffer-create "*clearcase-lsco*")
       (let ((inhibit-read-only t))
-        (erase-buffer)
-        (setq default-directory dir)
-        (insert "Listing checkouts in " dir "\n")
-        (insert "Cleartool command: "
-                (format "%S" (append user-selection other-options))
-                "\n")
-        (ah-clearcase-log-view-mode)
-        (let ((process
-               (ah-cleartool-do
-                "lsco"
-                (append user-selection other-options) (current-buffer))))
-          (switch-to-buffer-other-window (process-buffer process)))))))
+	(erase-buffer)
+	(setq default-directory dir)
+	(insert "Listing checkouts in " dir "\n")
+	(insert "Cleartool command: "
+		(format "%S" (append user-selection other-options))
+		"\n")
+	(ah-clearcase-log-view-mode)
+	(let ((process
+	       (ah-cleartool-do
+		"lsco"
+		(append user-selection other-options) (current-buffer))))
+	  (switch-to-buffer-other-window (process-buffer process)))))))
 
 ;;;###autoload
 (defun vc-clearcase-update-view (dir prefix-arg)
@@ -2815,12 +2817,12 @@ are made to the views)."
       (when prefix-arg (insert "*PREVIEW* "))
       (insert "Updating directory " dir "\n")
       (let ((options (list "-force" "-rename" dir)))
-        (when prefix-arg (setq options (cons "-print" options)))
-        (let ((process (ah-cleartool-do "update" options (current-buffer))))
-          (switch-to-buffer-other-window (process-buffer process))
-          ;; TODO: how do we refresh all the files that were loaded
-          ;; from this view?
-          )))))
+	(when prefix-arg (setq options (cons "-print" options)))
+	(let ((process (ah-cleartool-do "update" options (current-buffer))))
+	  (switch-to-buffer-other-window (process-buffer process))
+	  ;; TODO: how do we refresh all the files that were loaded
+	  ;; from this view?
+	  )))))
 
 (when (fboundp 'define-button-type)
   (define-button-type 'vc-clearcase-start-ediff-button
@@ -2828,13 +2830,16 @@ are made to the views)."
       'help-echo "mouse-2, RET: Compare the two file revisions with Ediff"
       'follow-link t
       'action (lambda (button)
-                (let ((file-name (button-get button 'file-name))
-                      (revision-1 (button-get button 'revision-1))
-                      (revision-2 (button-get button 'revision-2)))
-                  (with-current-buffer (find-file-noselect file-name)
-                    (funcall
-                     (intern (format "ediff-%S-internal" ediff-version-control-package))
-                     revision-1 revision-2 nil))))
+		(require 'ediff)
+		(declare (special ediff-version-control-package))
+		(let ((file-name (button-get button 'file-name))
+		      (revision-1 (button-get button 'revision-1))
+		      (revision-2 (button-get button 'revision-2)))
+		  (with-current-buffer (find-file-noselect file-name)
+		    (funcall
+		     (intern (format "ediff-%S-internal"
+				     ediff-version-control-package))
+		     revision-1 revision-2 nil))))
       'skip t))
 
 ;;;###autoload
@@ -2845,17 +2850,17 @@ files in `dir' that have different revisions between `label-1'
 and `label-2'."
   (interactive
    (let ((d (read-file-name "Report on directory: "
-                            default-directory default-directory t nil)))
+			    default-directory default-directory t nil)))
      (assert (file-directory-p d))
      (let* ((vob (ah-clearcase-vob-tag-for-path d))
-            (l1 (ah-clearcase-read-label "Label 1 (newer): " vob))
-            (l2 (ah-clearcase-read-label "Label 2 (older): " vob nil t)))
+	    (l1 (ah-clearcase-read-label "Label 1 (newer): " vob))
+	    (l2 (ah-clearcase-read-label "Label 2 (older): " vob nil t)))
        (list d l1 l2))))
   (setq dir (expand-file-name dir))
   (message "Fetching label differencess...")
   (let ((diff (vc-clearcase-get-label-differences dir label-1 label-2))
-        ;; the format string for a line in the report
-        line-fmt)
+	;; the format string for a line in the report
+	line-fmt)
     (setq diff (sort* diff 'string< :key 'car))
     (loop for (file rev-1 rev-2) in diff
        maximize (length file) into file-len
@@ -2863,7 +2868,7 @@ and `label-2'."
        maximize (length rev-2) into lb2-len
        finally do
        (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds"
-                              file-len lb1-len lb2-len)))
+			      file-len lb1-len lb2-len)))
 
     (with-current-buffer (get-buffer-create "*label-diff-report*")
       ;; these are declared in ps-print.el, but I want to avoid an
@@ -2878,23 +2883,23 @@ and `label-2'."
       (erase-buffer)
       (buffer-disable-undo)
       (insert (format "Directory: %s\nLabel 1: %s\nLabel 2: %s\n\n"
-                      dir label-1 label-2))
+		      dir label-1 label-2))
       (let ((header (format line-fmt 0 "File" label-1 label-2)))
-        (insert header)
-        (insert "\n")
-        (insert (make-string (length header) ?=)))
+	(insert header)
+	(insert "\n")
+	(insert (make-string (length header) ?=)))
       (insert "\n")
 
       (loop for (file rev-1 rev-2) in diff
-         count 1 into pos
-         do (progn
-              (if (fboundp 'insert-text-button)
-                  (insert-text-button
-                   (format line-fmt pos file rev-1 rev-2)
-                   'type 'vc-clearcase-start-ediff-button
-                   'file-name file 'revision-1 rev-1 'revision-2 rev-2)
-                  (insert (format line-fmt pos file rev-1 rev-2)))
-              (insert "\n")))
+	 count 1 into pos
+	 do (progn
+	      (if (fboundp 'insert-text-button)
+		  (insert-text-button
+		   (format line-fmt pos file rev-1 rev-2)
+		   'type 'vc-clearcase-start-ediff-button
+		   'file-name file 'revision-1 rev-1 'revision-2 rev-2)
+		  (insert (format line-fmt pos file rev-1 rev-2)))
+	      (insert "\n")))
 
       (goto-char (point-min))
       (buffer-enable-undo)
@@ -2940,18 +2945,18 @@ you can set the configspec.  This note is here, because
 `vc-clearcase-edcs' allows you to inspect the configspec of ANY
 view accessible from this machine."
   (interactive (list (current-buffer)
-                     (with-current-buffer (current-buffer)
-                       ah-clearcase-edcs-view-tag)))
+		     (with-current-buffer (current-buffer)
+		       ah-clearcase-edcs-view-tag)))
   (let ((vprop (ah-clearcase-get-vprop view-tag))
-        (configspec (buffer-file-name buffer)))
+	(configspec (buffer-file-name buffer)))
     (unless configspec (error "Buffer has no file associated with it"))
     (unless (memq (ah-clearcase-vprop-type vprop) '(snapshot dynamic))
       (error "Nothing known about %s.  Visit a file in the view first"
-             view-tag))
+	     view-tag))
     (when (buffer-modified-p buffer)
       (if (yes-or-no-p (format "Save %s? " configspec))
-          (save-buffer buffer)
-          (error "Aborted")))
+	  (save-buffer buffer)
+	  (error "Aborted")))
     (case (ah-clearcase-vprop-type vprop)
       ('dynamic
        ;; in a dynamic view, we simply set the configspec, than
@@ -2965,27 +2970,27 @@ view accessible from this machine."
        ;; the configspec with a ah-cleartool-do command, and trigger
        ;; the resynch in its finished callback.
        (with-current-buffer (get-buffer-create "*clearcase-setcs*")
-         (let ((inhibit-read-only t))
-           (erase-buffer)
-           (cd (ah-clearcase-vprop-root vprop))
-           (let ((process
-                  (ah-cleartool-do "setcs"
-                                   (list "-tag" view-tag configspec)
-                                   (current-buffer))))
-             (switch-to-buffer-other-window (process-buffer process))
-             ;; reuse this variable to hold the view tag in the update
-             ;; buffer.
-             (set (make-local-variable 'ah-clearcase-edcs-view-tag) view-tag)
-             (setq ah-cleartool-finished-function
-                   '(lambda ()
-                     (ah-clearcase-refresh-files-in-view
-                      ah-clearcase-edcs-view-tag))))))))))
+	 (let ((inhibit-read-only t))
+	   (erase-buffer)
+	   (cd (ah-clearcase-vprop-root vprop))
+	   (let ((process
+		  (ah-cleartool-do "setcs"
+				   (list "-tag" view-tag configspec)
+				   (current-buffer))))
+	     (switch-to-buffer-other-window (process-buffer process))
+	     ;; reuse this variable to hold the view tag in the update
+	     ;; buffer.
+	     (set (make-local-variable 'ah-clearcase-edcs-view-tag) view-tag)
+	     (setq ah-cleartool-finished-function
+		   '(lambda ()
+		     (ah-clearcase-refresh-files-in-view
+		      ah-clearcase-edcs-view-tag))))))))))
 
 (defun ah-clearcase-setcs-and-kill-buffer (&optional buffer view-tag)
   "Set the configspec found in BUFFER to the VIEW-TAG than kill the buffer."
   (interactive (list (current-buffer)
-                     (with-current-buffer (current-buffer)
-                       ah-clearcase-edcs-view-tag)))
+		     (with-current-buffer (current-buffer)
+		       ah-clearcase-edcs-view-tag)))
   (ah-clearcase-setcs buffer view-tag)
   (let ((window (get-buffer-window buffer t)))
     (when (and window (not (window-dedicated-p window)))
@@ -2998,9 +3003,9 @@ view accessible from this machine."
   (make-local-variable 'ah-clearcase-edcs-view-tag)
   ;; 'adapted' from values in emacs-lisp-mode
   (setq comment-start "#"
-        comment-start-skip "\\(\\(^\\|[^\\\\\n]\\)\\(\\\\\\\\\\)*\\)#+ *"
-        comment-end ""
-        comment-end-skip nil)
+	comment-start-skip "\\(\\(^\\|[^\\\\\n]\\)\\(\\\\\\\\\\)*\\)#+ *"
+	comment-end ""
+	comment-end-skip nil)
   (font-lock-mode t))
 
 ;; Provide a shorter alias for the edcs mode.  This is useful if you
@@ -3009,9 +3014,9 @@ view accessible from this machine."
 
 
 (easy-mmode-defmap ah-clearcase-edcs-mode-map
-                   '(("\C-c\C-s" . ah-clearcase-setcs)
-                     ("\C-c\C-c" . ah-clearcase-setcs-and-kill-buffer))
-                   "Keymap for Clearcase Edit Configspec mode")
+		   '(("\C-c\C-s" . ah-clearcase-setcs)
+		     ("\C-c\C-c" . ah-clearcase-setcs-and-kill-buffer))
+		   "Keymap for Clearcase Edit Configspec mode")
 
 (modify-syntax-entry ?\# "<" ah-clearcase-edcs-mode-syntax-table)
 (modify-syntax-entry ?\n ">" ah-clearcase-edcs-mode-syntax-table)
@@ -3029,11 +3034,11 @@ of the current file's view-tag."
      ;; get an initial view-tag if possible.
      (let ((file (buffer-file-name (current-buffer))))
        (when (and file (vc-clearcase-registered file))
-         (ah-clearcase-fprop-view-tag (ah-clearcase-file-fprop file)))))))
+	 (ah-clearcase-fprop-view-tag (ah-clearcase-file-fprop file)))))))
 
   (message "Fetching configspec for %s" view-tag)
   (let ((tid (ah-cleartool-ask (concat "catcs -tag " view-tag) 'nowait))
-        (csfile (format "%s%s.configspec" temporary-file-directory view-tag)))
+	(csfile (format "%s%s.configspec" temporary-file-directory view-tag)))
     (with-current-buffer (find-file-noselect csfile)
       (ah-clearcase-edcs-mode)
       (setq ah-clearcase-edcs-view-tag view-tag)
@@ -3089,25 +3094,25 @@ In interactive mode, prompts for a view-tag name."
   (let ((m (make-sparse-keymap "Clearcase")))
     (define-key m [vc-clearcase-label-diff-report]
       '(menu-item "Label diff report..." vc-clearcase-label-diff-report
-        :help "Report file version differences between two labels"))
+	:help "Report file version differences between two labels"))
     (define-key m [separator-clearcase-1]
       '("----" 'separator-1))
     (define-key m [vc-clearcase-list-view-private-files]
       '(menu-item "List View Private Files..."
-        vc-clearcase-list-view-private-files
-        :help "List view private files in a directory"))
+	vc-clearcase-list-view-private-files
+	:help "List view private files in a directory"))
     (define-key m [vc-clearcase-list-checkouts]
       '(menu-item "List Checkouts..." vc-clearcase-list-checkouts
-        :help "List Clearcase checkouts in a directory"))
+	:help "List Clearcase checkouts in a directory"))
     (define-key m [vc-clearcase-update-view]
       '(menu-item "Update snapshot view..." vc-clearcase-update-view
-        :help "Update a snapshot view"))
+	:help "Update a snapshot view"))
     (define-key m [vc-clearcase-edcs]
       '(menu-item "Edit Configspec..." vc-clearcase-edcs
-        :help "Edit a view's configspec"))
+	:help "Edit a view's configspec"))
     (define-key m [vc-clearcase-start-view]
       '(menu-item "Start dynamic view..." vc-clearcase-start-view
-        :help "Start a dynamic view"))
+	:help "Start a dynamic view"))
     (fset 'clearcase-global-menu m)))
 
 ;;;###autoload
@@ -3138,52 +3143,52 @@ This is the string returned by the cleartool -version command."
      "vc-clearcase.el"
      `( vc-clearcase-cvsid
 
-        ah-clearcase-cleartool-program
-        ah-cleartool-timeout
-        ah-cleartool-idle-timeout
-        ah-cleartool-save-stop-data
-        ah-clearcase-rmbranch-on-revert-flag
-        ah-clearcase-checkout-comment-type
-        ah-clearcase-checkout-policy
-        ah-clearcase-confirm-label-move
-        ah-clearcase-diff-format
-        ah-clearcase-diff-cleanup-flag
-        ah-clearcase-no-label-action
+	ah-clearcase-cleartool-program
+	ah-cleartool-timeout
+	ah-cleartool-idle-timeout
+	ah-cleartool-save-stop-data
+	ah-clearcase-rmbranch-on-revert-flag
+	ah-clearcase-checkout-comment-type
+	ah-clearcase-checkout-policy
+	ah-clearcase-confirm-label-move
+	ah-clearcase-diff-format
+	ah-clearcase-diff-cleanup-flag
+	ah-clearcase-no-label-action
 
-        ah-cleartool-next-command
+	ah-cleartool-next-command
 
-        ,(cons 'ah-cleartool-last-command-timestamp
-               (lambda (x buf)
-                 (let ((name (symbol-name x))
-                       (value (symbol-value x)))
-                   (insert name " " (format "%.3f" value)
-                           "; " (format "%.3f" (- (float-time) value))
-                           " seconds ago")
-                   (lisp-indent-line)
-                   (insert "\n"))))
+	,(cons 'ah-cleartool-last-command-timestamp
+	       (lambda (x buf)
+		 (let ((name (symbol-name x))
+		       (value (symbol-value x)))
+		   (insert name " " (format "%.3f" value)
+			   "; " (format "%.3f" (- (float-time) value))
+			   " seconds ago")
+		   (lisp-indent-line)
+		   (insert "\n"))))
 
-        ah-cleartool-ctid
-        ah-cleartool-ntid
-        ah-cleartool-terr
-        ah-cleartool-tresults)
+	ah-cleartool-ctid
+	ah-cleartool-ntid
+	ah-cleartool-terr
+	ah-cleartool-tresults)
 
      (lambda ()
        (insert "\n\nClearCase version:\n==================\n\n"
-               (ah-clearcase-version))
+	       (ah-clearcase-version))
        (insert "\n\nContents of *cleartool-aborts*:\n"
-               "===============================\n\n")
+	       "===============================\n\n")
        (if ah-cleartool-save-stop-data
-           (ignore-errors (insert-buffer-substring
-                           (get-buffer "*cleartool-aborts*")))
-           (insert "ah-cleartool-save-stop-data is nil, "
-                   "*cleartool-aborts* is not available"))
+	   (ignore-errors (insert-buffer-substring
+			   (get-buffer "*cleartool-aborts*")))
+	   (insert "ah-cleartool-save-stop-data is nil, "
+		   "*cleartool-aborts* is not available"))
        (insert "\n")
        (insert "\n\nContents of *cleartool-tq-trace*:\n"
-               "=================================\n\n")
+	       "=================================\n\n")
        (let ((buf (get-buffer "*cleartool-tq-trace*")))
-         (if buf
-             (insert-buffer-substring buf)
-             (insert "buffer *cleartool-tq-trace* is not available")))
+	 (if buf
+	     (insert-buffer-substring buf)
+	     (insert "buffer *cleartool-tq-trace* is not available")))
        (insert "\n")))))
 
 (defvar ah-clearcase-function-to-trace

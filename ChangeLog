@@ -1,3 +1,11 @@
+2006-12-10  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el: 1.91 (Bug 1608947) require the cl package at
+	runtime
+	(vc-clearcase-start-ediff-button): 1.91 require the ediff package
+	and declare ediff-version-control-package as special to avoid
+	compiler warnings.
+
 2006-11-04  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-what-version): 1.90 save the

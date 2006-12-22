@@ -1924,7 +1924,10 @@ meaning in ClearCase."
 	   (ah-clearcase-find-version-helper file rev tmpfile)
 	   (with-current-buffer buffer
 	     (insert-file-contents-literally tmpfile)))
-      (delete-file tmpfile))))
+      ;; If clearcase failed, the temp file will not exist and
+      ;; delete-file will signal an error.
+      (when (file-exists-p tmpfile)
+	(delete-file tmpfile)))))
 
 
 (defun ah-clearcase-finish-checkout (file rev comment mode)

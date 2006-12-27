@@ -1,3 +1,13 @@
+2006-12-27  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-log-view-forward-record): 1.93 use
+	destructuring-bind instead of multiple-value-bind
+
+2006-12-23  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-find-version): 1.92 only delete
+	the temporary file if it exists.
+
 2006-12-10  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el: 1.91 (Bug 1608947) require the cl package at

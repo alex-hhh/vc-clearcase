@@ -895,7 +895,7 @@ found, nil is returned."
   "Move forward NUM-RECORDS, if negative, move backward.
 Return the number of records actually moved."
   (interactive "p")
-  (multiple-value-bind (search-fn limit adjust)
+  (destructuring-bind (search-fn limit adjust)
       (if (>= num-records 0)
 	  (list 're-search-forward (point-max) 1)
 	  (list 're-search-backward (point-min) -1))

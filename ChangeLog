@@ -1,3 +1,14 @@
+2007-01-02  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-annotate-command): 1.94 use 8
+	characters for the user name in the annotate output.
+	(vc-clearcase-annotate-command): 1.94 remove call to
+	ah-clearcase-annotate-post-process.
+	(ah-clearcase-annotate-deleted-face): face removed.
+	(ah-clearcase-annotate-mark-deleted): function removed.
+	(vc-clearcase-start-ediff-button): 1.94 require the ediff-vers
+	package instead of ediff.
+
 2006-12-27  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-log-view-forward-record): 1.93 use

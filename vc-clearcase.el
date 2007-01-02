@@ -2292,10 +2292,10 @@ will ask if you want to display the deleted sections as well."
   (let ((pname (concat file (when rev (concat "@@" rev)))))
     (vc-setup-buffer buf)
     (with-current-buffer buf
-      (let ((fmt-args '("-fmt" "%-9.9Sd %-4.4u %Sn |"))
+      (let ((fmt-args '("-fmt" "%-9.9Sd %-8.8u %Sn |"))
 	    (rm-args (when (and current-prefix-arg
 				(y-or-n-p "Show deleted sections? "))
-		       '("-rm" "-rmfmt" "D %-9.9Sd %-4.4u |"))))
+		       '("-rm" "-rmfmt" "D %-9.9Sd %-8.8u |"))))
 	(ah-cleartool-do
 	 "annotate"
 	 (append fmt-args rm-args `("-out" "-" "-nheader" ,pname))
@@ -2303,8 +2303,7 @@ will ask if you want to display the deleted sections as well."
 	(setq ah-cleartool-finished-function
 	      '(lambda ()
 		(let ((buffer (current-buffer)))
-		  (ah-clearcase-annotate-post-process buffer)
-		  (ah-clearcase-annotate-mark-deleted buffer))))))))
+		  (ah-clearcase-annotate-post-process buffer))))))))
 
 (defun vc-clearcase-annotate-difference (point)
   "Return the age in days of POINT."
@@ -2317,13 +2316,6 @@ will ask if you want to display the deleted sections as well."
 (defun vc-clearcase-annotate-extract-revision-at-line ()
   "Return the version of (point)."
   (get-text-property (point) 'vc-clearcase-revision))
-
-(defconst ah-clearcase-annotate-deleted-face
-  (progn
-    (unless (intern-soft 'ah-clearcase-deleted-face)
-      (let ((face (make-face 'ah-clearcase-deleted-face)))
-	(set-face-attribute face nil :strike-through t)))
-    'ah-clearcase-deleted-face))
 
 (defconst ah-clearcase-annotate-months
   '(("Jan" . 1) ("Feb" . 2) ("Mar" . 3) ("Apr" . 4)
@@ -2407,18 +2399,6 @@ and `vc-clearcase-annotate-revision-atline' work fast."
 	  (put-text-property 0 max 'vc-clearcase-age age str)
 	  (put-text-property 0 max 'vc-clearcase-revision revision str)
 	  (replace-match str nil t))))))
-
-
-(defun ah-clearcase-annotate-mark-deleted (buffer)
-  "Mark all deleted files in BUFFER with strike-through face.
-When BUFFER is nil, the current buffer is used."
-  (with-current-buffer buffer
-    (save-excursion
-      (let ((inhibit-read-only t))
-	(goto-char (point-min))
-	(while (re-search-forward ".*|D .*|\\(.*\\)\\s-*$" nil 'noerror)
-	  (put-text-property (match-beginning 1) (match-end 1)
-			     'face '(:strike-through t)))))))
 
 (defcustom ah-clearcase-no-label-action 'ask
   "What to do when we are asked to apply a label that does not exist.
@@ -2833,7 +2813,7 @@ are made to the views)."
       'help-echo "mouse-2, RET: Compare the two file revisions with Ediff"
       'follow-link t
       'action (lambda (button)
-		(require 'ediff)
+		(require 'ediff-vers)
 		(declare (special ediff-version-control-package))
 		(let ((file-name (button-get button 'file-name))
 		      (revision-1 (button-get button 'revision-1))

@@ -1,5 +1,25 @@
 -*- outline -*- 
 
+* Release 1.95
+
+** some configuration variables have been renamed.
+   If you had non default values for these, you will need to update
+   your emacs initialisation file.  The easiest way is to browse the
+   vc-clearcase customisation group to set them again.
+
+   `ah-clearcase-checkout-comment-type' was renamed from
+   `vc-clearcase-checkout-comment-type'
+
+   `ah-clearcase-checkout-policy' was renamed from
+   `vc-clearcase-checkout-policy'
+
+** `vc-clearcase-label-diff-report' creates clickable links in the report
+   This only works in Emacs 22, as it requires the button library.
+
+** Fix Bug 1564792 "Process cleartool not running" error
+** Fix Bug 1608947 member* unbound error
+** Fix Bug 1608952 Username truncated in vc-annotate
+
 * Release 1.87
 
 ** instalation instructions have been updated 

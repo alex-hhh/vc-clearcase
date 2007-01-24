@@ -2233,10 +2233,22 @@ Only works for the clearcase log format defined in
     (when pos (goto-char pos))))
 
 
-(defcustom ah-clearcase-diff-format 'diff
-  "Format of the output by the cleartool diff command."
-  :type '(choice (const :tag "Diff Format" diff)
-	  (const :tag "Serial Format" serial))
+(defcustom vc-clearcase-diff-switches nil
+  "*Extra switches for clearcase diff under VC.
+This is either a string or a list of strings.  Usefull options
+are \"-diff_format\" or \"-serial_format\".
+
+To ignore the extra whitespace characters, you need the option
+\"-option \"-blank_ignore\"\".
+
+See the cleartool diff manual page for possible options."
+    :type '(choice (const :tag "None" nil)
+		 (string :tag "Argument String")
+		 (repeat :tag "Argument List"
+			 :value ("")
+			 string))
+  :version "21.1"
+  :group 'vc
   :group 'vc-clearcase)
 
 (defcustom ah-clearcase-diff-cleanup-flag t
@@ -2258,12 +2270,10 @@ Only works for the clearcase log format defined in
 	(message "Comparing file revisions...")
 	(let ((inhibit-read-only t))
 	  (erase-buffer)
-	  (let* ((diff-format (ecase ah-clearcase-diff-format
-				('diff "-diff_format")
-				('serial "-serial_format")))
-		 (diff (ah-cleartool
+	  (let ((diff (ah-cleartool
 			"diff %s \"%s\" \"%s\""
-			diff-format fver1 fver2)))
+		       (mapconcat 'identity (vc-switches 'CLEARCASE 'diff) " ")
+		       fver1 fver2)))
 	    (insert diff)
 	    (when ah-clearcase-diff-cleanup-flag
 	      (goto-char (point-min))
@@ -2274,14 +2284,12 @@ Only works for the clearcase log format defined in
 	    (not
 	     ;; the way we determine whether the files are identical
 	     ;; depends on the diff format we use.
-	     (ecase ah-clearcase-diff-format
-	       ('diff
+	     (or
 		;; diff format has an empty buffer
-		(equal (point-min) (point-max)))
-	       ('serial
-		;; serial format prints "Files are identical", so
-		;; we look for that.
-		(looking-at "Files are identical"))))))))))
+	      (equal (point-min) (point-max))
+	      ;; serial format prints "Files are identical", so we
+	      ;; look for that.
+	      (looking-at "Files are identical")))))))))
 
 
 (defun vc-clearcase-annotate-command (file buf rev)

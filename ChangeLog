@@ -1,3 +1,10 @@
+2007-01-24  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-diff-switches): 1.95 new variable
+	(ah-clearcase-diff-format): 1.95 removed
+	(vc-clearcase-diff): 1.95 use vc-clearcase-diff-switches instead
+	of ah-clearcase-diff-format
+
 2007-01-02  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-annotate-command): 1.94 use 8

@@ -200,8 +200,8 @@
 ;; * revert (file &optional contents-done) -- implemented, but
 ;;   `contents-done' is ignored.
 ;;
-;; - cancel-version (file editable) -- not implemented, ClearCase does
-;;   provide this functionality, but I consider it too dangerous.
+;; - cancel-version (file editable) -- implemented, see doc string for
+;;   `vc-clearcase-cancel-version'
 ;;
 ;; - merge (file rev1 rev2) -- implemented, but the operation will
 ;;   throw an error if the merge cannot be done automatically.  vc.el
@@ -249,7 +249,8 @@
 ;; - annotate-time () -- implemented (new in Emacs 22), we also
 ;;   implement annotate-difference which is Emacs 21.
 ;;
-;; - annotate-current-time () -- not implemented (new in Emacs 22)
+;; - annotate-current-time () -- not implemented, default is fine (new
+;;   in Emacs 22)
 ;;
 ;; - annotate-extract-revision-at-line () -- implemented (new in Emacs
 ;;   22)
@@ -1596,7 +1597,7 @@ comment file is removed."
     (let ((cfile (car comment-vars))
 	  (ctext (cadr comment-vars)))
       `(let ((,cfile
-	      (make-temp-name (concat temporary-file-directory "clearcase-"))))
+	      (make-temp-name (concat temporary-file-directory "vc-clearcase-"))))
 	 (unwind-protect
 	      (progn
 		(with-temp-file ,cfile
@@ -2128,6 +2129,110 @@ CONTENTS-DONE is ignored. The
       (let ((base (ah-clearcase-fprop-version-base fprop)))
 	(ah-cleartool "rmbranch -force -nc \"%s@@%s\"" file base)))
     (ah-clearcase-maybe-set-vc-state file 'force)))
+
+
+(defun vc-clearcase-cancel-version (file editable)
+  "Remove the current version of FILE.
+FILE must be checked in and latest on its branch.  We use
+\"rmver\" to remove the version, but a version will not be
+removed when a branch begins there or it has labels or attributes
+attached.
+
+When EDITABLE is non nil, the file will be checked out and the
+contents of the deleted version will be placed in FILE.  A
+checkin at this point will create a new version with the same
+contents as the deleted version.  This is usefull if you checked
+the file in by mistake and want to rework some changes.
+
+When EDITABLE is nil, the version is removed completely.  The
+current branch might be removed as well if
+`ah-clearcase-rmbranch-on-revert-flag' is non nil."
+
+;; Implementation Notes:
+;;
+;; Here is what we need to do in order to cancel a version so that the
+;; changes are kept ready for a new checkin:
+;;
+;; * make a temporary copy of the file and the checkin comment for the
+;;   file.  Copy-file will create a read-only copy, since the file is
+;;   checked in.
+;;
+;; * remove the version
+;;
+;; * on a snapshot view, this will leave the file in place as a view
+;;   private file.  We need to remove the file and run a clearcase
+;;   update to get the version controlled file back, otherwise
+;;   ClearCase commands will not work on the file.
+;;
+;; * checkout the file.  We use `vc-clearcase-checkout', as the
+;;   checkout logic can be complicated too.
+;;
+;; * we need to replace the checked out file with the saved copy, make
+;;   the file writable and load it back into emacs.
+;;
+;;
+;; To cancel a version so that it is completely removed we simply need
+;; to:
+;;
+;; * remove the version
+;;
+;; * on a snapshot view, update the file
+;;
+;; * if removing the version left an empty branch, we honour the
+;;   `ah-clearcase-rmbranch-on-revert-flag' (remove the branch if the
+;;   flag is set.
+;;
+
+  (setq file (expand-file-name file))
+  (let ((fprop (ah-clearcase-file-fprop file))
+	(tmp (make-temp-name (concat temporary-file-directory "vc-clearcase-")))
+	(comment-text nil)
+	(ah-clearcase-checkout-comment-type 'none))
+    (unwind-protect
+	 (progn
+	   (when editable
+	     (copy-file file tmp)
+	     ;; dont read comments for now, as we don't know how to
+	     ;; set them anyway
+
+
+;;              (setq comment-text
+;;                    (ah-cleartool "desc -fmt \"%%c\" \"%s@@%s\""
+;;                                  file (ah-clearcase-fprop-version fprop)))
+
+	     )
+
+	   (ah-cleartool "rmver -force -nc \"%s@@%s\""
+			 file (ah-clearcase-fprop-version fprop))
+
+	   (when (ah-clearcase-snapshot-view-p (ah-clearcase-fprop-view-tag fprop))
+	     (delete-file file)
+	     (ah-cleartool "update -force \"%s\"" file))
+
+	   ;; need to do this here, otherwise `vc-clearcase-checkout'
+	   ;; below will not work
+	   (ah-clearcase-maybe-set-vc-state file 'force)
+
+	   (when editable
+	     (vc-clearcase-checkout file 'editable)
+	     (setq fprop (ah-clearcase-file-fprop file))
+	     ;; TODO: we should tell ClearCase what the checkout
+	     ;; comment is.
+
+	     (copy-file tmp file 'overwrite)
+	     ;; FIXME: only need to turn on the writable bit.
+	     (set-file-modes file (default-file-modes))
+	     (revert-buffer 'ignore-auto 'noconfirm))
+
+	   (when (and (not editable)
+		      ah-clearcase-rmbranch-on-revert-flag
+		      (string-match "[/\\]0$" (ah-clearcase-fprop-parent fprop)))
+	     ;; we were left with an empty branch, remove that as well
+	     (ah-cleartool "rmbranch -force -nc \"%s@@%s\""
+			   file (ah-clearcase-fprop-version-base fprop))
+
+	     (ah-clearcase-maybe-set-vc-state file 'force)))
+      (when (file-exists-p tmp) (delete-file tmp)))))
 
 
 (defun vc-clearcase-merge (file rev1 rev2)

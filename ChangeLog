@@ -1,3 +1,9 @@
+2007-03-14  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (with-clearcase-cfile): 1.96 use "vc-clearcase-"
+	as the prefix for the temporary file.
+	(vc-clearcase-cancel-version): 1.96 new function.
+
 2007-01-24  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-diff-switches): 1.95 new variable

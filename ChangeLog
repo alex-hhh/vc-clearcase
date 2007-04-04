@@ -1,3 +1,8 @@
+2007-04-04  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-start-ediff-button): 1.97 require
+	the ediff package
+
 2007-03-14  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (with-clearcase-cfile): 1.96 use "vc-clearcase-"

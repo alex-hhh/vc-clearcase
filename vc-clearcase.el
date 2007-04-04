@@ -2926,7 +2926,7 @@ are made to the views)."
       'help-echo "mouse-2, RET: Compare the two file revisions with Ediff"
       'follow-link t
       'action (lambda (button)
-		(require 'ediff-vers)
+		(require 'ediff)
 		(declare (special ediff-version-control-package))
 		(let ((file-name (button-get button 'file-name))
 		      (revision-1 (button-get button 'revision-1))

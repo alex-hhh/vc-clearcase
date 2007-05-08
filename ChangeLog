@@ -1,3 +1,23 @@
+2007-05-08  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-vprop): 1.98 new fields in the
+	structure.
+	(ah-clearcase-snapshot-view-p, ah-clearcase-dynamic-view-p): 1.98
+	use the properties field in the vprop structure.
+	(ah-clearcase-ucm-view-p): 1.98 new function.
+	(ah-clearcase-prepare-vprop): 1.98 function removed
+	(ah-clearcase-get-vprop): 1.98 when creating a new vprop, populate
+	the properties and stream fields with info from ClearCase
+	(ah-clearcase-maybe-set-vc-state): 1.98 set the root-path in the
+	file's vprop if needed.
+	(with-clearcase-checkout, vc-clearcase-checkin): 1.98 pass "-ptime
+	-nwarn" to checkin/checkout commands.
+	(vc-clearcase-mode-line-string): 1.98 for UCM views, put the
+	stream name in the modeline
+	(ah-clearcase-finish-checkout): 1.98 pass "-nwarn" to checkout.
+	(ah-clearcase-setcs): 1.98 update for new vprop structure.
+
+
 2007-04-04  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-start-ediff-button): 1.97 require

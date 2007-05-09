@@ -1184,7 +1184,7 @@ the parent version, to conform to vc.el semantics."
   name
   root-path                             ; for snapshot views only
   stream                                ; for UCM views only
-  properties                            ; (a list of 'snapshot 'dynamic 'ucmview)
+  properties                 ; (a list of 'snapshot 'dynamic 'ucmview)
   )
 
 (defvar ah-clearcase-all-vprops '())
@@ -1209,15 +1209,18 @@ VIEW can be either a view name (a string) a vprop or a fprop."
 
 (defun ah-clearcase-get-vprop (view-tag)
   "Return the vprop struct associated with VIEW-TAG.
+The vprop structure is created if needed.
 
-VIEW-TAG can be:
+VIEW-TAG can be (1) a vprop, in which case it is returned; (2) a
+string in which case a vprop with that name is looked up or
+created; (3) a fprop, in which case its view-tag looked up
+using (2).
 
-1/ a vprop, in which case it is returned,
-
-2/ a string in which case a vprop with that name is looked up and
-returned (if no such vprop exists, it is created first)
-
-3/ a fprop, in which case its view-tag is searched using 2/."
+If the vprop is created, only the NAME and PROPERTIES fields will
+be populated.  A delayed request will fill in STREAM (on a UCM
+view).  The ROOT-PATH (on snapshot views only) will be set in
+`ah-clearcase-maybe-set-vc-state' the first time a file in this
+view is visited."
 
   (if (ah-clearcase-vprop-p view-tag)
       view-tag                          ; case 1/
@@ -1225,7 +1228,8 @@ returned (if no such vprop exists, it is created first)
 			 ((ah-clearcase-fprop-p view-tag)
 			  (ah-clearcase-fprop-view-tag view-tag))
 			 (t (error "Unknown type for VIEW-TAG"))))
-	     ;; find or create a new vprop
+	     ;; find or create a new vprop.  We will remove it later
+	     ;; if it turns out the view does not exist
 	     (vprop (car (or (member* vtag ah-clearcase-all-vprops
 				      :key 'ah-clearcase-vprop-name
 				      :test 'equal)
@@ -1236,15 +1240,29 @@ returned (if no such vprop exists, it is created first)
 	  ;; This is the first time we see this view, collect some
 	  ;; info on it.  Note that the root-path is set in
 	  ;; `ah-clearcase-maybe-set-vc-state'
-	  (let* ((vdata (ah-cleartool "lsview -properties -full %s" vtag))
-		 (case-fold-search t))
-	    (if (string-match "^\\s-*properties:\\s-*\\(.*\\)\\s-*$" vdata)
-		(setf (ah-clearcase-vprop-properties vprop)
-		      (mapcar 'intern
-			      (split-string (downcase (match-string 1 vdata)))))
-		;; else, report it as a message (should it be an error?
-		(message "ah-clearcase-get-vprop: no view props for %s" vtag)))
 
+	  (condition-case err
+	      (let* ((vdata (ah-cleartool "lsview -properties -full %s" vtag))
+		     (case-fold-search t))
+		(if (string-match "^\\s-*properties:\\s-*\\(.*\\)\\s-*$" vdata)
+		    (setf (ah-clearcase-vprop-properties vprop)
+			  (mapcar 'intern
+				  (split-string
+				   (downcase (match-string 1 vdata)))))
+		    ;; else, report it as a message (should it be an error?
+		    (message "ah-clearcase-get-vprop: no props for %s" vtag)))
+
+	    (ah-cleartool-error
+	     ;; If there was an error in the lsview command above,
+	     ;; remove this vprop from `ah-clearcase-all-vprops'
+	     (setq ah-clearcase-all-vprops
+		   (remove* vtag ah-clearcase-all-vprops
+			    :key 'ah-clearcase-vprop-name
+			    :test 'equal))
+
+	     ;; signal the error again, we only wanted to do some
+	     ;; cleanup.
+	     (signal 'ah-cleartool-error (cdr err))))
 	  (when (ah-clearcase-ucm-view-p vprop)
 	    (ah-cleartool-ask
 	     (format "lsstream -fmt \"%%n\" -view %s" vtag) 'nowait vprop
@@ -1838,7 +1856,7 @@ separate version, so we return the parent version in that case."
 	      (let ((vprop (ah-clearcase-get-vprop fprop)))
 		(concat "<" (ah-clearcase-vprop-name vprop) ">"))
 	      (let ((branch (ah-clearcase-fprop-branch fprop))
-	 (version-number (ah-clearcase-fprop-version-number fprop)))
+		    (version-number (ah-clearcase-fprop-version-number fprop)))
 		(concat branch "/" version-number))))
     (ah-clearcase-wash-mode-line
      (case (ah-clearcase-fprop-status fprop)
@@ -2146,40 +2164,40 @@ When EDITABLE is nil, the version is removed completely.  The
 current branch might be removed as well if
 `ah-clearcase-rmbranch-on-revert-flag' is non nil."
 
-;; Implementation Notes:
-;;
-;; Here is what we need to do in order to cancel a version so that the
-;; changes are kept ready for a new checkin:
-;;
-;; * make a temporary copy of the file and the checkin comment for the
-;;   file.  Copy-file will create a read-only copy, since the file is
-;;   checked in.
-;;
-;; * remove the version
-;;
-;; * on a snapshot view, this will leave the file in place as a view
-;;   private file.  We need to remove the file and run a clearcase
-;;   update to get the version controlled file back, otherwise
-;;   ClearCase commands will not work on the file.
-;;
-;; * checkout the file.  We use `vc-clearcase-checkout', as the
-;;   checkout logic can be complicated too.
-;;
-;; * we need to replace the checked out file with the saved copy, make
-;;   the file writable and load it back into emacs.
-;;
-;;
-;; To cancel a version so that it is completely removed we simply need
-;; to:
-;;
-;; * remove the version
-;;
-;; * on a snapshot view, update the file
-;;
-;; * if removing the version left an empty branch, we honour the
-;;   `ah-clearcase-rmbranch-on-revert-flag' (remove the branch if the
-;;   flag is set.
-;;
+  ;; Implementation Notes:
+  ;;
+  ;; Here is what we need to do in order to cancel a version so that the
+  ;; changes are kept ready for a new checkin:
+  ;;
+  ;; * make a temporary copy of the file and the checkin comment for the
+  ;;   file.  Copy-file will create a read-only copy, since the file is
+  ;;   checked in.
+  ;;
+  ;; * remove the version
+  ;;
+  ;; * on a snapshot view, this will leave the file in place as a view
+  ;;   private file.  We need to remove the file and run a clearcase
+  ;;   update to get the version controlled file back, otherwise
+  ;;   ClearCase commands will not work on the file.
+  ;;
+  ;; * checkout the file.  We use `vc-clearcase-checkout', as the
+  ;;   checkout logic can be complicated too.
+  ;;
+  ;; * we need to replace the checked out file with the saved copy, make
+  ;;   the file writable and load it back into emacs.
+  ;;
+  ;;
+  ;; To cancel a version so that it is completely removed we simply need
+  ;; to:
+  ;;
+  ;; * remove the version
+  ;;
+  ;; * on a snapshot view, update the file
+  ;;
+  ;; * if removing the version left an empty branch, we honour the
+  ;;   `ah-clearcase-rmbranch-on-revert-flag' (remove the branch if the
+  ;;   flag is set.
+  ;;
 
   (setq file (expand-file-name file))
   (let ((fprop (ah-clearcase-file-fprop file))
@@ -2194,9 +2212,9 @@ current branch might be removed as well if
 	     ;; set them anyway
 
 
-;;              (setq comment-text
-;;                    (ah-cleartool "desc -fmt \"%%c\" \"%s@@%s\""
-;;                                  file (ah-clearcase-fprop-version fprop)))
+	     ;;              (setq comment-text
+	     ;;                    (ah-cleartool "desc -fmt \"%%c\" \"%s@@%s\""
+	     ;;                                  file (ah-clearcase-fprop-version fprop)))
 
 	     )
 
@@ -2345,11 +2363,11 @@ To ignore the extra whitespace characters, you need the option
 \"-option \"-blank_ignore\"\".
 
 See the cleartool diff manual page for possible options."
-    :type '(choice (const :tag "None" nil)
-		 (string :tag "Argument String")
-		 (repeat :tag "Argument List"
-			 :value ("")
-			 string))
+  :type '(choice (const :tag "None" nil)
+	  (string :tag "Argument String")
+	  (repeat :tag "Argument List"
+	   :value ("")
+	   string))
   :version "21.1"
   :group 'vc
   :group 'vc-clearcase)
@@ -2374,7 +2392,7 @@ See the cleartool diff manual page for possible options."
 	(let ((inhibit-read-only t))
 	  (erase-buffer)
 	  (let ((diff (ah-cleartool
-			"diff %s \"%s\" \"%s\""
+		       "diff %s \"%s\" \"%s\""
 		       (mapconcat 'identity (vc-switches 'CLEARCASE 'diff) " ")
 		       fver1 fver2)))
 	    (insert diff)
@@ -2388,7 +2406,7 @@ See the cleartool diff manual page for possible options."
 	     ;; the way we determine whether the files are identical
 	     ;; depends on the diff format we use.
 	     (or
-		;; diff format has an empty buffer
+	      ;; diff format has an empty buffer
 	      (equal (point-min) (point-max))
 	      ;; serial format prints "Files are identical", so we
 	      ;; look for that.
@@ -3223,7 +3241,7 @@ In interactive mode, prompts for a view-tag name."
   "Return the clearcase version as a string.
 This is the string returned by the cleartool -version command."
   (with-temp-buffer
-    (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
+      (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
     (ah-cleartool-do "-version" nil (current-buffer))
     (catch 'done (while t (sit-for 0.1)))
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))

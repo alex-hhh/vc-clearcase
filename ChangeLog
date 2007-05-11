@@ -1,3 +1,12 @@
+2007-05-11  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el
+	(ah-clearcase-lshistory-fmt-ucm): 1.100 new variable
+	(vc-clearcase-print-log): 1.100 use
+	`ah-clearcase-lshistory-fmt-ucm' when the file is in an UCM view.
+	(vc-clearcase-what-view-tag): 1.100 in UCM views also show the
+	stream and activity set in the view.
+
 2007-05-09  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-get-vprop): 1.99 Doc update,

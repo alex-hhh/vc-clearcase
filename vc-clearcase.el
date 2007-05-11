@@ -820,6 +820,16 @@ that were run to create this buffer."
 	  "%c")
   "Format string to use when listing file history.")
 
+(defvar ah-clearcase-lshistory-fmt-ucm
+  (concat "----------\n"
+	  "version: %Vn\n"
+	  "user: %u; what: %e; date: %Sd\n"
+	  "activity: %[activity]p\n"
+	  "labels: %l\n\n"
+	  "%c")
+  "Format string so use when listing file history.
+This is used when the file is in a UCM project.")
+
 (defconst ah-clearcase-log-view-font-lock-keywords
   '(("----------" . font-lock-comment-face)
     ("[-A-Za-z0-9]+:" . font-lock-keyword-face)
@@ -2307,13 +2317,18 @@ This is not intended to be called directly from the vc.el.
 Instead, `vc-print-log' is advised to call this function directly
 for Clearcase registered files."
   (setq file (expand-file-name file))
-  (let ((buf (get-buffer-create "*clearcase-lshistory*")))
+  (let ((buf (get-buffer-create "*clearcase-lshistory*"))
+	(ucm-view-p (ah-clearcase-ucm-view-p
+		     (ah-clearcase-file-fprop file))))
     (vc-setup-buffer buf)
     (with-current-buffer buf
       (let ((inhibit-read-only t))
 	(erase-buffer)
 	(ah-clearcase-log-view-mode)
-	(let* ((args (list "-fmt" ah-clearcase-lshistory-fmt file))
+	(let* ((args (list "-fmt" (if ucm-view-p
+				      ah-clearcase-lshistory-fmt-ucm
+				      ah-clearcase-lshistory-fmt)
+			   file))
 	       (process (ah-cleartool-do "lshistory"
 					 (if current-prefix-arg
 					     (cons "-minor" args)
@@ -2837,17 +2852,29 @@ the whole revision string."
       (message "Not a clearcase file")))
 
 (defun vc-clearcase-what-view-tag (file)
-  "Show view in which FILE resides."
+  "Show view in which FILE resides.
+For UCM views, show the stream and current activity as well.  If
+FILE is null, the file visited in the current buffer is used."
   (interactive (list (buffer-file-name (current-buffer))))
-  (if (and (stringp file) (vc-clearcase-registered file))
-      (progn
+  (when (stringp file)
+    (setq file (expand-file-name file)))
+  (unless (and (stringp file) (vc-clearcase-registered file))
+    (error "Not a clearcase file: %S" file))
 	(ah-clearcase-maybe-set-vc-state file)
-	(let ((view-tag (ah-clearcase-fprop-view-tag
+  (let ((vprop (ah-clearcase-get-vprop
 			 (ah-clearcase-file-fprop file))))
-	  (if view-tag
-	      (message "View tag: %s" view-tag)
-	      (message "View tag not (yet?) known"))))
-      (message "Not a clearcase file")))
+    (if (ah-clearcase-ucm-view-p vprop)
+	(let ((cact (progn
+		      (ah-cleartool "cd %s" (file-name-directory file))
+		      (ah-cleartool "lsact -cact -fmt \"%%n\""))))
+	  (when (string= cact "")
+	    (setq cact " NO ACTIVITY "))
+	  (message "View: %s (%s); Activity: %s"
+		   (ah-clearcase-vprop-name vprop)
+		   (ah-clearcase-vprop-stream vprop)
+		   cact))
+	;; else
+	(message "View tag: %s" (ah-clearcase-vprop-name vprop)))))
 
 (defun vc-clearcase-gui-vtree-browser (ask-for-file)
   "Start the version tree browser GUI on a file or directory.

@@ -49,7 +49,7 @@
 
 ;; The code below will byte-compile vc-clearcase.el and generate the
 ;; autoloads in a file named vc-clearcase-auto.el in the same
-;; directory as vc-clearcase.el. If you don't have vc-clearcase.el
+;; directory as vc-clearcase.el.  If you don't have vc-clearcase.el
 ;; opened, or multiple copies of it are opened, we ask for the file
 ;; name explicitely.
 ;;
@@ -708,7 +708,7 @@ transaction is complete as funcall(fn closure answer)."
 	(ah-cleartool-wait-for tid))))
 
 (defsubst ah-cleartool (string &rest objects)
-  "Shorthand for (ah-clartool-ask (format ... ))."
+  "Shorthand for (ah-clartool-ask (format STRING OBJECTS))."
   (ah-cleartool-ask (apply 'format string objects)))
 
 ;;;; Cleartool subprocess interface
@@ -1333,7 +1333,7 @@ FLAG."
 			      ;; test-completion does not exist in emacs 21.
 			      '(lambda (x l &optional p) (intern-soft x l)))
 			     ((null flag) 'try-completion)
-			     (t (error "unknwn value for flag %S" flag)))))
+			     (t (error "Unknown value for flag %S" flag)))))
     (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
 
 
@@ -1342,7 +1342,7 @@ FLAG."
 PROMPT is displayed to the user; INITIAL, when non-nil is the
 initial view tag name presented to the user.
 
-This function will provide a completing-read with the list of
+This function will provide a `completing-read' with the list of
 available view tags in the system.  It does however read the view
 tags asynchronously so they might not be available immediately as
 the user hits the TAB key.
@@ -1406,10 +1406,10 @@ This can be used to obtain the vob-tag required for the
 		  (concat "/" (nth (1+ prefix-length) path-elements))))))))
 
 (defvar ah-clearcase-all-labels nil
-  "An obarray containing all labels (stored as symbols)")
+  "An obarray containing all labels (stored as symbols).")
 
 (defvar ah-clearcase-collect-labels-point nil
-  "The position in the buffer where we left the processing")
+  "The position in the buffer where we left the processing.")
 
 (defvar ah-clearcase-collect-labels-finished nil
   "Becomes t when we finished processing the cleartool dump output.
@@ -1501,7 +1501,9 @@ The labels will become available as
       (set-process-sentinel process 'ah-clearcase-collect-labels-sentinel))))
 
 (defun ah-clearcase-complete-label (string predicate flag)
-  "The completion function on the `ah-clearcase-all-labels'."
+  "The completion function on the `ah-clearcase-all-labels'.
+STRING, PREDICATE and FLAG are passed to a completion
+function (`all-completions' or `try-completion'."
   ;; Note that we cannot pass ah-clearcase-all-labels to completing-read
   ;; because its value will be set asynchronously when the cleartool
   ;; ask command finishes.  Thus, we simply check the flag and call
@@ -1512,7 +1514,7 @@ The labels will become available as
 			      ;; test-completion does not exist in emacs 21.
 			      '(lambda (x l &optional p) (intern-soft x l)))
 			     ((null flag) 'try-completion)
-			     (t (error "unknwn value for flag %S" flag)))))
+			     (t (error "Unknown value for flag %S" flag)))))
     (funcall completion-fn string ah-clearcase-all-labels predicate)))
 
 (defun ah-clearcase-read-label (prompt vob &optional initial reuse-labels)
@@ -1609,7 +1611,7 @@ comment file is removed."
     ;;    ;; blah blah)
     ;; but we didn't
     (unless (listp comment-vars)
-      (error "comment-vars vars should be a list"))
+      (error "Expecting comment-vars to be a list"))
     (unless (= 2 (length comment-vars))
       (error "Expecting two elements in comment-vars"))
     (unless (symbolp (car comment-vars))
@@ -2145,7 +2147,7 @@ checkout in the same view will recreate the branch.)"
 
 (defun vc-clearcase-revert (file &optional contents-done)
   "Cancel a checkout on FILE.
-CONTENTS-DONE is ignored. The
+CONTENTS-DONE is ignored.  The
 `ah-clearcase-rmbranch-on-revert-flag' is honoured."
   (setq file (expand-file-name file))
   (let* ((fprop (ah-clearcase-file-fprop file))
@@ -2613,7 +2615,7 @@ element * NAME -nocheckout"
 	     (message "Creating label %s" name)
 	     (ah-cleartool "mklbtype -ordinary -nc lbtype:%s" name)
 	     (message nil))
-	   (error "Label %s does not exist and will not create it." name)))))
+	   (error "Label %s does not exist and will not create it" name)))))
   (let ((dir? (file-directory-p dir)))
     (message "Applying label...")
     ;; NOTE: the mklabel command might fail if some files are
@@ -2985,8 +2987,8 @@ are made to the views)."
 (defun vc-clearcase-label-diff-report (dir label-1 label-2)
   "Report the changed file revisions between labels.
 A report is prepared in the *label-diff-report* buffer for the
-files in `dir' that have different revisions between `label-1'
-and `label-2'."
+files in DIR that have different revisions between LABEL-1
+and LABEL-2'."
   (interactive
    (let ((d (read-file-name "Report on directory: "
 			    default-directory default-directory t nil)))
@@ -3274,7 +3276,7 @@ This is the string returned by the cleartool -version command."
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))
 
 (defun vc-clearcase-report-bug ()
-  "Submit via mail a bug report on vc-clearcase.el"
+  "Submit via mail a bug report on vc-clearcase.el."
   (interactive)
   (require 'reporter)
   (let ((reporter-prompt-for-summary-p t))
@@ -3335,7 +3337,7 @@ This is the string returned by the cleartool -version command."
   '(ah-cleartool-ask ah-cleartool-wait-for ah-cleartool-tq-handler)
   "List of function to trace.
 See `ah-clearcase-trace-cleartool-tq' and
-`ah-clearcase-untrace-cleartool-tq' ")
+`ah-clearcase-untrace-cleartool-tq'")
 
 (defun ah-clearcase-trace-cleartool-tq ()
   "Trace some of the cleartool commands."

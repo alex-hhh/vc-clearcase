@@ -1,3 +1,19 @@
+2007-05-23  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-cleartool)
+	(ah-clearcase-complete-view-tag)
+	(ah-clearcase-read-view-tag)
+	(ah-clearcase-all-labels)
+	(ah-clearcase-collect-labels-point)
+	(ah-clearcase-complete-label)
+	(ah-clearcase-complete-label)
+	(with-clearcase-cfile)
+	(vc-clearcase-create-snapshot)
+	(vc-clearcase-label-diff-report)
+	(vc-clearcase-report-bug)
+	(ah-clearcase-function-to-trace): 1.101 updated messages and doc
+	strings at the recomandation of the `checkdoc' function.
+
 2007-05-11  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el

@@ -211,14 +211,7 @@
 ;; - merge-news (file) -- implemented, same restrictions as for
 ;;   `merge'
 ;;
-;; - steal-lock (file &optional version) -- not implemented.  Maybe it
-;;   could be implemented as unreserving someone elses reserved
-;;   checkout.  vc.el seems to handle locking by someone else in a
-;;   limited way (compared to ClearCase).  vc-clearcase-state will
-;;   never return a string (which signifies that the file is locked by
-;;   someone else) because vc.el will always want to steal the lock.
-;;   Instead, vc-clearcase-checkout will ask the user if he wants to
-;;   checkout the file unreserved.
+;; - steal-lock (file &optional version) -- implemented.
 ;;
 ;;
 ;; HISTORY FUNCTIONS
@@ -1542,6 +1535,24 @@ vaste of resources."
 
 ;;;; Vc interface + some helpers
 
+(defun ah-clearcase-get-keep-file-name (file-name)
+  "Return a file name which can be used as a 'keep' file for FILE-NAME.
+ClearCase creates backup files with the string .keep plus a
+number appended to the original file name.  We keep the same
+convention when we need to create a backup.
+
+We try to append .keep, .keep.1, .keep.2 to FILE-NAME untill we
+find a file which does not exist and return that one.  This
+method is open to race conditions, but it seems to be what
+ClearCase uses."
+  ;; first try appending .keep
+  (let ((keep-file (format "%s.keep" file-name))
+	(n 0))
+    (while (file-exists-p keep-file)
+      (incf n)
+      (setq keep-file (format "%s.keep.%d" file-name n)))
+    keep-file))
+
 (defun ah-clearcase-maybe-set-vc-state (file &optional force)
   "Lazily set the clearcase specific properties of FILE.
 If FORCE is not nil, always read the properties."
@@ -1594,7 +1605,7 @@ be either a file or a directory."
 	      (progn
 		(when ,checkout-needed
 		  (message "Checking out %s" ,real-thing)
-		  (ah-cleartool "checkout -ptime -nwarn -reserved -nc \"%s\"" ,real-thing))
+		  (ah-cleartool "checkout -nquery -ptime -nwarn -reserved -nc \"%s\"" ,real-thing))
 		,@forms)
 	   (when ,checkout-needed
 	     (message "Checking in %s" ,real-thing)
@@ -1973,7 +1984,7 @@ be 'reserved or 'unreserved."
 
   (with-clearcase-cfile (comment-file comment)
     (let ((pname (if rev (concat file "@@" rev) file))
-	  (options (concat "-ptime -nwarn "
+	  (options (concat "-ptime -nwarn -nquery "
 			   "-cfile " comment-file
 			   " " (when rev "-version ")))
 	  (co-mode (if (eq mode 'reserved) "-reserved " "-unreserved "))
@@ -2213,13 +2224,13 @@ current branch might be removed as well if
 
   (setq file (expand-file-name file))
   (let ((fprop (ah-clearcase-file-fprop file))
-	(tmp (make-temp-name (concat temporary-file-directory "vc-clearcase-")))
+	(keep-file (ah-clearcase-get-keep-file-name file))
 	(comment-text nil)
 	(ah-clearcase-checkout-comment-type 'none))
     (unwind-protect
 	 (progn
 	   (when editable
-	     (copy-file file tmp)
+	     (copy-file file keep-file)
 	     ;; dont read comments for now, as we don't know how to
 	     ;; set them anyway
 
@@ -2247,9 +2258,8 @@ current branch might be removed as well if
 	     ;; TODO: we should tell ClearCase what the checkout
 	     ;; comment is.
 
-	     (copy-file tmp file 'overwrite)
-	     ;; FIXME: only need to turn on the writable bit.
-	     (set-file-modes file (default-file-modes))
+	     (copy-file keep-file file 'overwrite)
+	     (set-file-modes file (logior (file-modes file) #o220))
 	     (revert-buffer 'ignore-auto 'noconfirm))
 
 	   (when (and (not editable)
@@ -2260,7 +2270,7 @@ current branch might be removed as well if
 			   file (ah-clearcase-fprop-version-base fprop))
 
 	     (ah-clearcase-maybe-set-vc-state file 'force)))
-      (when (file-exists-p tmp) (delete-file tmp)))))
+      (when (file-exists-p keep-file) (delete-file keep-file)))))
 
 
 (defun vc-clearcase-merge (file rev1 rev2)
@@ -2302,6 +2312,31 @@ but how do we detect it?"
 	  (shrink-window-if-larger-than-buffer)))
       0)))                              ; return success
 
+(defun vc-clearcase-steal-lock (file &optional version)
+  "Checkout a hijacked FILE and keep its current contents.
+VERSION is not used, and we signal an error if it is not nil.
+
+We save the current contents of the file, perform an unreserved
+checkout, put the contents of the file back in, than try to
+reserve theh checkout.  At the end of the process, FILE will be
+checked out and the contents will be the one of the hijacked
+file.  File might be checked out unreseved, if someone already
+has a reserved checkout of the file."
+  (when version
+    (error "vc-clearcase-steal-lock: cannot steal a specific version"))
+  (setq file (expand-file-name file))
+  (let ((keep-file (ah-clearcase-get-keep-file-name file)))
+    (unwind-protect
+	 (progn
+	   (rename-file file keep-file)
+	   (ah-cleartool "checkout -nquery -ncomment -nwarn -ndata -unreserved %s" file)
+	   (copy-file keep-file file 'overwrite)
+	   ;; make file writable, in case it wasn't
+	   (set-file-modes file (logior (file-modes file) #o220))
+	   (ignore-cleartool-errors
+	     (ah-cleartool "reserve -ncomment %s" file))
+	   (ah-clearcase-maybe-set-vc-state file 'force))
+      (when (file-exists-p keep-file) (delete-file keep-file)))))
 
 (defvar ah-clearcase-file-name nil
   "File name for which this log was generated.")

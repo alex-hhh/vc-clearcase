@@ -8,6 +8,8 @@
 	ah-clearcase-get-keep-file-name; only turn on the write bit on the
 	file (instead of setting default mode bits)
 	(vc-clearcase-steal-lock): 1.102 new function
+	(vc-clearcase-cancel-version, vc-clearcase-steal-lock): 1.103
+	leave the kep file in place if the function fails.
 
 2007-05-23  Alexandru Harsanyi  <harsanyi@mac.com>
 

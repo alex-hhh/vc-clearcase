@@ -1,3 +1,14 @@
+2007-05-24  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-get-keep-file-name): 1.102 new
+	function
+	(with-clearcase-checkout, ah-clearcase-finish-checkout): 1.102
+	pass -nquery to the checkout command
+	(vc-clearcase-cancel-version): 1.102 use
+	ah-clearcase-get-keep-file-name; only turn on the write bit on the
+	file (instead of setting default mode bits)
+	(vc-clearcase-steal-lock): 1.102 new function
+
 2007-05-23  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-cleartool)

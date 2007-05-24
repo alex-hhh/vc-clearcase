@@ -2221,56 +2221,56 @@ current branch might be removed as well if
   ;;   `ah-clearcase-rmbranch-on-revert-flag' (remove the branch if the
   ;;   flag is set.
   ;;
+  ;; If something goes wrong in this routine, we leave the keep file
+  ;; in place.  This is consistent with ClearCase behaviour.
 
   (setq file (expand-file-name file))
   (let ((fprop (ah-clearcase-file-fprop file))
 	(keep-file (ah-clearcase-get-keep-file-name file))
 	(comment-text nil)
 	(ah-clearcase-checkout-comment-type 'none))
-    (unwind-protect
-	 (progn
-	   (when editable
-	     (copy-file file keep-file)
-	     ;; dont read comments for now, as we don't know how to
-	     ;; set them anyway
+    (when editable
+      (copy-file file keep-file)
+      ;; dont read comments for now, as we don't know how to set them
+      ;; anyway
 
 
-	     ;;              (setq comment-text
-	     ;;                    (ah-cleartool "desc -fmt \"%%c\" \"%s@@%s\""
-	     ;;                                  file (ah-clearcase-fprop-version fprop)))
+      ;;              (setq comment-text
+      ;;                    (ah-cleartool "desc -fmt \"%%c\" \"%s@@%s\""
+      ;;                                  file (ah-clearcase-fprop-version fprop)))
 
-	     )
+      )
 
-	   (ah-cleartool "rmver -force -nc \"%s@@%s\""
-			 file (ah-clearcase-fprop-version fprop))
+    (ah-cleartool "rmver -force -nc \"%s@@%s\""
+		  file (ah-clearcase-fprop-version fprop))
 
-	   (when (ah-clearcase-snapshot-view-p (ah-clearcase-fprop-view-tag fprop))
-	     (delete-file file)
-	     (ah-cleartool "update -force \"%s\"" file))
+    (when (ah-clearcase-snapshot-view-p (ah-clearcase-fprop-view-tag fprop))
+      (delete-file file)
+      (ah-cleartool "update -force \"%s\"" file))
 
-	   ;; need to do this here, otherwise `vc-clearcase-checkout'
-	   ;; below will not work
-	   (ah-clearcase-maybe-set-vc-state file 'force)
+    ;; need to do this here, otherwise `vc-clearcase-checkout' below
+    ;; will not work
+    (ah-clearcase-maybe-set-vc-state file 'force)
 
-	   (when editable
-	     (vc-clearcase-checkout file 'editable)
-	     (setq fprop (ah-clearcase-file-fprop file))
-	     ;; TODO: we should tell ClearCase what the checkout
-	     ;; comment is.
+    (when editable
+      (vc-clearcase-checkout file 'editable)
+      (setq fprop (ah-clearcase-file-fprop file))
+      ;; TODO: we should tell ClearCase what the checkout comment is.
 
-	     (copy-file keep-file file 'overwrite)
-	     (set-file-modes file (logior (file-modes file) #o220))
-	     (revert-buffer 'ignore-auto 'noconfirm))
+      (copy-file keep-file file 'overwrite)
+      (set-file-modes file (logior (file-modes file) #o220))
+      (revert-buffer 'ignore-auto 'noconfirm))
 
-	   (when (and (not editable)
-		      ah-clearcase-rmbranch-on-revert-flag
-		      (string-match "[/\\]0$" (ah-clearcase-fprop-parent fprop)))
-	     ;; we were left with an empty branch, remove that as well
-	     (ah-cleartool "rmbranch -force -nc \"%s@@%s\""
-			   file (ah-clearcase-fprop-version-base fprop))
+    (when (and (not editable)
+	       ah-clearcase-rmbranch-on-revert-flag
+	       (string-match "[/\\]0$" (ah-clearcase-fprop-parent fprop)))
+      ;; we were left with an empty branch, remove that as well
+      (ah-cleartool "rmbranch -force -nc \"%s@@%s\""
+		    file (ah-clearcase-fprop-version-base fprop))
 
-	     (ah-clearcase-maybe-set-vc-state file 'force)))
-      (when (file-exists-p keep-file) (delete-file keep-file)))))
+      (ah-clearcase-maybe-set-vc-state file 'force))
+
+    (delete-file keep-file)))
 
 
 (defun vc-clearcase-merge (file rev1 rev2)
@@ -2326,17 +2326,17 @@ has a reserved checkout of the file."
     (error "vc-clearcase-steal-lock: cannot steal a specific version"))
   (setq file (expand-file-name file))
   (let ((keep-file (ah-clearcase-get-keep-file-name file)))
-    (unwind-protect
-	 (progn
-	   (rename-file file keep-file)
-	   (ah-cleartool "checkout -nquery -ncomment -nwarn -ndata -unreserved %s" file)
-	   (copy-file keep-file file 'overwrite)
-	   ;; make file writable, in case it wasn't
-	   (set-file-modes file (logior (file-modes file) #o220))
-	   (ignore-cleartool-errors
-	     (ah-cleartool "reserve -ncomment %s" file))
-	   (ah-clearcase-maybe-set-vc-state file 'force))
-      (when (file-exists-p keep-file) (delete-file keep-file)))))
+    ;; if something goes wrong in this routine, we leave the keep file
+    ;; in place.  This is consistent with ClearCase behaviour.
+    (rename-file file keep-file)
+    (ah-cleartool "checkout -nquery -ncomment -nwarn -ndata -unreserved %s" file)
+    (copy-file keep-file file 'overwrite)
+    ;; make file writable, in case it wasn't
+    (set-file-modes file (logior (file-modes file) #o220))
+    (delete-file keep-file)
+    (ignore-cleartool-errors
+     (ah-cleartool "reserve -ncomment %s" file))
+    (ah-clearcase-maybe-set-vc-state file 'force)))
 
 (defvar ah-clearcase-file-name nil
   "File name for which this log was generated.")

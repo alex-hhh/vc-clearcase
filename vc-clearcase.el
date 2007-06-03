@@ -2557,7 +2557,7 @@ and `vc-clearcase-annotate-revision-atline' work fast."
 	       (time (get-text-property bol 'vc-clearcase-time))
 	       (age (get-text-property bol 'vc-clearcase-age))
 	       (revision (get-text-property bol 'vc-clearcase-revision))
-	       (str "                 .                  |")
+	       (str "                   .                    |")
 	       (max (1- (length str))))
 	  (put-text-property 0 max 'vc-clearcase-time time str)
 	  (put-text-property 0 max 'vc-clearcase-age age str)

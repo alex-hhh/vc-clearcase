@@ -1,5 +1,35 @@
 -*- outline -*- 
 
+* Release 
+
+** HIJACKED files are now handled correctly
+   On checkout (C-x v v) Emacs will ask whether to keep the changes in the
+   HIJACKED file or discard them.  The vc.el terminology for this is 'stealing
+   the lock', the question Emacs asks is "Claim lock retaining changes? ".
+
+   See the doc string of `vc-clearcase-steal-lock' for more details.
+
+** you can now cancel the last check-in
+   using the "C-x v c" `vc-cancel-version'.
+
+   The last checked in version of a file will be removed and the file checked
+   out.  Emacs will ask you whether to discard the actual changes or put them
+   in the checked out file.
+
+   See the doc string for `vc-clearcase-cancel-version' for more details.
+
+** `ah-clearcase-diff-format' variable removed
+   It is replaced by `vc-clearcase-diff-switches'.  See the doc string of that
+   variable.
+
+** preliminary support for UCM
+   When a file is in a UCM view, the following will be changed from normal
+   ClearCase behaviour:
+
+*** the stream name is displayed in the modeline
+*** `vc-clearcase-what-view-tag' will display the UCM activity and stream
+*** `vc-clearcase-print-log' will also display activity names for each version
+
 * Release 1.95
 
 ** some configuration variables have been renamed.

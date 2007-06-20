@@ -1,6 +1,6 @@
 ;; vc-clearcase.el --- support for ClearCase version control system
 ;;
-;; Copyright (C) 2006 Alexandru Harsanyi
+;; Copyright (C) 2006, 2007 Alexandru Harsanyi
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -703,6 +703,9 @@ transaction is complete as funcall(fn closure answer)."
 (defsubst ah-cleartool (string &rest objects)
   "Shorthand for (ah-clartool-ask (format STRING OBJECTS))."
   (ah-cleartool-ask (apply 'format string objects)))
+
+(eval-when-compile
+  (put 'ah-cleartool 'byte-compile-format-like t))
 
 ;;;; Cleartool subprocess interface
 

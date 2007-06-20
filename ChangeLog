@@ -1,4 +1,4 @@
-2007-06-20  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-06-20  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-cleartool): 1.105 tell the bytecompiler that
 	the function is format like.

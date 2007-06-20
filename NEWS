@@ -1,6 +1,6 @@
 -*- outline -*- 
 
-* Release 
+* Release 1.106
 
 ** HIJACKED files are now handled correctly
    On checkout (C-x v v) Emacs will ask whether to keep the changes in the

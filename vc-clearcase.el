@@ -587,7 +587,7 @@ callback with the answer."
 	       (setq ah-cleartool-ctid tid) ; assume tid's always grow
 	       (cond ((> status 0)
 		      (push (cons tid result) ah-cleartool-terr))
-		     (cb             ; do we have a callback function?
+		     (cb                ; do we have a callback function?
 		      (funcall cb cb-closure result))
 		     (t
 		      (push (cons tid result) ah-cleartool-tresults))))))
@@ -1016,16 +1016,16 @@ Will move to the next record if NUM is negative."
 	     (:constructor ah-clearcase-make-fprop)
 	     (:copier ah-clearcase-copy-fprop))
 
-  file-name                      ; the file name this fprop belongs to
+  file-name                             ; the file name this fprop belongs to
 
   version-tid
   version                               ; current file revision
   parent                                ; parent revision
-  status        ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
+  status                ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
   what-rule                             ; confispec rule for the file
 
   comment-tid
-  comment                    ; the checkout comment (when checked out)
+  comment                            ; the checkout comment (when checked out)
 
   view-tag                              ; the view for the file
 
@@ -1190,7 +1190,7 @@ the parent version, to conform to vc.el semantics."
   name
   root-path                             ; for snapshot views only
   stream                                ; for UCM views only
-  properties                 ; (a list of 'snapshot 'dynamic 'ucmview)
+  properties                         ; (a list of 'snapshot 'dynamic 'ucmview)
   )
 
 (defvar ah-clearcase-all-vprops '())
@@ -2142,7 +2142,7 @@ This method does three completely different things:
 	 (message (match-string 0 update-result)))
        (ah-clearcase-maybe-set-vc-state file 'force)
        (vc-resynch-buffer file t t)))
-    ((not editable)                  ; last case left for not editable
+    ((not editable)                     ; last case left for not editable
      (error "Cannot to update to a specific revision"))
     (t
      (error "Bad param combinations in vc-clearcase-checkout: %S %S %S"
@@ -2169,7 +2169,12 @@ CONTENTS-DONE is ignored.  The
     (ah-cleartool "uncheckout -keep \"%s\"" file)
     (when (and empty-branch-p ah-clearcase-rmbranch-on-revert-flag)
       (let ((base (ah-clearcase-fprop-version-base fprop)))
-	(ah-cleartool "rmbranch -force -nc \"%s@@%s\"" file base)))
+	(ah-cleartool "rmbranch -force -nc \"%s@@%s\"" file base)
+	;; in snapshot views, the file seems to be listed as "[special
+	;; selection, deleted version]", after removing the branch, so we need
+	;; an update.
+	(when (ah-clearcase-snapshot-view-p (ah-clearcase-get-vprop fprop))
+	  (ah-cleartool "update -overwrite -force \"%s\"" file))))
     (ah-clearcase-maybe-set-vc-state file 'force)))
 
 
@@ -2270,7 +2275,9 @@ current branch might be removed as well if
       ;; we were left with an empty branch, remove that as well
       (ah-cleartool "rmbranch -force -nc \"%s@@%s\""
 		    file (ah-clearcase-fprop-version-base fprop))
-
+      ;; see vc-clearcase-revert on why we do this...
+      (when (ah-clearcase-snapshot-view-p (ah-clearcase-get-vprop fprop))
+	(ah-cleartool "update -overwrite -force \"%s\"" file))
       (ah-clearcase-maybe-set-vc-state file 'force))
 
     (delete-file keep-file)))
@@ -2332,14 +2339,24 @@ has a reserved checkout of the file."
     ;; if something goes wrong in this routine, we leave the keep file
     ;; in place.  This is consistent with ClearCase behaviour.
     (rename-file file keep-file)
-    (ah-cleartool "checkout -nquery -ncomment -nwarn -ndata -unreserved %s" file)
-    (copy-file keep-file file 'overwrite)
-    ;; make file writable, in case it wasn't
-    (set-file-modes file (logior (file-modes file) #o220))
-    (delete-file keep-file)
-    (ignore-cleartool-errors
-     (ah-cleartool "reserve -ncomment %s" file))
-    (ah-clearcase-maybe-set-vc-state file 'force)))
+    (condition-case err
+
+	(progn
+	  (ah-cleartool "checkout -nquery -ncomment -nwarn -ndata -unreserved \"%s\"" file)
+	  (copy-file keep-file file 'overwrite)
+	  ;; make file writable, in case it wasn't
+	  (set-file-modes file (logior (file-modes file) #o220))
+	  (delete-file keep-file)
+	  (ignore-cleartool-errors
+	   (ah-cleartool "reserve -ncomment \"%s\"" file))
+	  (ah-clearcase-maybe-set-vc-state file 'force))
+
+      (ah-cleartool-error
+       ;; if we failed above, and we don't have a file, put the original file
+       ;; back
+       (unless (file-exists-p file)
+	 (rename-file keep-file file))
+       (error (error-message-string err))))))
 
 (defvar ah-clearcase-file-name nil
   "File name for which this log was generated.")
@@ -2661,10 +2678,10 @@ element * NAME -nocheckout"
     (ah-cleartool
      "mklabel -nc %s %s lbtype:%s \"%s\""
      (if branchp "-replace" "") (if dir? "-recurse" "") name dir)
-    (when dir?                     ; apply label to parent directories
+    (when dir?                          ; apply label to parent directories
       (message "Applying label to parent directories...")
       (ignore-cleartool-errors
-       (while t                  ; until cleartool will throw an error
+       (while t                         ; until cleartool will throw an error
 	 (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
 	 (setq dir (file-name-directory dir))
 	 (ah-cleartool
@@ -2900,9 +2917,9 @@ FILE is null, the file visited in the current buffer is used."
     (setq file (expand-file-name file)))
   (unless (and (stringp file) (vc-clearcase-registered file))
     (error "Not a clearcase file: %S" file))
-	(ah-clearcase-maybe-set-vc-state file)
+  (ah-clearcase-maybe-set-vc-state file)
   (let ((vprop (ah-clearcase-get-vprop
-			 (ah-clearcase-file-fprop file))))
+		(ah-clearcase-file-fprop file))))
     (if (ah-clearcase-ucm-view-p vprop)
 	(let ((cact (progn
 		      (ah-cleartool "cd %s" (file-name-directory file))
@@ -3308,7 +3325,7 @@ In interactive mode, prompts for a view-tag name."
   "Return the clearcase version as a string.
 This is the string returned by the cleartool -version command."
   (with-temp-buffer
-      (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
+    (setq ah-cleartool-finished-function (lambda () (throw 'done nil)))
     (ah-cleartool-do "-version" nil (current-buffer))
     (catch 'done (while t (sit-for 0.1)))
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))

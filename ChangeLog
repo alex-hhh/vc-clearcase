@@ -2,9 +2,9 @@
 
 	* vc-clearcase.el (vc-clearcase-cancel-version),
 	(vc-clearcase-revert): 1.106 after removing a branch, do an update
-	in snapshot views.
+	in snapshot views.  Bug 1740843.
 	(vc-clearcase-steal-lock): 1.106 abort gracefully when we cannot
-	checkout the file.
+	checkout the file. Bug 1740839.
 
 2007-06-20  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

@@ -1,3 +1,11 @@
+2007-06-21  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-cancel-version),
+	(vc-clearcase-revert): 1.106 after removing a branch, do an update
+	in snapshot views.
+	(vc-clearcase-steal-lock): 1.106 abort gracefully when we cannot
+	checkout the file.
+
 2007-06-20  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-cleartool): 1.105 tell the bytecompiler that

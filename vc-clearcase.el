@@ -3351,6 +3351,7 @@ This is the string returned by the cleartool -version command."
 	ah-clearcase-diff-format
 	ah-clearcase-diff-cleanup-flag
 	ah-clearcase-no-label-action
+	vc-clearcase-diff-switches
 
 	ah-cleartool-next-command
 

@@ -3330,6 +3330,10 @@ This is the string returned by the cleartool -version command."
     (catch 'done (while t (sit-for 0.1)))
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))
 
+;; To update vc-clearcase-report-bug, use M-x occur <RET>
+;; def\(var\|const\|group\) <RET>.  `ah-cleartool-last-command-timestamp' is
+;; treated specially (see below)
+
 (defun vc-clearcase-report-bug ()
   "Submit via mail a bug report on vc-clearcase.el."
   (interactive)
@@ -3339,21 +3343,16 @@ This is the string returned by the cleartool -version command."
      vc-clearcase-maintainer-address
      "vc-clearcase.el"
      `( vc-clearcase-cvsid
-
+	vc-clearcase-maintainer-address
 	ah-clearcase-cleartool-program
+	ah-clearcase-vtree-program
+	ah-cleartool-tq
+	ah-cleartool-next-command
+	ah-cleartool-status-rx
+	ah-cleartool-question-rx
+	ah-cleartool-tq-rx
 	ah-cleartool-timeout
 	ah-cleartool-idle-timeout
-	ah-cleartool-save-stop-data
-	ah-clearcase-rmbranch-on-revert-flag
-	ah-clearcase-checkout-comment-type
-	ah-clearcase-checkout-policy
-	ah-clearcase-confirm-label-move
-	ah-clearcase-diff-format
-	ah-clearcase-diff-cleanup-flag
-	ah-clearcase-no-label-action
-	vc-clearcase-diff-switches
-
-	ah-cleartool-next-command
 
 	,(cons 'ah-cleartool-last-command-timestamp
 	       (lambda (x buf)
@@ -3368,7 +3367,36 @@ This is the string returned by the cleartool -version command."
 	ah-cleartool-ctid
 	ah-cleartool-ntid
 	ah-cleartool-terr
-	ah-cleartool-tresults)
+	ah-cleartool-tresults
+	ah-cleartool-save-stop-data
+	ah-cleartool-mode-line
+	ah-cleartool-finished-function
+	ah-cleartool-kill-buffer-when-done
+	ah-cleartool-last-command
+	ah-clearcase-lshistory-fmt
+	ah-clearcase-lshistory-fmt-ucm
+	ah-clearcase-log-view-font-lock-keywords
+	ah-clearcase-record-separator-rx
+	ah-clearcase-all-vprops
+	ah-clearcase-edcs-all-view-tags
+	ah-clearcase-edcs-all-view-tags-tid
+	ah-clearcase-all-labels
+	ah-clearcase-collect-labels-point
+	ah-clearcase-collect-labels-finished
+	ah-clearcase-checkout-comment-type
+	ah-clearcase-checkout-policy
+	ah-clearcase-rmbranch-on-revert-flag
+	ah-clearcase-file-name
+	vc-clearcase-diff-switches
+	ah-clearcase-diff-cleanup-flag
+	ah-clearcase-annotate-months
+	ah-clearcase-annotate-date-rx
+	ah-clearcase-no-label-action
+	ah-clearcase-confirm-label-move
+	ah-cleartool-lsco-fmt
+	ah-clearcase-edcs-view-tag
+	clearcase-global-menu
+	ah-clearcase-function-to-trace)
 
      (lambda ()
        (insert "\n\nClearCase version:\n==================\n\n"

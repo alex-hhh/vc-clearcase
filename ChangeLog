@@ -1,7 +1,7 @@
 2007-06-22  Alexandru Harsanyi  <harsanyi@mac.com>
 
-	* vc-clearcase.el (vc-clearcase-report-bug): 1.107 add
-	vc-clearcase-diff-switches added to the report.
+	* vc-clearcase.el (vc-clearcase-report-bug): 1.108 updated with
+	all defvar, defconst and defcustom symbols.
 
 2007-06-21  Alexandru Harsanyi  <harsanyi@mac.com>
 

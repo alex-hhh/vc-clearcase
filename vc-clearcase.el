@@ -2450,39 +2450,46 @@ See the cleartool diff manual page for possible options."
   :group 'vc-clearcase)
 
 (defun vc-clearcase-diff (file &optional rev1 rev2)
-  "Return the diff on FILE between REV1 and REV2."
+  "Put the FILE's diff between REV1 and REV2 in the *vc-diff* buffer.
+Return t if the revisions are identical, nil otherwise.
+
+When REV1 is nil, the files latest (checked-in) revision is used,
+when REV2 is nil, the current contents of the file are used."
   (setq file (expand-file-name file))
   (let ((fprop (ah-clearcase-file-fprop file)))
-    (when (not rev1)
+    (unless rev1
       (setq rev1 (ah-clearcase-fprop-version fprop)))
     (ah-cleartool "cd \"%s\"" (file-name-directory file))
     (setq file (file-name-nondirectory file))
-    (let ((fver1 (concat file "@@" rev1))
-	  (fver2 (if rev2 (concat file "@@" rev2) file)))
-      (with-current-buffer (get-buffer-create "*vc-diff*")
-	(message "Comparing file revisions...")
-	(let ((inhibit-read-only t))
-	  (erase-buffer)
-	  (let ((diff (ah-cleartool
-		       "diff %s \"%s\" \"%s\""
-		       (mapconcat 'identity (vc-switches 'CLEARCASE 'diff) " ")
-		       fver1 fver2)))
-	    (insert diff)
-	    (when ah-clearcase-diff-cleanup-flag
-	      (goto-char (point-min))
-	      (while (re-search-forward "\r$" nil t)
-		(replace-match "" nil nil)))
-	    (goto-char (point-min))
 
-	    (not
-	     ;; the way we determine whether the files are identical
-	     ;; depends on the diff format we use.
-	     (or
-	      ;; diff format has an empty buffer
-	      (equal (point-min) (point-max))
-	      ;; serial format prints "Files are identical", so we
-	      ;; look for that.
-	      (looking-at "Files are identical")))))))))
+    (with-current-buffer (get-buffer-create "*vc-diff*")
+      (message "Comparing file revisions...")
+
+      (let ((inhibit-read-only t)
+	    (fver1 (concat file "@@" rev1))
+	    (fver2 (if rev2 (concat file "@@" rev2) file))
+	    (opts (mapconcat 'identity
+			     (if (listp vc-clearcase-diff-switches)
+				 vc-clearcase-diff-switches
+				 (list vc-clearcase-diff-switches))
+			     " ")))
+	(erase-buffer)
+	(insert (ah-cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
+
+      (when ah-clearcase-diff-cleanup-flag
+	(goto-char (point-min))
+	(while (re-search-forward "\r$" nil t)
+	  (replace-match "" nil nil)))
+      (goto-char (point-min))
+
+      (not
+       ;; the way we determine whether the files are identical depends on the
+       ;; diff format we use.
+       (or
+	;; diff format has an empty buffer
+	(equal (point-min) (point-max))
+	;; serial format prints "Files are identical", so we look for that.
+	(looking-at "Files are identical"))))))
 
 
 (defun vc-clearcase-annotate-command (file buf rev)

@@ -3331,7 +3331,7 @@ This is the string returned by the cleartool -version command."
     (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))
 
 ;; To update vc-clearcase-report-bug, use M-x occur <RET>
-;; def\(var\|const\|group\) <RET>.  `ah-cleartool-last-command-timestamp' is
+;; def\(var\|const\|custom\) <RET>.  `ah-cleartool-last-command-timestamp' is
 ;; treated specially (see below)
 
 (defun vc-clearcase-report-bug ()

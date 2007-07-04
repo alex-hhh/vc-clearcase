@@ -321,7 +321,7 @@
 
 
 (eval-when-compile
-  (require 'cc-defs)                    ; for c-point
+  (require 'cc-defs)    ; for c-point
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
 
@@ -587,7 +587,7 @@ callback with the answer."
 	       (setq ah-cleartool-ctid tid) ; assume tid's always grow
 	       (cond ((> status 0)
 		      (push (cons tid result) ah-cleartool-terr))
-		     (cb                ; do we have a callback function?
+		     (cb ; do we have a callback function?
 		      (funcall cb cb-closure result))
 		     (t
 		      (push (cons tid result) ah-cleartool-tresults))))))
@@ -1016,18 +1016,18 @@ Will move to the next record if NUM is negative."
 	     (:constructor ah-clearcase-make-fprop)
 	     (:copier ah-clearcase-copy-fprop))
 
-  file-name                             ; the file name this fprop belongs to
+  file-name             ; the file name this fprop belongs to
 
   version-tid
-  version                               ; current file revision
-  parent                                ; parent revision
+  version               ; current file revision
+  parent                ; parent revision
   status                ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
-  what-rule                             ; confispec rule for the file
+  what-rule             ; confispec rule for the file
 
   comment-tid
-  comment                            ; the checkout comment (when checked out)
+  comment               ; the checkout comment (when checked out)
 
-  view-tag                              ; the view for the file
+  view-tag              ; the view for the file
 
   ;; a list of all the revisions of this file, starting from \main\0
   ;; all the way to latest.  Used by vc-clearcase-next-version to
@@ -1188,9 +1188,11 @@ the parent version, to conform to vc.el semantics."
 	     (:constructor ah-clearcase-make-vprop)
 	     (:copier ah-clearcase-copy-vprop))
   name
-  root-path                             ; for snapshot views only
-  stream                                ; for UCM views only
-  properties                         ; (a list of 'snapshot 'dynamic 'ucmview)
+  root-path                  ; for snapshot views only
+  stream                     ; the UCM stream or nil
+  properties                 ; a list of 'snapshot 'dynamic 'ucmview
+  activities                 ; list of UCM activities in this stream
+  activities-tid             ; transaction id for actitiviy retrieval
   )
 
 (defvar ah-clearcase-all-vprops '())
@@ -1229,7 +1231,7 @@ view).  The ROOT-PATH (on snapshot views only) will be set in
 view is visited."
 
   (if (ah-clearcase-vprop-p view-tag)
-      view-tag                          ; case 1/
+      view-tag          ; case 1/
       (let* ((vtag (cond ((stringp view-tag) view-tag)
 			 ((ah-clearcase-fprop-p view-tag)
 			  (ah-clearcase-fprop-view-tag view-tag))
@@ -1239,7 +1241,10 @@ view is visited."
 	     (vprop (car (or (member* vtag ah-clearcase-all-vprops
 				      :key 'ah-clearcase-vprop-name
 				      :test 'equal)
-			     (push (ah-clearcase-make-vprop :name vtag)
+			     (push (ah-clearcase-make-vprop
+				    :name vtag
+				    :activities (list "*NONE*" "*NEW-ACTIVITY*")
+				    :activities-tid -1)
 				   ah-clearcase-all-vprops)))))
 
 	(unless (ah-clearcase-vprop-properties vprop)
@@ -1280,7 +1285,9 @@ view is visited."
 (defun ah-clearcase-refresh-files-in-view (view-tag)
   "Update all visited files from VIEW-TAG.
 This is useful when the view changes (by a setcs or update
-command).  VIEW can be either a view-tag name or a vprop."
+command).
+
+VIEW-TAG is passed to `ah-clearcase-get-vprop', which see."
   (when (ah-clearcase-vprop-p view-tag)
     (setq view-tag (ah-clearcase-vprop-name view-tag)))
   (dolist (buffer (buffer-list))
@@ -1295,6 +1302,62 @@ command).  VIEW can be either a view-tag name or a vprop."
 	  (when (string= vtag view-tag)
 	    (ah-clearcase-maybe-set-vc-state file 'force)
 	    (vc-resynch-buffer file t t)))))))
+
+(defun ah-clearcase-retrieve-activities (view-tag)
+  "Retrieve the activities in VIEW-TAG.
+
+VIEW-TAG is passed to `ah-clearcase-get-vprop', which see.
+
+This function will start a transaction to retrieve all the
+activities, but will not wait for it.  It sets the activities-tid
+slot in the view tag's vprop to the transaction id and at the end
+of the transaction, will store the list of activities in the
+activities slot.
+
+Two special activities, *NONE* and *NEW-ACTIVITY*, will also be
+added to the list.  See `vc-clearcase-set-activity' for how they
+are used."
+  (let ((vprop (ah-clearcase-get-vprop view-tag)))
+    ;; wait for a previous activity collection transaction
+    (ah-cleartool-wait-for (ah-clearcase-vprop-activities-tid vprop))
+    (let ((tid (ah-cleartool-ask
+		(format "lsact -fmt \"%%n\\n\" -view %s"
+			(ah-clearcase-vprop-name vprop))
+		'nowait
+		vprop
+		(lambda (vprop answer)
+		  (setf (ah-clearcase-vprop-activities vprop)
+			(append (list "*NONE*" "*NEW-ACTIVITY*")
+				(split-string answer "[\n\r]+" t)))))))
+      (setf (ah-clearcase-vprop-activities-tid vprop) tid))))
+
+
+;;;; Read an activity name from the minibuffer with completion
+
+(defun ah-clearcase-read-activity (view-tag prompt &optional initial)
+  "Read an activity from VIEW-TAG with completion.
+PROMPT is displayed to the user; INITIAL, when non-nil is the
+initial activity name presented to the user."
+  (lexical-let ((vprop (ah-clearcase-get-vprop view-tag)))
+    ;; start reading the activities. By the time the user decides what
+    ;; activity it wants, we may have the answer already.  Note that the
+    ;; previous activity list still exists and the user can perform
+    ;; completions form that one.
+    (ah-clearcase-retrieve-activities vprop)
+    (completing-read
+     prompt
+     '(lambda (string predicate flag)
+       (let ((fn (cond ((eq flag t) 'all-completions)
+		       ((eq flag 'lambda)
+			;; test-completion does not exist in emacs 21.
+			'(lambda (x l &optional p) (member x l)))
+		       ((null flag) 'try-completion)
+		       (t (error "Unknown value for flag %S" flag)))))
+	 (funcall
+	  fn string (ah-clearcase-vprop-activities vprop) predicate)))
+     nil
+     'require-match
+     initial)))
 
 ;;;; Read a view-tag from the minibuffer with completion
 
@@ -1637,7 +1700,7 @@ comment file is removed."
 	 (unwind-protect
 	      (progn
 		(with-temp-file ,cfile
-		  (insert ,ctext))      ; ctext evaluated once, here
+		  (insert ,ctext)) ; ctext evaluated once, here
 		,@forms)
 	   (delete-file ,cfile)))))
 
@@ -1647,7 +1710,7 @@ comment file is removed."
 	 (progn ,@forms)
        (ah-cleartool-error nil)))
 
-  )                                     ; eval-when-compile
+  )                     ; eval-when-compile
 
 (put 'with-clearcase-checkout 'lisp-indent-function 1)
 (put 'with-clearcase-cfile 'lisp-indent-function 1)
@@ -1920,7 +1983,7 @@ returns a 'pathname not within a VOB' error message."
 	(condition-case msg
 	    (if (ah-cleartool "ls \"%s\"" file)
 		t
-		nil)                    ; never reached
+		nil)    ; never reached
 	  (ah-cleartool-error
 	   (if (string-match "Pathname is not within a VOB:" (cadr msg))
 	       nil
@@ -2142,7 +2205,7 @@ This method does three completely different things:
 	 (message (match-string 0 update-result)))
        (ah-clearcase-maybe-set-vc-state file 'force)
        (vc-resynch-buffer file t t)))
-    ((not editable)                     ; last case left for not editable
+    ((not editable)     ; last case left for not editable
      (error "Cannot to update to a specific revision"))
     (t
      (error "Bad param combinations in vc-clearcase-checkout: %S %S %S"
@@ -2193,7 +2256,11 @@ the file in by mistake and want to rework some changes.
 
 When EDITABLE is nil, the version is removed completely.  The
 current branch might be removed as well if
-`ah-clearcase-rmbranch-on-revert-flag' is non nil."
+`ah-clearcase-rmbranch-on-revert-flag' is non nil.
+
+If an error is signaled during the cancel, the original version
+is saved as a keep file in the same directory as FILE, so no data
+is lost."
 
   ;; Implementation Notes:
   ;;
@@ -2211,8 +2278,10 @@ current branch might be removed as well if
   ;;   update to get the version controlled file back, otherwise
   ;;   ClearCase commands will not work on the file.
   ;;
-  ;; * checkout the file.  We use `vc-clearcase-checkout', as the
-  ;;   checkout logic can be complicated too.
+  ;; * checkout the file.  We checkout the file unreserved, which we expect to
+  ;;   succeed most of the time (unless you are in a UCM view and you don't
+  ;;   have an activity set).  We will try to reserve the checkout, but do
+  ;;   nothing if it fails.
   ;;
   ;; * we need to replace the checked out file with the saved copy, make
   ;;   the file writable and load it back into emacs.
@@ -2235,39 +2304,35 @@ current branch might be removed as well if
   (setq file (expand-file-name file))
   (let ((fprop (ah-clearcase-file-fprop file))
 	(keep-file (ah-clearcase-get-keep-file-name file))
-	(comment-text nil)
-	(ah-clearcase-checkout-comment-type 'none))
+	(comment-text nil))
     (when editable
       (copy-file file keep-file)
-      ;; dont read comments for now, as we don't know how to set them
-      ;; anyway
+      (setq comment-text
+	    (ah-cleartool "desc -fmt \"%%c\" \"%s@@%s\""
+			  file (ah-clearcase-fprop-version fprop))))
 
+    ;; -xhlink, enables us to cancel versions which have activities or merge
+    ;; arrows attached.  Without it we cannot cancel any version in UCM views.
 
-      ;;              (setq comment-text
-      ;;                    (ah-cleartool "desc -fmt \"%%c\" \"%s@@%s\""
-      ;;                                  file (ah-clearcase-fprop-version fprop)))
-
-      )
-
-    (ah-cleartool "rmver -force -nc \"%s@@%s\""
+    (ah-cleartool "rmver -force -xhlink -nc \"%s@@%s\""
 		  file (ah-clearcase-fprop-version fprop))
 
     (when (ah-clearcase-snapshot-view-p (ah-clearcase-fprop-view-tag fprop))
       (delete-file file)
       (ah-cleartool "update -force \"%s\"" file))
 
-    ;; need to do this here, otherwise `vc-clearcase-checkout' below
-    ;; will not work
-    (ah-clearcase-maybe-set-vc-state file 'force)
-
     (when editable
-      (vc-clearcase-checkout file 'editable)
-      (setq fprop (ah-clearcase-file-fprop file))
-      ;; TODO: we should tell ClearCase what the checkout comment is.
-
+      (with-clearcase-cfile (comment-file comment-text)
+	(ah-cleartool
+	 "checkout -nquery -cfile \"%s\" -nwarn -ndata -unreserved \"%s\""
+	 comment-file file))
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
+      (ignore-cleartool-errors
+       (ah-cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
+
+    (ah-clearcase-maybe-set-vc-state file 'force)
 
     (when (and (not editable)
 	       ah-clearcase-rmbranch-on-revert-flag
@@ -2300,7 +2365,7 @@ but how do we detect it?"
 	(insert merge-status)
 	(switch-to-buffer-other-window (current-buffer) 'norecord)
 	(shrink-window-if-larger-than-buffer)))
-    0))                                 ; return success
+    0))                 ; return success
 
 (defun vc-clearcase-merge-news (file)
   "Merge the new versions in FILE."
@@ -2320,7 +2385,7 @@ but how do we detect it?"
 	  (insert merge-status)
 	  (switch-to-buffer-other-window (current-buffer) 'norecord)
 	  (shrink-window-if-larger-than-buffer)))
-      0)))                              ; return success
+      0)))              ; return success
 
 (defun vc-clearcase-steal-lock (file &optional version)
   "Checkout a hijacked FILE and keep its current contents.
@@ -2685,10 +2750,10 @@ element * NAME -nocheckout"
     (ah-cleartool
      "mklabel -nc %s %s lbtype:%s \"%s\""
      (if branchp "-replace" "") (if dir? "-recurse" "") name dir)
-    (when dir?                          ; apply label to parent directories
+    (when dir?          ; apply label to parent directories
       (message "Applying label to parent directories...")
       (ignore-cleartool-errors
-       (while t                         ; until cleartool will throw an error
+       (while t         ; until cleartool will throw an error
 	 (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
 	 (setq dir (file-name-directory dir))
 	 (ah-cleartool
@@ -2917,8 +2982,8 @@ the whole revision string."
 
 (defun vc-clearcase-what-view-tag (file)
   "Show view in which FILE resides.
-For UCM views, show the stream and current activity as well.  If
-FILE is null, the file visited in the current buffer is used."
+For UCM views, show the current activity as well.  If FILE is
+null, the file visited in the current buffer is used."
   (interactive (list (buffer-file-name (current-buffer))))
   (when (stringp file)
     (setq file (expand-file-name file)))
@@ -2932,10 +2997,9 @@ FILE is null, the file visited in the current buffer is used."
 		      (ah-cleartool "cd %s" (file-name-directory file))
 		      (ah-cleartool "lsact -cact -fmt \"%%n\""))))
 	  (when (string= cact "")
-	    (setq cact " NO ACTIVITY "))
-	  (message "View: %s (%s); Activity: %s"
+	    (setq cact "NO ACTIVITY"))
+	  (message "View: %s (%s)"
 		   (ah-clearcase-vprop-name vprop)
-		   (ah-clearcase-vprop-stream vprop)
 		   cact))
 	;; else
 	(message "View tag: %s" (ah-clearcase-vprop-name vprop)))))
@@ -3026,6 +3090,36 @@ are made to the views)."
 	  ;; TODO: how do we refresh all the files that were loaded
 	  ;; from this view?
 	  )))))
+
+;;;###autoload
+(defun vc-clearcase-set-activity (&optional dir)
+  "Set a UCM activity in DIR.
+The user is prompted for the available activities in the stream
+associated with the UCM view in DIR, and the selected one is set.
+Two special activity names are also available: *NONE* which will
+cause the current activity to be unset and *NEW-ACTIVITY* which
+will create and set a new activity (the user is prompted for the
+activity headline).
+
+When DIR is nil, the current directory is used."
+  (interactive)
+  (unless dir
+    (setq dir default-directory))
+
+  (let* ((view-tag (progn (ah-cleartool "cd \"%s\"" dir)
+			  (replace-regexp-in-string
+			   "[\n\r]+" "" (ah-cleartool "pwv -short"))))
+	 (activity (ah-clearcase-read-activity view-tag "Set activity: ")))
+    (cond
+      ((equal activity "*NONE*")
+       (ah-cleartool "setact -none"))
+      ((equal activity "*NEW-ACTIVITY*")
+       (let ((headline (read-from-minibuffer "Activity headline: ")))
+	 (when (equal headline "")
+	   (error "Activity headline cannot be empty"))
+	 (ah-cleartool "mkact -force -headline \"%s\"" headline)))
+      (t
+       (ah-cleartool "setact \"%s\"" activity)))))
 
 (when (fboundp 'define-button-type)
   (define-button-type 'vc-clearcase-start-ediff-button
@@ -3273,6 +3367,7 @@ In interactive mode, prompts for a view-tag name."
   (define-key vc-prefix-map "e" 'vc-clearcase-edcs)
   (define-key vc-prefix-map "f" 'vc-clearcase-start-view)
   (define-key vc-prefix-map "j" 'vc-clearcase-gui-vtree-browser)
+  (define-key vc-prefix-map "k" 'vc-clearcase-set-activity)
   (define-key vc-prefix-map "o" 'vc-clearcase-list-checkouts)
   (define-key vc-prefix-map "p" 'vc-clearcase-update-view)
   (define-key vc-prefix-map "t" 'vc-clearcase-what-view-tag)
@@ -3317,6 +3412,9 @@ In interactive mode, prompts for a view-tag name."
     (define-key m [vc-clearcase-start-view]
       '(menu-item "Start dynamic view..." vc-clearcase-start-view
 	:help "Start a dynamic view"))
+    (define-key m [vc-clearcase-set-activity]
+      '(menu-item "Set UCM activity..." vc-clearcase-set-activity
+	:help "Set an UCM activity in the current view"))
     (fset 'clearcase-global-menu m)))
 
 ;;;###autoload

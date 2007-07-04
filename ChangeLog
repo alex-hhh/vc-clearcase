@@ -1,3 +1,20 @@
+2007-07-04  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-vprop): 1.111 new slots,
+	activities, activities-tid
+	(ah-clearcase-get-vprop): 1.111 when creating a new
+	ah-clearcase-vprop structure, initialize activities and
+	activities-tid
+	(ah-clearcase-refresh-files-in-view): 1.111 doc update.
+	(ah-clearcase-retrieve-activities): 1.111 new function.
+	(vc-clearcase-cancel-version): 1.111 when checking out a file, use
+	the checkout comment of the canceled version; doc updates; allow
+	canceling versions with hyperlinks
+	(vc-clearcase-what-view-tag): 1.111 only display the view name and
+	current activity
+	(vc-clearcase-set-activity): 1.111 new function, added to the
+	keymap and menu
+
 2007-06-26  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-diff): 1.110 use

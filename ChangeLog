@@ -1,3 +1,15 @@
+2007-07-08  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-retrieve-activities): 1.112
+	removed
+	(ah-clearcase-read-activity): 1.112 also retrieve activities.
+	(ah-clearcase-complete-view-tag): 1.112 removed
+	(ah-clearcase-read-view-tag): 1.112 use a lambda form for the
+	completion function.
+	(ah-clearcase-complete-label): 1.112 removed
+	(ah-clearcase-read-label): 1.112 use a lambda form for the
+	completion function.
+
 2007-07-04  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-vprop): 1.111 new slots,

@@ -1303,23 +1303,23 @@ VIEW-TAG is passed to `ah-clearcase-get-vprop', which see."
 	    (ah-clearcase-maybe-set-vc-state file 'force)
 	    (vc-resynch-buffer file t t)))))))
 
-(defun ah-clearcase-retrieve-activities (view-tag)
-  "Retrieve the activities in VIEW-TAG.
+;;;; Read an activity name from the minibuffer with completion
 
-VIEW-TAG is passed to `ah-clearcase-get-vprop', which see.
+(defun ah-clearcase-read-activity (view-tag prompt &optional initial)
+  "Read an activity from VIEW-TAG with completion.
+PROMPT is displayed to the user; INITIAL, when non-nil is the
+initial activity name presented to the user."
+  (lexical-let ((vprop (ah-clearcase-get-vprop view-tag)))
 
-This function will start a transaction to retrieve all the
-activities, but will not wait for it.  It sets the activities-tid
-slot in the view tag's vprop to the transaction id and at the end
-of the transaction, will store the list of activities in the
-activities slot.
-
-Two special activities, *NONE* and *NEW-ACTIVITY*, will also be
-added to the list.  See `vc-clearcase-set-activity' for how they
-are used."
-  (let ((vprop (ah-clearcase-get-vprop view-tag)))
     ;; wait for a previous activity collection transaction
+
     (ah-cleartool-wait-for (ah-clearcase-vprop-activities-tid vprop))
+
+    ;; Start reading the activities asynchronously.  By the time the user
+    ;; decides what activity it wants, we may have the answer already.  Note
+    ;; that the previous activity list still exists and the user can perform
+    ;; completions form that one.
+
     (let ((tid (ah-cleartool-ask
 		(format "lsact -fmt \"%%n\\n\" -view %s"
 			(ah-clearcase-vprop-name vprop))
@@ -1329,21 +1329,8 @@ are used."
 		  (setf (ah-clearcase-vprop-activities vprop)
 			(append (list "*NONE*" "*NEW-ACTIVITY*")
 				(split-string answer "[\n\r]+" t)))))))
-      (setf (ah-clearcase-vprop-activities-tid vprop) tid))))
+      (setf (ah-clearcase-vprop-activities-tid vprop) tid))
 
-
-;;;; Read an activity name from the minibuffer with completion
-
-(defun ah-clearcase-read-activity (view-tag prompt &optional initial)
-  "Read an activity from VIEW-TAG with completion.
-PROMPT is displayed to the user; INITIAL, when non-nil is the
-initial activity name presented to the user."
-  (lexical-let ((vprop (ah-clearcase-get-vprop view-tag)))
-    ;; start reading the activities. By the time the user decides what
-    ;; activity it wants, we may have the answer already.  Note that the
-    ;; previous activity list still exists and the user can perform
-    ;; completions form that one.
-    (ah-clearcase-retrieve-activities vprop)
     (completing-read
      prompt
      '(lambda (string predicate flag)
@@ -1374,27 +1361,8 @@ initial activity name presented to the user."
 (defvar ah-clearcase-edcs-all-view-tags nil
   "An obarray of all known view-tags (stored as symbols).")
 
-(defvar  ah-clearcase-edcs-all-view-tags-tid nil
+(defvar ah-clearcase-edcs-all-view-tags-tid -1
   "Transaction ID to wait for fetching all view-tags.")
-
-(defun ah-clearcase-complete-view-tag (string predicate flag)
-  "Completion function for reading a view-tag name.
-See `completing-read' for the meanings of STRING, PREDICATE and
-FLAG."
-  ;; Note that we cannot pass ah-clearcase-edcs-all-view-tags to
-  ;; completing-read because its value will be set asynchronously when
-  ;; the cleartool ask command finishes.  Thus, we simply check the
-  ;; flag and call the proper function (which completing-read would
-  ;; call if we would pass ah-clearcase-edcs-all-view-tags directly to
-  ;; it.
-  (let ((completion-fn (cond ((eq flag t) 'all-completions)
-			     ((eq flag 'lambda)
-			      ;; test-completion does not exist in emacs 21.
-			      '(lambda (x l &optional p) (intern-soft x l)))
-			     ((null flag) 'try-completion)
-			     (t (error "Unknown value for flag %S" flag)))))
-    (funcall completion-fn string ah-clearcase-edcs-all-view-tags predicate)))
-
 
 (defun ah-clearcase-read-view-tag (prompt &optional initial)
   "Read a view tag from the minibuffer and return it.
@@ -1411,10 +1379,13 @@ user wants to accept INITIAL or wants to type in the name of the
 view, he can do so without waiting for the full list of view tags
 to be read from cleartool."
 
-  ;; start reading the view-tags. By the time the user decides what
-  ;; view-tag it wants, we may have the answer already.  Note that the
-  ;; previous view tag list still exists and the user can perform
-  ;; completions form that one.
+  ;; wait for the previous read view-tags transaction
+  (ah-cleartool-wait-for ah-clearcase-edcs-all-view-tags-tid)
+
+  ;; Start reading the view-tags asynchronously. By the time the user decides
+  ;; what view-tag it wants, we may have the answer already.  Note that the
+  ;; previous view tag list still exists and the user can perform completions
+  ;; form that one.
   (setq ah-clearcase-edcs-all-view-tags-tid
 	(ah-cleartool-ask
 	 "lsview -short" 'nowait nil
@@ -1423,7 +1394,19 @@ to be read from cleartool."
 	   (dolist (vtag (split-string view-tags "[\n\r]+"))
 	     (intern vtag ah-clearcase-edcs-all-view-tags)))))
 
-  (completing-read prompt 'ah-clearcase-complete-view-tag nil nil initial))
+  (completing-read
+   prompt
+   '(lambda (string predicate flag)
+     (let ((fn (cond ((eq flag t) 'all-completions)
+		     ((eq flag 'lambda)
+		      ;; test-completion does not exist in emacs 21.
+		      '(lambda (x l &optional p) (intern-soft x l)))
+		     ((null flag) 'try-completion)
+		     (t (error "Unknown value for flag %S" flag)))))
+       (funcall fn string ah-clearcase-edcs-all-view-tags predicate)))
+   nil
+   nil
+   initial))
 
 ;;;; Read a label form the minibuffer with completion.
 
@@ -1559,23 +1542,6 @@ The labels will become available as
       (set-process-filter process 'ah-clearcase-collect-labels-filter)
       (set-process-sentinel process 'ah-clearcase-collect-labels-sentinel))))
 
-(defun ah-clearcase-complete-label (string predicate flag)
-  "The completion function on the `ah-clearcase-all-labels'.
-STRING, PREDICATE and FLAG are passed to a completion
-function (`all-completions' or `try-completion'."
-  ;; Note that we cannot pass ah-clearcase-all-labels to completing-read
-  ;; because its value will be set asynchronously when the cleartool
-  ;; ask command finishes.  Thus, we simply check the flag and call
-  ;; the proper function (which completing-read would call if we would
-  ;; pass ah-clearcase-edcs-all-view-tags directly to it.
-  (let ((completion-fn (cond ((eq flag t) 'all-completions)
-			     ((eq flag 'lambda)
-			      ;; test-completion does not exist in emacs 21.
-			      '(lambda (x l &optional p) (intern-soft x l)))
-			     ((null flag) 'try-completion)
-			     (t (error "Unknown value for flag %S" flag)))))
-    (funcall completion-fn string ah-clearcase-all-labels predicate)))
-
 (defun ah-clearcase-read-label (prompt vob &optional initial reuse-labels)
   "Read a label from the minibuffer and return it.
 
@@ -1596,8 +1562,19 @@ from the user, in which case starting several cleartool commands is a
 vaste of resources."
   (unless reuse-labels
     (ah-clearcase-collect-labels-for-vob vob))
-  (completing-read prompt 'ah-clearcase-complete-label nil nil initial))
-
+  (completing-read
+   prompt
+   '(lambda (string predicate flag)
+     (let ((fn (cond ((eq flag t) 'all-completions)
+		     ((eq flag 'lambda)
+		      ;; test-completion does not exist in emacs 21.
+		      '(lambda (x l &optional p) (intern-soft x l)))
+		     ((null flag) 'try-completion)
+		     (t (error "Unknown value for flag %S" flag)))))
+       (funcall fn string ah-clearcase-all-labels predicate)))
+   nil
+   nil
+   initial))
 
 ;;;; Vc interface + some helpers
 

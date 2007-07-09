@@ -3069,24 +3069,22 @@ are made to the views)."
 	  )))))
 
 ;;;###autoload
-(defun vc-clearcase-set-activity (&optional dir)
-  "Set a UCM activity in DIR.
-The user is prompted for the available activities in the stream
-associated with the UCM view in DIR, and the selected one is set.
-Two special activity names are also available: *NONE* which will
+(defun vc-clearcase-set-activity (&optional activity)
+  "Set the UCM ACTIVITY in the current directory.
+In interactive mode, the user is prompted for the available
+activities in the stream associated with the UCM view in the
+`default-directory', and the selected one is set.
+
+Two special activity names are also accepted: *NONE* which will
 cause the current activity to be unset and *NEW-ACTIVITY* which
 will create and set a new activity (the user is prompted for the
-activity headline).
+activity headline)."
+  (interactive
+   (let* ((view (progn (ah-cleartool "cd \"%s\"" default-directory)
+		       (replace-regexp-in-string
+			"[\n\r]+" "" (ah-cleartool "pwv -short")))))
+     (list (ah-clearcase-read-activity view "Set activity: "))))
 
-When DIR is nil, the current directory is used."
-  (interactive)
-  (unless dir
-    (setq dir default-directory))
-
-  (let* ((view-tag (progn (ah-cleartool "cd \"%s\"" dir)
-			  (replace-regexp-in-string
-			   "[\n\r]+" "" (ah-cleartool "pwv -short"))))
-	 (activity (ah-clearcase-read-activity view-tag "Set activity: ")))
     (cond
       ((equal activity "*NONE*")
        (ah-cleartool "setact -none"))
@@ -3096,7 +3094,35 @@ When DIR is nil, the current directory is used."
 	   (error "Activity headline cannot be empty"))
 	 (ah-cleartool "mkact -force -headline \"%s\"" headline)))
       (t
-       (ah-cleartool "setact \"%s\"" activity)))))
+     (ah-cleartool "setact \"%s\"" activity))))
+
+;;;###autoload
+(defun vc-clearcase-show-current-activity (&optional extra-info)
+  "Show the current activity in the view.
+With prefix arguument (EXTRA-INFO), also shows the number of
+files modified under this activity, number of versions and the
+number of checked out files."
+  (interactive "P")
+  (ah-cleartool "cd \"%s\"" default-directory)
+  (let ((headline (ah-cleartool "lsact -cact -fmt \"%%[headline]p\""))
+	versions
+	(files 0)
+	(checkouts 0))
+    (when extra-info
+      (with-temp-message "Collecting activitiy statistics..."
+	(setq versions
+	      (split-string
+	       (ah-cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
+	(setq files (make-hash-table :test 'equal))
+	(dolist (v versions)
+	  (when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
+	    (incf checkouts))
+	  (when (string-match "^\\(.*\\)@@" v)
+	    (setf (gethash (match-string 1 v) files) t)))))
+    (if extra-info
+	(message "%s; %d files, %d revisions, %d checked-out"
+		 headline (hash-table-count files) (length versions) checkouts)
+	(message "%s" headline))))
 
 (when (fboundp 'define-button-type)
   (define-button-type 'vc-clearcase-start-ediff-button
@@ -3389,6 +3415,11 @@ In interactive mode, prompts for a view-tag name."
     (define-key m [vc-clearcase-start-view]
       '(menu-item "Start dynamic view..." vc-clearcase-start-view
 	:help "Start a dynamic view"))
+    (define-key m [separator-clearcase-2]
+      '("----" 'separator-2))
+    (define-key m [vc-clearcase-show-current-activity]
+      '(menu-item "Show current UCM activity..." vc-clearcase-show-current-activity
+	:help "Show the current activity in the view"))
     (define-key m [vc-clearcase-set-activity]
       '(menu-item "Set UCM activity..." vc-clearcase-set-activity
 	:help "Set an UCM activity in the current view"))

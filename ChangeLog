@@ -1,3 +1,10 @@
+2007-07-09  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (vc-clearcase-set-activity): 1.113 accept an
+	activity name as argument, in interactive mode, ask the user for
+	an activity
+	(vc-clearcase-show-current-activity): 1.113 new function
+
 2007-07-08  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (ah-clearcase-retrieve-activities): 1.112

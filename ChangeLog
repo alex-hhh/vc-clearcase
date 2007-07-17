@@ -1,3 +1,13 @@
+2007-07-17  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-file-not-found-handler): 1.114 new
+	function
+	(clearcase-global-menu): 1.114 add vc-clearcase-report-bug to the
+	menu.
+	(ah-clearcase-never-report): 1.114 new variable
+	(vc-clearcase-report-bug): 1.114 find and report on all variables
+	in the vc-clearcase package.
+
 2007-07-09  Alexandru Harsanyi  <harsanyi@mac.com>
 
 	* vc-clearcase.el (vc-clearcase-set-activity): 1.113 accept an

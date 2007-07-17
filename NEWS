@@ -1,5 +1,15 @@
 -*- outline -*- 
 
+* Release 1.115
+
+** ability to set and query the current UCM activity
+   This is implemented in `vc-clearcase-set-activity' (also bound to C-x v k)
+   and `vc-clearcase-show-current-activity'
+
+** Fix Bug 1741439 vc-clearcase-diff will incorectly use {vc-}diff-switches
+** Fix Bug 1740843 Uncheckout may corrupt the ClearCase status of a file
+** Fix Bug 1740839 Handling HIJACKED files in UCM views can fail
+
 * Release 1.106
 
 ** HIJACKED files are now handled correctly

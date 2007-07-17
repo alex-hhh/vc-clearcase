@@ -1,4 +1,4 @@
-2007-07-17  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-07-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-clearcase-file-not-found-handler): 1.114 new
 	function
@@ -8,14 +8,14 @@
 	(vc-clearcase-report-bug): 1.114 find and report on all variables
 	in the vc-clearcase package.
 
-2007-07-09  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-07-09  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-set-activity): 1.113 accept an
 	activity name as argument, in interactive mode, ask the user for
 	an activity
 	(vc-clearcase-show-current-activity): 1.113 new function
 
-2007-07-08  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-07-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-clearcase-retrieve-activities): 1.112
 	removed
@@ -27,7 +27,7 @@
 	(ah-clearcase-read-label): 1.112 use a lambda form for the
 	completion function.
 
-2007-07-04  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-07-04  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-clearcase-vprop): 1.111 new slots,
 	activities, activities-tid
@@ -44,17 +44,17 @@
 	(vc-clearcase-set-activity): 1.111 new function, added to the
 	keymap and menu
 
-2007-06-26  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-06-26  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-diff): 1.110 use
 	vc-clearcase-diff-switches directly, also reorganized the routine.
 
-2007-06-22  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-06-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-report-bug): 1.108 updated with
 	all defvar, defconst and defcustom symbols.
 
-2007-06-21  Alexandru Harsanyi  <harsanyi@mac.com>
+2007-06-21  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-cancel-version),
 	(vc-clearcase-revert): 1.106 after removing a branch, do an update

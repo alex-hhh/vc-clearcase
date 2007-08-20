@@ -277,7 +277,7 @@
 ;;
 ;; - clear-headers () -- not implemented
 ;;
-;; - delete-file (file) -- not implemented
+;; - delete-file (file) -- implemented
 ;;
 ;; - rename-file (old new) -- implemented
 ;;
@@ -321,7 +321,7 @@
 
 
 (eval-when-compile
-  (require 'cc-defs)    ; for c-point
+  (require 'cc-defs)                    ; for c-point
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
 
@@ -587,7 +587,7 @@ callback with the answer."
 	       (setq ah-cleartool-ctid tid) ; assume tid's always grow
 	       (cond ((> status 0)
 		      (push (cons tid result) ah-cleartool-terr))
-		     (cb ; do we have a callback function?
+		     (cb                ; do we have a callback function?
 		      (funcall cb cb-closure result))
 		     (t
 		      (push (cons tid result) ah-cleartool-tresults))))))
@@ -809,30 +809,28 @@ that were run to create this buffer."
 ;; lshistory in ClearCase).
 
 (defvar ah-clearcase-lshistory-fmt
-  (concat "----------\n"
-	  "version: %Vn\n"
-	  "user: %u; what: %e; date: %Sd\n"
-	  "labels: %l\n\n"
+  (concat "----------------------------\n"
+	  "revision %Vn\n"
+	  "date: %d; author: %u; what: %e\n"
 	  "%c")
   "Format string to use when listing file history.")
 
 (defvar ah-clearcase-lshistory-fmt-ucm
-  (concat "----------\n"
-	  "version: %Vn\n"
-	  "user: %u; what: %e; date: %Sd\n"
+  (concat "----------------------------\n"
+	  "revision %Vn\n"
+	  "date: %d; author: %u; what: %e\n"
 	  "activity: %[activity]p\n"
-	  "labels: %l\n\n"
 	  "%c")
   "Format string so use when listing file history.
 This is used when the file is in a UCM project.")
 
 (defconst ah-clearcase-log-view-font-lock-keywords
-  '(("----------" . font-lock-comment-face)
-    ("[-A-Za-z0-9]+:" . font-lock-keyword-face)
+  '(("-+" . font-lock-comment-face)
+    ("^revision .*$" . font-lock-keyword-face)
     ("(reserved)" . font-lock-variable-name-face)
     ("<No-tag-in-region>" . font-lock-warning-face)))
 
-(defconst ah-clearcase-record-separator-rx "^----------"
+(defconst ah-clearcase-record-separator-rx "^-+$"
   "Regexp for a record separator.")
 
 (defun ah-clearcase-log-view-bor ()
@@ -866,7 +864,7 @@ This method assumes that the record fields look like:
 found, nil is returned."
   (save-match-data
     (save-excursion
-      (let ((field-re (format "\\<%s:\\s-+" field-name))
+      (let ((field-re (format "\\<%s:?\\s-+" field-name))
 	    (limit (progn (ah-clearcase-log-view-eor) (point)))
 	    start end)
 	(ah-clearcase-log-view-bor)
@@ -926,7 +924,7 @@ Will visit previous records if NUM is negative).
 NOTE: you can only move forward if the current version is on the
 version path of the current file."
   (interactive "p")
-  (let ((version (ah-clearcase-log-view-record-field "version"))
+  (let ((version (ah-clearcase-log-view-record-field "revision"))
 	(move-version-fn (if (>= num 0) 'vc-clearcase-next-version
 			     'vc-clearcase-previous-version))
 	(file (with-current-buffer vc-parent-buffer
@@ -1016,18 +1014,18 @@ Will move to the next record if NUM is negative."
 	     (:constructor ah-clearcase-make-fprop)
 	     (:copier ah-clearcase-copy-fprop))
 
-  file-name             ; the file name this fprop belongs to
+  file-name                             ; the file name this fprop belongs to
 
   version-tid
-  version               ; current file revision
-  parent                ; parent revision
+  version                               ; current file revision
+  parent                                ; parent revision
   status                ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
-  what-rule             ; confispec rule for the file
+  what-rule                             ; confispec rule for the file
 
   comment-tid
-  comment               ; the checkout comment (when checked out)
+  comment                            ; the checkout comment (when checked out)
 
-  view-tag              ; the view for the file
+  view-tag                              ; the view for the file
 
   ;; a list of all the revisions of this file, starting from \main\0
   ;; all the way to latest.  Used by vc-clearcase-next-version to
@@ -1188,11 +1186,11 @@ the parent version, to conform to vc.el semantics."
 	     (:constructor ah-clearcase-make-vprop)
 	     (:copier ah-clearcase-copy-vprop))
   name
-  root-path                  ; for snapshot views only
-  stream                     ; the UCM stream or nil
-  properties                 ; a list of 'snapshot 'dynamic 'ucmview
-  activities                 ; list of UCM activities in this stream
-  activities-tid             ; transaction id for actitiviy retrieval
+  root-path                             ; for snapshot views only
+  stream                                ; the UCM stream or nil
+  properties                           ; a list of 'snapshot 'dynamic 'ucmview
+  activities                           ; list of UCM activities in this stream
+  activities-tid                      ; transaction id for actitiviy retrieval
   )
 
 (defvar ah-clearcase-all-vprops '())
@@ -1231,7 +1229,7 @@ view).  The ROOT-PATH (on snapshot views only) will be set in
 view is visited."
 
   (if (ah-clearcase-vprop-p view-tag)
-      view-tag          ; case 1/
+      view-tag                          ; case 1/
       (let* ((vtag (cond ((stringp view-tag) view-tag)
 			 ((ah-clearcase-fprop-p view-tag)
 			  (ah-clearcase-fprop-view-tag view-tag))
@@ -1677,7 +1675,7 @@ comment file is removed."
 	 (unwind-protect
 	      (progn
 		(with-temp-file ,cfile
-		  (insert ,ctext)) ; ctext evaluated once, here
+		  (insert ,ctext))      ; ctext evaluated once, here
 		,@forms)
 	   (delete-file ,cfile)))))
 
@@ -1687,7 +1685,7 @@ comment file is removed."
 	 (progn ,@forms)
        (ah-cleartool-error nil)))
 
-  )                     ; eval-when-compile
+  )                                     ; eval-when-compile
 
 (put 'with-clearcase-checkout 'lisp-indent-function 1)
 (put 'with-clearcase-cfile 'lisp-indent-function 1)
@@ -1960,7 +1958,7 @@ returns a 'pathname not within a VOB' error message."
 	(condition-case msg
 	    (if (ah-cleartool "ls \"%s\"" file)
 		t
-		nil)    ; never reached
+		nil)                    ; never reached
 	  (ah-cleartool-error
 	   (if (string-match "Pathname is not within a VOB:" (cadr msg))
 	       nil
@@ -2182,7 +2180,7 @@ This method does three completely different things:
 	 (message (match-string 0 update-result)))
        (ah-clearcase-maybe-set-vc-state file 'force)
        (vc-resynch-buffer file t t)))
-    ((not editable)     ; last case left for not editable
+    ((not editable)                     ; last case left for not editable
      (error "Cannot to update to a specific revision"))
     (t
      (error "Bad param combinations in vc-clearcase-checkout: %S %S %S"
@@ -2342,7 +2340,7 @@ but how do we detect it?"
 	(insert merge-status)
 	(switch-to-buffer-other-window (current-buffer) 'norecord)
 	(shrink-window-if-larger-than-buffer)))
-    0))                 ; return success
+    0))                                 ; return success
 
 (defun vc-clearcase-merge-news (file)
   "Merge the new versions in FILE."
@@ -2362,7 +2360,7 @@ but how do we detect it?"
 	  (insert merge-status)
 	  (switch-to-buffer-other-window (current-buffer) 'norecord)
 	  (shrink-window-if-larger-than-buffer)))
-      0)))              ; return success
+      0)))                              ; return success
 
 (defun vc-clearcase-steal-lock (file &optional version)
   "Checkout a hijacked FILE and keep its current contents.
@@ -2417,14 +2415,36 @@ Instead, `vc-print-log' is advised to call this function directly
 for Clearcase registered files."
   (setq file (expand-file-name file))
   (let ((buf (get-buffer-create "*clearcase-lshistory*"))
-	(ucm-view-p (ah-clearcase-ucm-view-p
-		     (ah-clearcase-file-fprop file))))
+	(label-revisions nil)
+	(max-label-length 0))
+
     (vc-setup-buffer buf)
+
+    (with-temp-message "Collecting label information..."
+      (dolist (v (split-string
+		  (ah-cleartool "lsvtree -nco -all \"%s\"" file) "[\n\r]+"))
+	(when (string-match "@@\\([^ ]+\\) (\\(.*\\))" v)
+	  (let ((revision (match-string 1 v))
+		(labels (match-string 2 v)))
+	    (dolist (label (split-string labels ", "))
+	      (setq max-label-length (max max-label-length (length label)))
+	      (push (cons label revision) label-revisions))))))
+
     (with-current-buffer buf
       (let ((inhibit-read-only t))
 	(erase-buffer)
+	(switch-to-buffer-other-window buf)
 	(ah-clearcase-log-view-mode)
-	(let* ((args (list "-fmt" (if ucm-view-p
+
+	(insert (format "Working file: %s\n" file))
+	(insert "Labels:\n")
+
+	(let ((fmtstr (format "\t%%-%ds %%s\n" max-label-length)))
+	  (dolist (label label-revisions)
+	    (insert (format fmtstr (car label) (cdr label)))))
+
+	(let* ((args (list "-fmt" (if (ah-clearcase-ucm-view-p
+				       (ah-clearcase-file-fprop file))
 				      ah-clearcase-lshistory-fmt-ucm
 				      ah-clearcase-lshistory-fmt)
 			   file))
@@ -2439,8 +2459,7 @@ for Clearcase registered files."
 		  (let ((fprop
 			 (ah-clearcase-file-fprop ah-clearcase-file-name)))
 		    (vc-clearcase-show-log-entry
-		     (ah-clearcase-fprop-version fprop)))))
-	  (switch-to-buffer-other-window (process-buffer process)))))))
+		     (ah-clearcase-fprop-version fprop))))))))))
 
 (defadvice vc-print-log (around ah-clearcase-print-log-advice)
   "On Clearcase files, call 'vc-clearcase-print-log' directly.
@@ -2457,7 +2476,7 @@ On all other files call the normal `vc-print-log'."
 Only works for the clearcase log format defined in
 `ah-clearcase-lshistory-fmt'."
   (let ((regexp
-	 (concat "^version: "
+	 (concat "^revision "
 		 (replace-regexp-in-string "[\\\\/]" "[\\\\/]" version)
 		 "\\>"))
 	pos)
@@ -2727,10 +2746,10 @@ element * NAME -nocheckout"
     (ah-cleartool
      "mklabel -nc %s %s lbtype:%s \"%s\""
      (if branchp "-replace" "") (if dir? "-recurse" "") name dir)
-    (when dir?          ; apply label to parent directories
+    (when dir?                          ; apply label to parent directories
       (message "Applying label to parent directories...")
       (ignore-cleartool-errors
-       (while t         ; until cleartool will throw an error
+       (while t                         ; until cleartool will throw an error
 	 (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
 	 (setq dir (file-name-directory dir))
 	 (ah-cleartool
@@ -2779,6 +2798,13 @@ Return nil if no such revision exists."
 	(setf (ah-clearcase-fprop-revision-list fprop) revision-list)
 	(message "Building revision list...done.")))
     (car (cdr-safe (member rev revision-list)))))
+
+(defun vc-clearcase-delete-file (file)
+  "Remove FILE from ClearCase.
+Previous versions of the directory will still contain FILE."
+  (setq file (expand-file-name file))
+  (with-clearcase-checkout (file-name-directory file)
+    (ah-cleartool "rmname -nc \"%s\"" file)))
 
 ;;; NOTE: for some reason, the renamed file does not show up as a
 ;;; clearcase registered until after I kill it and re-open it...
@@ -3036,7 +3062,7 @@ will open the specified version in another window, using
 ;;;; Additional vc clearcase commands (for directories)
 
 (defconst ah-cleartool-lsco-fmt
-  (concat "----------\n"
+  (concat "----------------------------\n"
 	  "file: %n\n"
 	  "parent-version: %PVn\n"
 	  "checkout-status: (%Rf)\n"
@@ -3117,15 +3143,15 @@ activity headline)."
 			"[\n\r]+" "" (ah-cleartool "pwv -short")))))
      (list (ah-clearcase-read-activity view "Set activity: "))))
 
-    (cond
-      ((equal activity "*NONE*")
-       (ah-cleartool "setact -none"))
-      ((equal activity "*NEW-ACTIVITY*")
-       (let ((headline (read-from-minibuffer "Activity headline: ")))
-	 (when (equal headline "")
-	   (error "Activity headline cannot be empty"))
-	 (ah-cleartool "mkact -force -headline \"%s\"" headline)))
-      (t
+  (cond
+    ((equal activity "*NONE*")
+     (ah-cleartool "setact -none"))
+    ((equal activity "*NEW-ACTIVITY*")
+     (let ((headline (read-from-minibuffer "Activity headline: ")))
+       (when (equal headline "")
+	 (error "Activity headline cannot be empty"))
+       (ah-cleartool "mkact -force -headline \"%s\"" headline)))
+    (t
      (ah-cleartool "setact \"%s\"" activity))))
 
 ;;;###autoload
@@ -3140,21 +3166,23 @@ number of checked out files."
 	versions
 	(files 0)
 	(checkouts 0))
-    (when extra-info
-      (with-temp-message "Collecting activitiy statistics..."
-	(setq versions
-	      (split-string
-	       (ah-cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
-	(setq files (make-hash-table :test 'equal))
-	(dolist (v versions)
-	  (when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
-	    (incf checkouts))
-	  (when (string-match "^\\(.*\\)@@" v)
-	    (setf (gethash (match-string 1 v) files) t)))))
-    (if extra-info
-	(message "%s; %d files, %d revisions, %d checked-out"
-		 headline (hash-table-count files) (length versions) checkouts)
-	(message "%s" headline))))
+    (if (equal headline "")
+	(message "no current activity set.")
+	(when extra-info
+	  (with-temp-message "Collecting activitiy statistics..."
+	    (setq versions
+		  (split-string
+		   (ah-cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
+	    (setq files (make-hash-table :test 'equal))
+	    (dolist (v versions)
+	      (when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
+		(incf checkouts))
+	      (when (string-match "^\\(.*\\)@@" v)
+		(setf (gethash (match-string 1 v) files) t)))))
+	(if extra-info
+	    (message "%s; %d files, %d revisions, %d checked-out"
+		     headline (hash-table-count files) (length versions) checkouts)
+	    (message "%s" headline)))))
 
 (when (fboundp 'define-button-type)
   (define-button-type 'vc-clearcase-start-ediff-button
@@ -3518,14 +3546,14 @@ easier to keep it up-to-date this way.")
      obarray)
 
     (push (cons 'ah-cleartool-last-command-timestamp
-	       (lambda (x buf)
-		 (let ((name (symbol-name x))
-		       (value (symbol-value x)))
-		   (insert name " " (format "%.3f" value)
-			   "; " (format "%.3f" (- (float-time) value))
-			   " seconds ago")
-		   (lisp-indent-line)
-		   (insert "\n"))))
+		(lambda (x buf)
+		  (let ((name (symbol-name x))
+			(value (symbol-value x)))
+		    (insert name " " (format "%.3f" value)
+			    "; " (format "%.3f" (- (float-time) value))
+			    " seconds ago")
+		    (lisp-indent-line)
+		    (insert "\n"))))
 	  varlist)
 
     ;; sort varlist, as it is easier to search in the error report.

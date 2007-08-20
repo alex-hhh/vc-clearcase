@@ -1,3 +1,21 @@
+2007-08-20  Alexandru Harsanyi  <harsanyi@mac.com>
+
+	* vc-clearcase.el (ah-clearcase-lshistory-fmt)
+	(ah-clearcase-lshistory-fmt-ucm): 1.115 changed to more compact
+	format
+	(ah-clearcase-log-view-font-lock-keywords)
+	(ah-clearcase-record-separator-rx): 1.115 updated
+	(ah-clearcase-log-view-record-field): 1.115 updated for new record
+	format.
+	(ah-clearcase-log-view-forward-version): 1.115 s/version/revision/
+	(vc-clearcase-print-log): 1.115 changed so that output resembles
+	the "cvs log" output
+	(vc-clearcase-show-log-entry): 1.115 s/version/revision/
+	(vc-clearcase-delete-file): 1.115 new function
+	(ah-cleartool-lsco-fmt): 1.115 updated
+	(vc-clearcase-show-current-activity): 1.115 print a helpful
+	message when no activity is set.
+
 2007-07-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-clearcase-file-not-found-handler): 1.114 new

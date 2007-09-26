@@ -3138,7 +3138,8 @@ cause the current activity to be unset and *NEW-ACTIVITY* which
 will create and set a new activity (the user is prompted for the
 activity headline)."
   (interactive
-   (let* ((view (progn (ah-cleartool "cd \"%s\"" default-directory)
+   (let* ((view (progn (ah-cleartool
+			"cd \"%s\"" (expand-file-name default-directory))
 		       (replace-regexp-in-string
 			"[\n\r]+" "" (ah-cleartool "pwv -short")))))
      (list (ah-clearcase-read-activity view "Set activity: "))))
@@ -3161,7 +3162,7 @@ With prefix arguument (EXTRA-INFO), also shows the number of
 files modified under this activity, number of versions and the
 number of checked out files."
   (interactive "P")
-  (ah-cleartool "cd \"%s\"" default-directory)
+  (ah-cleartool "cd \"%s\"" (expand-file-name default-directory))
   (let ((headline (ah-cleartool "lsact -cact -fmt \"%%[headline]p\""))
 	versions
 	(files 0)

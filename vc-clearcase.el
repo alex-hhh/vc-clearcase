@@ -688,7 +688,8 @@ transaction is complete as funcall(fn closure answer)."
     (let ((ah-cleartool-save-stop-data nil))
       ;; stop cleartool without dumping state to the
       ;; *cleartool-aborts* buffer.
-      (ah-cleartool-tq-stop)))
+      (ah-cleartool-tq-stop))
+    (message nil))
   (setq ah-cleartool-last-command-timestamp (float-time))
   (ah-cleartool-tq-maybe-start)
   (let ((tid ah-cleartool-ntid)
@@ -2211,7 +2212,7 @@ CONTENTS-DONE is ignored.  The
 	;; in snapshot views, the file seems to be listed as "[special
 	;; selection, deleted version]", after removing the branch, so we need
 	;; an update.
-	(when (ah-clearcase-snapshot-view-p (ah-clearcase-get-vprop fprop))
+	(when (ah-clearcase-snapshot-view-p fprop)
 	  (ah-cleartool "update -overwrite -force \"%s\"" file))))
     (ah-clearcase-maybe-set-vc-state file 'force)))
 
@@ -2292,7 +2293,7 @@ is lost."
     (ah-cleartool "rmver -force -xhlink -nc \"%s@@%s\""
 		  file (ah-clearcase-fprop-version fprop))
 
-    (when (ah-clearcase-snapshot-view-p (ah-clearcase-fprop-view-tag fprop))
+    (when (ah-clearcase-snapshot-view-p fprop)
       (delete-file file)
       (ah-cleartool "update -force \"%s\"" file))
 
@@ -2316,7 +2317,7 @@ is lost."
       (ah-cleartool "rmbranch -force -nc \"%s@@%s\""
 		    file (ah-clearcase-fprop-version-base fprop))
       ;; see vc-clearcase-revert on why we do this...
-      (when (ah-clearcase-snapshot-view-p (ah-clearcase-get-vprop fprop))
+      (when (ah-clearcase-snapshot-view-p fprop)
 	(ah-cleartool "update -overwrite -force \"%s\"" file))
       (ah-clearcase-maybe-set-vc-state file 'force))
 
@@ -2495,7 +2496,10 @@ are \"-diff_format\" or \"-serial_format\".
 To ignore the extra whitespace characters, you need the option
 \"-option \"-blank_ignore\"\".
 
-See the cleartool diff manual page for possible options."
+See the cleartool diff manual page for possible options.
+
+NOTE: this option is ignored when
+`ah-clearcase-use-external-diff' is t."
   :type '(choice (const :tag "None" nil)
 	  (string :tag "Argument String")
 	  (repeat :tag "Argument List"
@@ -2510,6 +2514,12 @@ See the cleartool diff manual page for possible options."
   :type 'boolean
   :group 'vc-clearcase)
 
+(defcustom ah-clearcase-use-external-diff nil
+  "Non-nil means use the `diff' function to compare revisions.
+When nil, the ClearCase internal diff is used instead."
+  :type 'boolean
+  :group 'vc-clearcase)
+
 (defun vc-clearcase-diff (file &optional rev1 rev2)
   "Put the FILE's diff between REV1 and REV2 in the *vc-diff* buffer.
 Return t if the revisions are identical, nil otherwise.
@@ -2517,40 +2527,68 @@ Return t if the revisions are identical, nil otherwise.
 When REV1 is nil, the files latest (checked-in) revision is used,
 when REV2 is nil, the current contents of the file are used."
   (setq file (expand-file-name file))
-  (let ((fprop (ah-clearcase-file-fprop file)))
+  (let ((fprop (ah-clearcase-file-fprop file))
+	(default-directory (file-name-directory file)))
     (unless rev1
       (setq rev1 (ah-clearcase-fprop-version fprop)))
     (ah-cleartool "cd \"%s\"" (file-name-directory file))
     (setq file (file-name-nondirectory file))
 
-    (with-current-buffer (get-buffer-create "*vc-diff*")
-      (message "Comparing file revisions...")
+    (if ah-clearcase-use-external-diff
 
-      (let ((inhibit-read-only t)
-	    (fver1 (concat file "@@" rev1))
-	    (fver2 (if rev2 (concat file "@@" rev2) file))
-	    (opts (mapconcat 'identity
-			     (if (listp vc-clearcase-diff-switches)
-				 vc-clearcase-diff-switches
-				 (list vc-clearcase-diff-switches))
-			     " ")))
-	(erase-buffer)
-	(insert (ah-cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
+	(let ((old (vc-version-backup-file-name file rev1 'manual))
+	      (new (if rev2
+		       (vc-version-backup-file-name file rev2 'manual)
+		       file)))
+	  (when (file-exists-p old)
+	    (delete-file old))
+	  (ah-cleartool "get -to \"%s\" \"%s@@%s\"" old file rev1)
+	  (when rev2
+	    (when (file-exists-p new)
+	      (delete-file new))
+	    (ah-cleartool "get -to \"%s\" \"%s@@%s\"" new file rev2))
+	  (let ((b (get-buffer "*vc-diff*")))
+	    (when b (kill-buffer b)))
+	  (with-current-buffer (diff old new nil 'no-async)
+	    (rename-buffer "*vc-diff*")
 
-      (when ah-clearcase-diff-cleanup-flag
-	(goto-char (point-min))
-	(while (re-search-forward "\r$" nil t)
-	  (replace-match "" nil nil)))
-      (goto-char (point-min))
+	    ;; delete the temporary files we created
+	    (delete-file old)
+	    (when rev2 (delete-file new))
 
-      (not
-       ;; the way we determine whether the files are identical depends on the
-       ;; diff format we use.
-       (or
-	;; diff format has an empty buffer
-	(equal (point-min) (point-max))
-	;; serial format prints "Files are identical", so we look for that.
-	(looking-at "Files are identical"))))))
+	    (goto-char (point-max))
+	    (beginning-of-line)
+	    ;; return t when there are no differences
+	    (and (re-search-forward "(no differences)" (point-max) 'noerror) t)))
+
+	;; else use the internal diff provided by cleartool
+	(with-current-buffer (get-buffer-create "*vc-diff*")
+
+	  (let ((inhibit-read-only t)
+		(fver1 (concat file "@@" rev1))
+		(fver2 (if rev2 (concat file "@@" rev2) file))
+		(opts (mapconcat 'identity
+				 (if (listp vc-clearcase-diff-switches)
+				     vc-clearcase-diff-switches
+				     (list vc-clearcase-diff-switches))
+				 " ")))
+	    (erase-buffer)
+	    (insert (ah-cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
+
+	  (when ah-clearcase-diff-cleanup-flag
+	    (goto-char (point-min))
+	    (while (re-search-forward "\r$" nil t)
+	      (replace-match "" nil nil)))
+	  (goto-char (point-min))
+
+	  (not
+	   ;; the way we determine whether the files are identical depends on
+	   ;; the diff format we use.
+	   (or
+	    ;; diff format has an empty buffer
+	    (equal (point-min) (point-max))
+	    ;; serial format prints "Files are identical", so we look for that.
+	    (looking-at "Files are identical")))))))
 
 
 (defun vc-clearcase-annotate-command (file buf rev)
@@ -3168,7 +3206,7 @@ number of checked out files."
 	(files 0)
 	(checkouts 0))
     (if (equal headline "")
-	(message "no current activity set.")
+	(message "No current activity set.")
 	(when extra-info
 	  (with-temp-message "Collecting activitiy statistics..."
 	    (setq versions

@@ -1,3 +1,13 @@
+2007-10-13  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (ah-cleartool-ask): 1.117 clear the message
+	about restarting cleartool.
+	(vc-clearcase-revert, vc-clearcase-cancel-version): 1.117
+	ah-clearcase-snapshot-view-p accepts a fprop as argument
+	(ah-clearcase-use-external-diff): 1.117 new variable
+	(vc-clearcase-diff): 1.117 optionally use the diff package for
+	comparing revisions
+
 2007-09-26  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-set-activity)

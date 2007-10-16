@@ -1,3 +1,12 @@
+2007-10-16  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-clearcase-dir-state-cache): 1.118 new
+	variable
+	(vc-clearcase-dir-state): 1.118 new function
+	(vc-clearcase-dired-state-info): 1.118 new function
+	(vc-clearcase-responsible-p): 1.118 re-written, takes into account
+	`vc-clearcase-dir-state-cache'.
+
 2007-10-13  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-cleartool-ask): 1.117 clear the message

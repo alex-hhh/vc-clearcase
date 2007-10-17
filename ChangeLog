@@ -1,3 +1,21 @@
+2007-10-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (ah-cleartool-tq-start): 1.119 start cleartool
+	in the users home directory
+	(with-cleartool-directory): 1.119 new macro
+	(ah-clearcase-setup-vprop): 1.119 new function
+	(ah-clearcase-get-vprop): 1.119 initializing a VPROP moved to
+	`ah-clearcase-setup-vprop'
+	(ah-clearcase-vob-tag-for-path)
+	(ah-clearcase-maybe-set-vc-state)
+	(vc-clearcase-diff)
+	(vc-clearcase-create-snapshot)
+	(vc-clearcase-get-label-differences)
+	(vc-clearcase-what-view-tag)
+	(vc-clearcase-set-activity)
+	(vc-clearcase-show-current-activity): 1.119 use
+	`with-cleartool-directory'
+
 2007-10-16  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-dir-state-cache): 1.118 new

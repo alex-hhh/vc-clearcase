@@ -117,29 +117,6 @@
 ;;         (save-buffer)))))
 ;;
 
-;;;;; Implementation notes:
-;;
-;; This package uses the following prefixes for its functions and
-;; variables:
-;;
-;;  ah-cleartool -- used for all cleartool related functionality
-;; (running cleartool commands or communicating with the cleartool
-;; transaction queue)
-;;
-;; ah-clearcase -- used for all clearcase functionality (support
-;; functions for the VC package)
-;;
-;; vc-clearcase -- prefix used by the VC interface functions (required
-;; by vc.el) and the additional functions which perform vc operations.
-;;
-;; the 'ah' prefix stands for Alex Harsanyi and is used to avoid
-;; conflicts with the clearcase.el package.
-;;
-;; In addition, three macros are defined: with-clearcase-checkout,
-;; with-clearcase-cfile and ignore-cleartool-errors if you compile
-;; this file they will not pollute the Emacs namespace.
-
-
 ;;;;; Implementation status of vc backend functions from vc.el
 ;;
 ;;
@@ -311,7 +288,7 @@
 (require 'vc-hooks)
 (require 'vc)
 
-;; Bug 1608947: This is needed at runtime for the member* call.
+;; Bug 1608947: This is needed at runtime for the `find' call.
 (require 'cl)
 
 ;; This is present in Emacs 22.  If it is available, we provide
@@ -473,26 +450,26 @@ Cleans up properly if cleartool exits.  EVENT is not used."
 
 (defun ah-cleartool-tq-start ()
   "Start the transaction queue to cleartool."
-  (let ((process
-	 (start-process "cleartool" " *cleartool*"
-			ah-clearcase-cleartool-program "-status")))
-    (when (not (eq system-type 'windows-nt))
-      ;; on systems other than windows-nt, cleartool will print a
-      ;; prompt when it starts up and tq will complain about it.  In
-      ;; these cases, we wait until the prompt is printed, and start
-      ;; the tq afterward.
-      (with-timeout (5 (error "Timeout waiting for cleartool to start"))
-	(with-current-buffer (get-buffer " *cleartool*")
-	  (goto-char (point-min))
-	  (while (not (looking-at "cleartool 1> $"))
-	    (accept-process-output process 2)
-	    (goto-char (point-min)))
-	  (erase-buffer))))
-    (set-process-sentinel process 'ah-cleartool-tq-sentinel)
-    (process-kill-without-query process nil)
-    (setq ah-cleartool-tq (tq-create process)
-	  ah-cleartool-next-command 1
-	  ah-cleartool-last-command-timestamp (float-time))))
+  (let ((default-directory (expand-file-name "~")))
+    (let ((process
+	   (start-process "cleartool" " *cleartool*"
+			  ah-clearcase-cleartool-program "-status")))
+      (when (not (eq system-type 'windows-nt))
+	;; on systems other than windows-nt, cleartool will print a prompt
+	;; when it starts up and tq will complain about it.  In these cases,
+	;; we wait until the prompt is printed, and start the tq afterward.
+	(with-timeout (5 (error "Timeout waiting for cleartool to start"))
+	  (with-current-buffer (get-buffer " *cleartool*")
+	    (goto-char (point-min))
+	    (while (not (looking-at "cleartool 1> $"))
+	      (accept-process-output process 2)
+	      (goto-char (point-min)))
+	    (erase-buffer))))
+      (set-process-sentinel process 'ah-cleartool-tq-sentinel)
+      (process-kill-without-query process nil)
+      (setq ah-cleartool-tq (tq-create process)
+	    ah-cleartool-next-command 1
+	    ah-cleartool-last-command-timestamp (float-time)))))
 
 
 (defcustom ah-cleartool-save-stop-data nil
@@ -802,6 +779,83 @@ that were run to create this buffer."
 	(setq ah-cleartool-last-command (copy-sequence args1))
 	process))))
 
+;;;; Some helper macros
+
+;; If you compile this file, these macros won't exist at runtime, so it is
+;; safe to give them nice names.
+
+(defmacro with-clearcase-checkout (thing &rest forms)
+  "Ensure that THING is checked out, than execute FORMS.
+If THING was checked out by us, we check it back in.  THING can
+be either a file or a directory."
+  ;; NOTE: we could use make-symbol with the same effect
+  (let ((checkout-needed (make-symbol "checkout-needed"))
+	(real-thing (make-symbol "real-thing")))
+    `(let* ((,real-thing ,thing)
+	    (,checkout-needed
+	     (string=
+	      (ah-cleartool "desc -fmt \"%%Rf\" \"%s\"" ,real-thing)
+	      "")))
+       (unwind-protect
+	    (progn
+	      (when ,checkout-needed
+		(message "Checking out %s" ,real-thing)
+		(ah-cleartool "checkout -nquery -ptime -nwarn -reserved -nc \"%s\"" ,real-thing))
+	      ,@forms)
+	 (when ,checkout-needed
+	   (message "Checking in %s" ,real-thing)
+	   (ah-cleartool "checkin -ptime -nwarn -nc \"%s\"" ,real-thing))))))
+
+(defmacro with-clearcase-cfile (comment-vars &rest forms)
+  "Save a comment in a temporary file, than execute `FORMS'.
+`COMMENT-VARS' is a list of (comment-file comment-text),
+comment-file will be bound to a temporary file name and
+comment-text will be saved into it.  When all is finished, the
+comment file is removed."
+  ;; NOTE: we could have used
+  ;; (defmacro* with-cleacase-cfile ((comment-file comment-text) &body forms)
+  ;;    ;; blah blah)
+  ;; but we didn't
+  (unless (listp comment-vars)
+    (error "Expecting comment-vars to be a list"))
+  (unless (= 2 (length comment-vars))
+    (error "Expecting two elements in comment-vars"))
+  (unless (symbolp (car comment-vars))
+    (error "(car comment-vars) is not a symbol"))
+  (let ((cfile (car comment-vars))
+	(ctext (cadr comment-vars)))
+    `(let ((,cfile
+	    (make-temp-name (concat temporary-file-directory "vc-clearcase-"))))
+       (unwind-protect
+	    (progn
+	      (with-temp-file ,cfile
+		(insert ,ctext))      ; ctext evaluated once, here
+	      ,@forms)
+	 (delete-file ,cfile)))))
+
+(defmacro with-cleartool-directory (dir &rest forms)
+  "Change the cleartool directory to DIR, than execute forms.
+The original cleartool directory is restored after the forms are
+executed."
+  (let ((old-dir (make-symbol "old-dir")))
+      `(let ((,old-dir (replace-regexp-in-string
+			"[\n\r]+" "" (ah-cleartool-ask "pwd"))))
+	 (unwind-protect
+	      (progn
+		(ah-cleartool "cd \"%s\"" ,dir)
+		,@forms)
+	   (ah-cleartool "cd \"%s\"" ,old-dir)))))
+
+(defmacro ignore-cleartool-errors (&rest forms)
+  "Execute forms, trapping any cleartool errors and ignoring them"
+  `(condition-case nil
+       (progn ,@forms)
+     (ah-cleartool-error nil)))
+
+(put 'with-clearcase-checkout 'lisp-indent-function 1)
+(put 'with-clearcase-cfile 'lisp-indent-function 1)
+(put 'with-cleartool-directory 'lisp-indent-function 1)
+(put 'ignore-cleartool-errors 'lisp-indent-function 0)
 
 ;;;; Clearcase Log View mode
 
@@ -1214,20 +1268,55 @@ VIEW can be either a view name (a string) a vprop or a fprop."
   (let ((vprop (ah-clearcase-get-vprop view)))
     (not (null (memq 'ucmview (ah-clearcase-vprop-properties vprop))))))
 
-(defun ah-clearcase-get-vprop (view-tag)
+(defun ah-clearcase-setup-vprop (vprop dir)
+  "Setup some properties in VPROP, if they are not already set.
+We set the view properties plus the stream name for UCM views.
+If DIR is not nil it is a directory inside the view, we use it to
+determine the root path for a snapshot view."
+
+  ;; WARNING: we assume that DIR is a directory inside the view VPROP, but we
+  ;; don't check.  This can lead to problems when DIR is inside a different
+  ;; view...
+
+  (with-cleartool-directory dir
+    (unless (ah-clearcase-vprop-properties vprop)
+      (let ((vdata (ah-cleartool "lsview -properties -full %s"
+				 (ah-clearcase-vprop-name vprop)))
+	    (case-fold-search t))
+	(if (string-match "^\\s-*properties:\\s-*\\(.*\\)\\s-*$" vdata)
+	    (setf (ah-clearcase-vprop-properties vprop)
+		  (mapcar 'intern (split-string (downcase (match-string 1 vdata)))))
+	    ;; else, report it as a message (should it be an error?
+	    (message "ah-clearcase-get-vprop: no props for %s"
+		     (ah-clearcase-vprop-name vprop))))
+
+      (when (ah-clearcase-ucm-view-p vprop)
+	(setf (ah-clearcase-vprop-stream vprop)
+	      (format "lsstream -fmt \"%%n\" -view %s"
+		      (ah-clearcase-vprop-name vprop)))))
+    (when (and dir
+	       (null (ah-clearcase-vprop-root-path vprop))
+	       (ah-clearcase-snapshot-view-p vprop))
+      (setf (ah-clearcase-vprop-root-path vprop)
+	    (replace-regexp-in-string
+	     "[\n\r]+" "" (ah-cleartool "pwv -root")))))
+  vprop)
+
+
+(defun ah-clearcase-get-vprop (view-tag &optional dir)
   "Return the vprop struct associated with VIEW-TAG.
-The vprop structure is created if needed.
+The vprop structure is created if needed.  DIR, if not nil is a
+directory inside the view.  It is used to set the view root path
+in snapshot views.
 
 VIEW-TAG can be (1) a vprop, in which case it is returned; (2) a
 string in which case a vprop with that name is looked up or
 created; (3) a fprop, in which case its view-tag looked up
 using (2).
 
-If the vprop is created, only the NAME and PROPERTIES fields will
-be populated.  A delayed request will fill in STREAM (on a UCM
-view).  The ROOT-PATH (on snapshot views only) will be set in
-`ah-clearcase-maybe-set-vc-state' the first time a file in this
-view is visited."
+If the VPROP has to be created, some properties will be set by
+asking cleartool for information.  See
+`ah-clearcase-setup-vprop'."
 
   (if (ah-clearcase-vprop-p view-tag)
       view-tag                          ; case 1/
@@ -1235,50 +1324,17 @@ view is visited."
 			 ((ah-clearcase-fprop-p view-tag)
 			  (ah-clearcase-fprop-view-tag view-tag))
 			 (t (error "Unknown type for VIEW-TAG"))))
-	     ;; find or create a new vprop.  We will remove it later
-	     ;; if it turns out the view does not exist
-	     (vprop (car (or (member* vtag ah-clearcase-all-vprops
-				      :key 'ah-clearcase-vprop-name
-				      :test 'equal)
-			     (push (ah-clearcase-make-vprop
-				    :name vtag
-				    :activities (list "*NONE*" "*NEW-ACTIVITY*")
-				    :activities-tid -1)
-				   ah-clearcase-all-vprops)))))
-
-	(unless (ah-clearcase-vprop-properties vprop)
-	  ;; This is the first time we see this view, collect some
-	  ;; info on it.  Note that the root-path is set in
-	  ;; `ah-clearcase-maybe-set-vc-state'
-
-	  (condition-case err
-	      (let* ((vdata (ah-cleartool "lsview -properties -full %s" vtag))
-		     (case-fold-search t))
-		(if (string-match "^\\s-*properties:\\s-*\\(.*\\)\\s-*$" vdata)
-		    (setf (ah-clearcase-vprop-properties vprop)
-			  (mapcar 'intern
-				  (split-string
-				   (downcase (match-string 1 vdata)))))
-		    ;; else, report it as a message (should it be an error?
-		    (message "ah-clearcase-get-vprop: no props for %s" vtag)))
-
-	    (ah-cleartool-error
-	     ;; If there was an error in the lsview command above,
-	     ;; remove this vprop from `ah-clearcase-all-vprops'
-	     (setq ah-clearcase-all-vprops
-		   (remove* vtag ah-clearcase-all-vprops
-			    :key 'ah-clearcase-vprop-name
-			    :test 'equal))
-
-	     ;; signal the error again, we only wanted to do some
-	     ;; cleanup.
-	     (signal 'ah-cleartool-error (cdr err))))
-	  (when (ah-clearcase-ucm-view-p vprop)
-	    (ah-cleartool-ask
-	     (format "lsstream -fmt \"%%n\" -view %s" vtag) 'nowait vprop
-	     '(lambda (vprop stream-name)
-	       (setf (ah-clearcase-vprop-stream vprop) stream-name)))))
-
+	     (vprop (find vtag ah-clearcase-all-vprops
+			  :key 'ah-clearcase-vprop-name :test 'equal)))
+	(unless vprop
+	  (assert dir)
+	  (setq vprop (ah-clearcase-setup-vprop
+		       (ah-clearcase-make-vprop
+			:name vtag
+			:activities (list "*NONE*" "*NEW-ACTIVITY*")
+			:activities-tid -1)
+		       dir))
+	  (push vprop ah-clearcase-all-vprops))
 	vprop)))
 
 (defun ah-clearcase-refresh-files-in-view (view-tag)
@@ -1433,15 +1489,13 @@ This can be used to obtain the vob-tag required for the
   (setq path (expand-file-name path))
   (unless (file-exists-p path)
     (error "%s does not exist" path))
-  (let ((dir (if (file-directory-p path)
-		 path
-		 (file-name-directory path))))
-    (ah-cleartool "cd \"%s\"" dir)
+  (with-cleartool-directory
+      (if (file-directory-p path) path (file-name-directory path))
     (let ((view-root (ah-cleartool "pwv -root")))
       (let ((path-elements (split-string path "[\\\\\\/]"))
 	    (prefix-length (length (split-string view-root "[\\\\\\/]"))))
-	;; On Windows, the vob tag looks like "/Vob_Name", on Solaris,
-	;; it is "/vobs/Vob_Name".
+	;; On Windows, the vob tag looks like "/Vob_Name", on Solaris, it is
+	;; "/vobs/Vob_Name".
 	(concat "/" (nth prefix-length path-elements)
 		(unless (eq system-type 'windows-nt)
 		  (concat "/" (nth (1+ prefix-length) path-elements))))))))
@@ -1613,93 +1667,13 @@ If FORCE is not nil, always read the properties."
       ;; get the view tag for this fprop.  Ignore the FORCE option, as
       ;; we don't expect the view tag to ever change.
       (unless (ah-clearcase-fprop-view-tag fprop)
-	(ah-cleartool "cd \"%s\"" (file-name-directory file))
-	(setf (ah-clearcase-fprop-view-tag fprop)
-	      (replace-regexp-in-string
-	       "[\n\r]+" "" (ah-cleartool "pwv -short")))
-
-	;; This is our only chance to set the view root path for a
-	;; snapshot view, since we can only find while we are in a
-	;; directory below it.  Not very clean.
-
-	(let ((vprop (ah-clearcase-get-vprop fprop)))
-	  (when (and (ah-clearcase-snapshot-view-p vprop)
-		     (not (ah-clearcase-vprop-root-path vprop)))
-	    (ah-cleartool-ask
-	     "pwv -root" 'nowait vprop
-	     '(lambda (vprop root-dir)
-	       (let ((root (replace-regexp-in-string "[\n\r]+" "" root-dir)))
-		 (setf (ah-clearcase-vprop-root-path vprop) root))))))))))
-
-
-(eval-when-compile
-
-  ;; If you compile this file, these macros won't exist at runtime, so
-  ;; it is safe to give them nice names.
-
-  (defmacro with-clearcase-checkout (thing &rest forms)
-    "Ensure that THING is checked out, than execute FORMS.
-If THING was checked out by us, we check it back in.  THING can
-be either a file or a directory."
-    ;; NOTE: we could use make-symbol with the same effect
-    (let ((checkout-needed (gensym))
-	  (real-thing (gensym)))
-      `(let* ((,real-thing ,thing)
-	      (,checkout-needed
-	       (string=
-		(ah-cleartool "desc -fmt \"%%Rf\" \"%s\"" ,real-thing)
-		"")))
-	 (unwind-protect
-	      (progn
-		(when ,checkout-needed
-		  (message "Checking out %s" ,real-thing)
-		  (ah-cleartool "checkout -nquery -ptime -nwarn -reserved -nc \"%s\"" ,real-thing))
-		,@forms)
-	   (when ,checkout-needed
-	     (message "Checking in %s" ,real-thing)
-	     (ah-cleartool "checkin -ptime -nwarn -nc \"%s\"" ,real-thing))))))
-
-  (defmacro with-clearcase-cfile (comment-vars &rest forms)
-    "Save a comment in a temporary file, than execute `FORMS'.
-`COMMENT-VARS' is a list of (comment-file comment-text),
-comment-file will be bound to a temporary file name and
-comment-text will be saved into it.  When all is finished, the
-comment file is removed."
-    ;; NOTE: we could have used
-    ;; (defmacro* with-cleacase-cfile ((comment-file comment-text) &body forms)
-    ;;    ;; blah blah)
-    ;; but we didn't
-    (unless (listp comment-vars)
-      (error "Expecting comment-vars to be a list"))
-    (unless (= 2 (length comment-vars))
-      (error "Expecting two elements in comment-vars"))
-    (unless (symbolp (car comment-vars))
-      (error "(car comment-vars) is not a symbol"))
-    (let ((cfile (car comment-vars))
-	  (ctext (cadr comment-vars)))
-      `(let ((,cfile
-	      (make-temp-name (concat temporary-file-directory "vc-clearcase-"))))
-	 (unwind-protect
-	      (progn
-		(with-temp-file ,cfile
-		  (insert ,ctext))      ; ctext evaluated once, here
-		,@forms)
-	   (delete-file ,cfile)))))
-
-  (defmacro ignore-cleartool-errors (&rest forms)
-    "Execute forms, trapping any cleartool errors and ignoring them"
-    `(condition-case nil
-	 (progn ,@forms)
-       (ah-cleartool-error nil)))
-
-  )                                     ; eval-when-compile
-
-(put 'with-clearcase-checkout 'lisp-indent-function 1)
-(put 'with-clearcase-cfile 'lisp-indent-function 1)
-(put 'ignore-cleartool-errors 'lisp-indent-function 0)
-
-
-
+	(with-cleartool-directory (file-name-directory file)
+	  (setf (ah-clearcase-fprop-view-tag fprop)
+		(replace-regexp-in-string
+		 "[\n\r]+" "" (ah-cleartool "pwv -short"))))
+	;; this will create the proper vprop structure (unless already
+	;; created).
+	(ah-clearcase-get-vprop fprop (file-name-directory file))))))
 
 (defadvice vc-version-backup-file-name
     (after ah-clearcase-cleanup-version (file &optional rev manual regexp))
@@ -1940,22 +1914,21 @@ information in advance.  This improves the speed somewhat."
 		    ;; Regular, version controlled file.  Set the state.
 		    (vc-file-setprop
 		     file 'vc-state
-		     (let ((state
-			    (cond ((progn
-				     (beginning-of-line)
-				     (re-search-forward "\\[hijacked\\]" limit 'noerror))
-				   'unlocked-change)
-				  ((progn
-				     (beginning-of-line)
-				     (re-search-forward "CHECKOUT" limit 'noerror))
-				   'edited)
-				  (t 'up-to-date)))
+		     (let ((state (cond
+				    ((progn
+				       (beginning-of-line)
+				       (re-search-forward "\\[hijacked\\]" limit 'noerror) )
+				     'unlocked-change)
+				    ((progn
+				       (beginning-of-line)
+				       (re-search-forward "CHECKOUT" limit 'noerror) )
+				     'edited)
+				    (t 'up-to-date)))
 			   (fprop (ah-clearcase-file-fprop file)))
-
-		       ;; When the file has a FPROP (meaning it is visited in
-		       ;; Emacs), we try to reconcile `state' with `fprop',
-		       ;; but we are carefull not to ask for a fprop refres
-		       ;; unless it is necessary.
+		       ;; when the file has a FPROP (meaning it is visited in
+		       ;; Emacs, we try to reconcile `state' with `fprop', but
+		       ;; we are carefull not to ask for a fprop refres unless
+		       ;; it is necessary.
 		       (when fprop
 			 (cond ((eq state 'edited)
 				(unless (ah-clearcase-fprop-checkedout-p fprop)
@@ -2078,7 +2051,7 @@ responsible if the transaction id is positive."
   (let ((tid (gethash file vc-clearcase-dir-state-cache)))
     (if (null tid)
 	(ignore-cleartool-errors
-	  (not (string= (ah-cleartool "desc -fmt \"%%Vn\" \"%s\"" file) "")))
+	 (not (string= (ah-cleartool "desc -fmt \"%%Vn\" \"%s\"" file) "")))
 
 	;; if the tid is -1, `vc-clearcase-dir-state' put it in there
 	;; for us only, so we remove it now.
@@ -2653,64 +2626,65 @@ when REV2 is nil, the current contents of the file are used."
 	(default-directory (file-name-directory file)))
     (unless rev1
       (setq rev1 (ah-clearcase-fprop-version fprop)))
-    (ah-cleartool "cd \"%s\"" (file-name-directory file))
-    (setq file (file-name-nondirectory file))
+    (with-cleartool-directory (file-name-directory file)
+      (setq file (file-name-nondirectory file))
 
-    (if ah-clearcase-use-external-diff
+      (if ah-clearcase-use-external-diff
 
-	(let ((old (vc-version-backup-file-name file rev1 'manual))
-	      (new (if rev2
-		       (vc-version-backup-file-name file rev2 'manual)
-		       file)))
-	  (when (file-exists-p old)
-	    (delete-file old))
-	  (ah-cleartool "get -to \"%s\" \"%s@@%s\"" old file rev1)
-	  (when rev2
-	    (when (file-exists-p new)
-	      (delete-file new))
-	    (ah-cleartool "get -to \"%s\" \"%s@@%s\"" new file rev2))
-	  (let ((b (get-buffer "*vc-diff*")))
-	    (when b (kill-buffer b)))
-	  (with-current-buffer (diff old new nil 'no-async)
-	    (rename-buffer "*vc-diff*")
+	  (let ((old (vc-version-backup-file-name file rev1 'manual))
+		(new (if rev2
+			 (vc-version-backup-file-name file rev2 'manual)
+			 file)))
+	    (when (file-exists-p old)
+	      (delete-file old))
+	    (ah-cleartool "get -to \"%s\" \"%s@@%s\"" old file rev1)
+	    (when rev2
+	      (when (file-exists-p new)
+		(delete-file new))
+	      (ah-cleartool "get -to \"%s\" \"%s@@%s\"" new file rev2))
+	    (let ((b (get-buffer "*vc-diff*")))
+	      (when b (kill-buffer b)))
+	    (with-current-buffer (diff old new nil 'no-async)
+	      (rename-buffer "*vc-diff*")
 
-	    ;; delete the temporary files we created
-	    (delete-file old)
-	    (when rev2 (delete-file new))
+	      ;; delete the temporary files we created
+	      (delete-file old)
+	      (when rev2 (delete-file new))
 
-	    (goto-char (point-max))
-	    (beginning-of-line)
-	    ;; return t when there are no differences
-	    (and (re-search-forward "(no differences)" (point-max) 'noerror) t)))
+	      (goto-char (point-max))
+	      (beginning-of-line)
+	      ;; return t when there are no differences
+	      (and (re-search-forward "(no differences)" (point-max) 'noerror) t)))
 
-	;; else use the internal diff provided by cleartool
-	(with-current-buffer (get-buffer-create "*vc-diff*")
+	  ;; else use the internal diff provided by cleartool
+	  (with-current-buffer (get-buffer-create "*vc-diff*")
 
-	  (let ((inhibit-read-only t)
-		(fver1 (concat file "@@" rev1))
-		(fver2 (if rev2 (concat file "@@" rev2) file))
-		(opts (mapconcat 'identity
-				 (if (listp vc-clearcase-diff-switches)
-				     vc-clearcase-diff-switches
-				     (list vc-clearcase-diff-switches))
-				 " ")))
-	    (erase-buffer)
-	    (insert (ah-cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
+	    (let ((inhibit-read-only t)
+		  (fver1 (concat file "@@" rev1))
+		  (fver2 (if rev2 (concat file "@@" rev2) file))
+		  (opts (mapconcat 'identity
+				   (if (listp vc-clearcase-diff-switches)
+				       vc-clearcase-diff-switches
+				       (list vc-clearcase-diff-switches))
+				   " ")))
+	      (erase-buffer)
+	      (insert (ah-cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
 
-	  (when ah-clearcase-diff-cleanup-flag
+	    (when ah-clearcase-diff-cleanup-flag
+	      (goto-char (point-min))
+	      (while (re-search-forward "\r$" nil t)
+		(replace-match "" nil nil)))
 	    (goto-char (point-min))
-	    (while (re-search-forward "\r$" nil t)
-	      (replace-match "" nil nil)))
-	  (goto-char (point-min))
 
-	  (not
-	   ;; the way we determine whether the files are identical depends on
-	   ;; the diff format we use.
-	   (or
-	    ;; diff format has an empty buffer
-	    (equal (point-min) (point-max))
-	    ;; serial format prints "Files are identical", so we look for that.
-	    (looking-at "Files are identical")))))))
+	    (not
+	     ;; the way we determine whether the files are identical depends
+	     ;; on the diff format we use.
+	     (or
+	      ;; diff format has an empty buffer
+	      (equal (point-min) (point-max))
+	      ;; serial format prints "Files are identical", so we look for
+	      ;; that.
+	      (looking-at "Files are identical"))))))))
 
 
 (defun vc-clearcase-annotate-command (file buf rev)
@@ -2882,40 +2856,40 @@ element * NAME -nocheckout"
 	     (not (yes-or-no-p "Move existing label? ")))
     (error "Aborted"))
   (setq dir (expand-file-name dir))
-  (ah-cleartool "cd \"%s\"" (file-name-directory dir))
-  ;; let's see if the label exists
-  (condition-case nil
-      (ah-cleartool "desc -fmt \"ok\" lbtype:%s" name)
-    (ah-cleartool-error
-     (let ((should-create
-	    (ecase ah-clearcase-no-label-action
-	      ('create t)
-	      ('error nil)
-	      ('ask (yes-or-no-p
-		     (format "Label %s does not exist.  Create it? " name))))))
-       (if should-create
-	   (progn
-	     (message "Creating label %s" name)
-	     (ah-cleartool "mklbtype -ordinary -nc lbtype:%s" name)
-	     (message nil))
-	   (error "Label %s does not exist and will not create it" name)))))
-  (let ((dir? (file-directory-p dir)))
-    (message "Applying label...")
-    ;; NOTE: the mklabel command might fail if some files are
-    ;; hijacked... The rest of the files will be labeled though...
-    (ah-cleartool
-     "mklabel -nc %s %s lbtype:%s \"%s\""
-     (if branchp "-replace" "") (if dir? "-recurse" "") name dir)
-    (when dir?                          ; apply label to parent directories
-      (message "Applying label to parent directories...")
-      (ignore-cleartool-errors
-       (while t                         ; until cleartool will throw an error
-	 (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-	 (setq dir (file-name-directory dir))
-	 (ah-cleartool
-	  "mklabel -nc %s lbtype:%s \"%s\""
-	  (if branchp "-replace" "") name dir)))))
-  (message "Finished applying label"))
+  (with-cleartool-directory (file-name-directory dir)
+    ;; let's see if the label exists
+    (condition-case nil
+	(ah-cleartool "desc -fmt \"ok\" lbtype:%s" name)
+      (ah-cleartool-error
+       (let ((should-create
+	      (ecase ah-clearcase-no-label-action
+		('create t)
+		('error nil)
+		('ask (yes-or-no-p
+		       (format "Label %s does not exist.  Create it? " name))))))
+	 (if should-create
+	     (progn
+	       (message "Creating label %s" name)
+	       (ah-cleartool "mklbtype -ordinary -nc lbtype:%s" name)
+	       (message nil))
+	     (error "Label %s does not exist and will not create it" name)))))
+    (let ((dir? (file-directory-p dir)))
+      (message "Applying label...")
+      ;; NOTE: the mklabel command might fail if some files are
+      ;; hijacked... The rest of the files will be labeled though...
+      (ah-cleartool
+       "mklabel -nc %s %s lbtype:%s \"%s\""
+       (if branchp "-replace" "") (if dir? "-recurse" "") name dir)
+      (when dir?                        ; apply label to parent directories
+	(message "Applying label to parent directories...")
+	(ignore-cleartool-errors
+	 (while t                       ; until cleartool will throw an error
+	   (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	   (setq dir (file-name-directory dir))
+	   (ah-cleartool
+	    "mklabel -nc %s lbtype:%s \"%s\""
+	    (if branchp "-replace" "") name dir)))))
+    (message "Finished applying label")))
 
 
 (defun vc-clearcase-previous-version (file rev)
@@ -2998,21 +2972,20 @@ the same for LABEL-2.
 The list of files is not returned in any particular order."
   (setq dir (expand-file-name dir))
   ;; make sure both labels exist
-  (ah-cleartool "cd \"%s\"" dir)
-  (ah-cleartool "desc -fmt \"ok\" lbtype:%s" label-1)
-  (ah-cleartool "desc -fmt \"ok\" lbtype:%s" label-2)
+  (with-cleartool-directory dir
+    (ah-cleartool "desc -fmt \"ok\" lbtype:%s" label-1)
+    (ah-cleartool "desc -fmt \"ok\" lbtype:%s" label-2))
 
   (let ((buf1 (get-buffer-create " *ah-clearcase-label-1*"))
 	(buf2 (get-buffer-create " *ah-clearcase-label-2*"))
 
-	;; Will hold the file report.  KEY is file-name, VALUE is
-	;; (cons label-1-version label-2-version).  If one of the
-	;; versions does not exist, the string "*no version*" is used
-	;; instead.
+	;; Will hold the file report.  KEY is file-name, VALUE is (cons
+	;; label-1-version label-2-version).  If one of the versions does not
+	;; exist, the string "*no version*" is used instead.
 	(report (make-hash-table :test 'equal))
 
-	;; We don't want the full pathname in front of each file so we
-	;; remove it by skipping SKIP chars.
+	;; We don't want the full pathname in front of each file so we remove
+	;; it by skipping SKIP chars.
 	(skip (length dir)))
 
     ;; Start a cleartool find for label-1
@@ -3033,15 +3006,15 @@ The list of files is not returned in any particular order."
 
     ;; Wait for both processes to complete
     (with-timeout (30 (error "Cleartool takes too long to complete"))
-      ;; we use ignore-errors because the cleartool sentinel deletes
-      ;; the process on exit.
+      ;; we use ignore-errors because the cleartool sentinel deletes the
+      ;; process on exit.
       (while (or (ignore-errors (eq (process-status buf1) 'run))
 		 (ignore-errors (eq (process-status buf2) 'run)))
 	(accept-process-output)
 	(sit-for 1)))
 
-    ;; Process the listed files for label-1.  For each line in the
-    ;; buffer, find the file and version and add it to the report.
+    ;; Process the listed files for label-1.  For each line in the buffer,
+    ;; find the file and version and add it to the report.
     (with-current-buffer buf1
       (goto-char (point-min))
       (while (not (= (point) (point-max)))
@@ -3057,11 +3030,10 @@ The list of files is not returned in any particular order."
 	      (puthash file (cons version "*no version*") report))))
 	(forward-line 1)))
 
-    ;; Process the listed files for label-2.  For each line in the
-    ;; buffer, find the file and version than update the report with
-    ;; the second label's version.  We remove entries that have the
-    ;; same version for both labels and add new entries for files that
-    ;; only have label 2.
+    ;; Process the listed files for label-2.  For each line in the buffer,
+    ;; find the file and version than update the report with the second
+    ;; label's version.  We remove entries that have the same version for both
+    ;; labels and add new entries for files that only have label 2.
     (with-current-buffer buf2
       (goto-char (point-min))
       (while (not (= (point) (point-max)))
@@ -3156,8 +3128,7 @@ null, the file visited in the current buffer is used."
   (let ((vprop (ah-clearcase-get-vprop
 		(ah-clearcase-file-fprop file))))
     (if (ah-clearcase-ucm-view-p vprop)
-	(let ((cact (progn
-		      (ah-cleartool "cd %s" (file-name-directory file))
+	(let ((cact (with-cleartool-directory (file-name-directory file)
 		      (ah-cleartool "lsact -cact -fmt \"%%n\""))))
 	  (when (string= cact "")
 	    (setq cact "NO ACTIVITY"))
@@ -3298,10 +3269,9 @@ cause the current activity to be unset and *NEW-ACTIVITY* which
 will create and set a new activity (the user is prompted for the
 activity headline)."
   (interactive
-   (let* ((view (progn (ah-cleartool
-			"cd \"%s\"" (expand-file-name default-directory))
-		       (replace-regexp-in-string
-			"[\n\r]+" "" (ah-cleartool "pwv -short")))))
+   (let* ((view (with-cleartool-directory (expand-file-name default-directory)
+		  (replace-regexp-in-string
+		   "[\n\r]+" "" (ah-cleartool "pwv -short")))))
      (list (ah-clearcase-read-activity view "Set activity: "))))
 
   (cond
@@ -3322,28 +3292,28 @@ With prefix arguument (EXTRA-INFO), also shows the number of
 files modified under this activity, number of versions and the
 number of checked out files."
   (interactive "P")
-  (ah-cleartool "cd \"%s\"" (expand-file-name default-directory))
-  (let ((headline (ah-cleartool "lsact -cact -fmt \"%%[headline]p\""))
-	versions
-	(files 0)
-	(checkouts 0))
-    (if (equal headline "")
-	(message "No current activity set.")
-	(when extra-info
-	  (with-temp-message "Collecting activitiy statistics..."
-	    (setq versions
-		  (split-string
-		   (ah-cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
-	    (setq files (make-hash-table :test 'equal))
-	    (dolist (v versions)
-	      (when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
-		(incf checkouts))
-	      (when (string-match "^\\(.*\\)@@" v)
-		(setf (gethash (match-string 1 v) files) t)))))
-	(if extra-info
-	    (message "%s; %d files, %d revisions, %d checked-out"
-		     headline (hash-table-count files) (length versions) checkouts)
-	    (message "%s" headline)))))
+  (with-cleartool-directory (expand-file-name default-directory)
+    (let ((headline (ah-cleartool "lsact -cact -fmt \"%%[headline]p\""))
+	  versions
+	  (files 0)
+	  (checkouts 0))
+      (if (equal headline "")
+	  (message "No current activity set.")
+	  (when extra-info
+	    (with-temp-message "Collecting activitiy statistics..."
+	      (setq versions
+		    (split-string
+		     (ah-cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
+	      (setq files (make-hash-table :test 'equal))
+	      (dolist (v versions)
+		(when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
+		  (incf checkouts))
+		(when (string-match "^\\(.*\\)@@" v)
+		  (setf (gethash (match-string 1 v) files) t)))))
+	  (if extra-info
+	      (message "%s; %d files, %d revisions, %d checked-out"
+		       headline (hash-table-count files) (length versions) checkouts)
+	      (message "%s" headline))))))
 
 (when (fboundp 'define-button-type)
   (define-button-type 'vc-clearcase-start-ediff-button

@@ -5,6 +5,9 @@
 
 (require 'button)
 
+(eval-when-compile
+  (require 'vc-clearcase))
+
 (defvar ucm-activity nil
   "The name of the current activity being browsed.")
 
@@ -12,11 +15,14 @@
   "A stack of previous activities we visited.
 Used to implement the BACK button.")
 
+(make-variable-buffer-local 'ucm-previous-activities)
+
 (define-button-type 'ucm-file-link
     'face 'default
     'help-echo "mouse-2, RET: Visit this file"
     'follow-link t
     'action (lambda (button)
+	      (pop-to-buffer (button-get button 'buffer))
 	      (let ((file-name (button-get button 'file-name)))
 		(pop-to-buffer (find-file-noselect file-name))))
     'skip t)
@@ -26,6 +32,7 @@ Used to implement the BACK button.")
     'help-echo "mouse-2, RET: Browse this activity"
     'follow-link t
     'action (lambda (button)
+	      (pop-to-buffer (button-get button 'buffer))
 	      (push ucm-activity ucm-previous-activities)
 	      (ucm-browse-activity (button-get button 'ucm-activity)))
     'skip t)
@@ -34,6 +41,7 @@ Used to implement the BACK button.")
     'face 'default
     'help-echo "mouse-2, RET: Browse previous activity"
     'action (lambda (button)
+	      (pop-to-buffer (button-get button 'buffer))
 	      (when ucm-previous-activities
 		(ucm-browse-activity (pop ucm-previous-activities))))
     'follow-link t
@@ -43,6 +51,7 @@ Used to implement the BACK button.")
     'face 'default
     'help-echo "mouse-2, RET: Show diff"
     'action (lambda (button)
+	      (pop-to-buffer (button-get button 'buffer))
 	      (let* ((file (expand-file-name (button-get button 'file-name)))
 		     (current (button-get button 'revision))
 		     (previous (ah-cleartool
@@ -54,15 +63,20 @@ Used to implement the BACK button.")
 
 (defun ucm-browse-activity (activity)
 
-  (interactive
-   (let ((view (progn (ah-cleartool "cd \"%s\"" (expand-file-name default-directory))
-		      (replace-regexp-in-string
-		       "[\n\r]+" "" (ah-cleartool "pwv -short")))))
-     (list (ah-clearcase-read-activity view "Browse activity: "))))
+  (interactive (list (ah-clearcase-read-activity
+		      "Browse activity: " nil 'include-obsolete)))
+
+  (assert activity)
 
   (with-temp-message "Preparing report..."
     (ah-cleartool "cd \"%s\"" (expand-file-name default-directory))
-    (let ((changeset (make-hash-table :test 'equal)))
+    (let ((changeset (make-hash-table :test 'equal))
+	  (view (replace-regexp-in-string "[\n\r]+" "" (ah-cleartool "pwv -short"))))
+
+      (unless (string= view "")
+	(let ((vprop (ah-clearcase-get-vprop view)))
+	  (setq view (ah-clearcase-vprop-root-path vprop))))
+
       (dolist (v (split-string
 		  (ah-cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
 		  ", " 'omit-nulls))
@@ -75,7 +89,6 @@ Used to implement the BACK button.")
 	(setq buffer-read-only t)
 	(buffer-disable-undo)
 	(set (make-local-variable 'ucm-activity) activity)
-	(make-local-variable 'ucm-previous-activities)
 	(let ((inhibit-read-only t))
 	  (erase-buffer)
 	  (insert (ah-cleartool
@@ -92,14 +105,16 @@ Used to implement the BACK button.")
 		   (file-name-nondirectory file)
 		   'face 'bold
 		   'type 'ucm-file-link
+		   'buffer (current-buffer)
 		   'file-name file)
-		  (insert " in " (file-name-directory file) "\n"))
+		  (insert " in " (file-relative-name (file-name-directory file) view) "\n"))
 	     do (dolist (revision (gethash file changeset))
 		  (insert "        ")
 		  (insert-text-button
 		   (concat "@@" revision)
 		   'face 'italic
 		   'type 'ucm-show-diff-link
+		   'buffer (current-buffer)
 		   'file-name file
 		   'revision revision)
 		  (insert "\n")))

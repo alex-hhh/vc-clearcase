@@ -1,3 +1,14 @@
+2007-10-18  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (with-clearcase-cfile): 1.120 use a
+	destructuring-bind for the comment-vars argument
+	(with-cleartool-directory): 1.120 don't switch the directory if
+	DIR is not a valid directory.
+	(ah-clearcase-read-activity): 1.120 new arg INCLUDE-OBSOLETE, can
+	now determine the view tag from the current directory.
+	(vc-clearcase-set-activity): 1.120 put the whole function body in
+	a `with-cleartool-directory'
+
 2007-10-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-cleartool-tq-start): 1.119 start cleartool

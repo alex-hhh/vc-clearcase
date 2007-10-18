@@ -781,11 +781,8 @@ that were run to create this buffer."
 
 ;;;; Some helper macros
 
-;; If you compile this file, these macros won't exist at runtime, so it is
-;; safe to give them nice names.
-
-(defmacro with-clearcase-checkout (thing &rest forms)
-  "Ensure that THING is checked out, than execute FORMS.
+(defmacro with-clearcase-checkout (thing &rest body)
+  "Ensure that THING is checked out, than execute BODY.
 If THING was checked out by us, we check it back in.  THING can
 be either a file or a directory."
   ;; NOTE: we could use make-symbol with the same effect
@@ -801,14 +798,14 @@ be either a file or a directory."
 	      (when ,checkout-needed
 		(message "Checking out %s" ,real-thing)
 		(ah-cleartool "checkout -nquery -ptime -nwarn -reserved -nc \"%s\"" ,real-thing))
-	      ,@forms)
+	      ,@body)
 	 (when ,checkout-needed
 	   (message "Checking in %s" ,real-thing)
 	   (ah-cleartool "checkin -ptime -nwarn -nc \"%s\"" ,real-thing))))))
 
-(defmacro with-clearcase-cfile (comment-vars &rest forms)
-  "Save a comment in a temporary file, than execute `FORMS'.
-`COMMENT-VARS' is a list of (comment-file comment-text),
+(defmacro with-clearcase-cfile (comment-vars &rest body)
+  "Save a comment in a temporary file, than execute BODY.
+COMMENT-VARS is a list of (comment-file comment-text),
 comment-file will be bound to a temporary file name and
 comment-text will be saved into it.  When all is finished, the
 comment file is removed."
@@ -816,40 +813,39 @@ comment file is removed."
   ;; (defmacro* with-cleacase-cfile ((comment-file comment-text) &body forms)
   ;;    ;; blah blah)
   ;; but we didn't
-  (unless (listp comment-vars)
-    (error "Expecting comment-vars to be a list"))
-  (unless (= 2 (length comment-vars))
-    (error "Expecting two elements in comment-vars"))
-  (unless (symbolp (car comment-vars))
-    (error "(car comment-vars) is not a symbol"))
-  (let ((cfile (car comment-vars))
-	(ctext (cadr comment-vars)))
+  (destructuring-bind (cfile ctext) comment-vars
+    (assert (symbolp cfile) 'show-args "Expecting a symbol %S")
     `(let ((,cfile
 	    (make-temp-name (concat temporary-file-directory "vc-clearcase-"))))
        (unwind-protect
 	    (progn
 	      (with-temp-file ,cfile
-		(insert ,ctext))      ; ctext evaluated once, here
-	      ,@forms)
+		(insert ,ctext))        ; ctext evaluated once, here
+	      ,@body)
 	 (delete-file ,cfile)))))
 
-(defmacro with-cleartool-directory (dir &rest forms)
-  "Change the cleartool directory to DIR, than execute forms.
-The original cleartool directory is restored after the forms are
+(defmacro with-cleartool-directory (dir &rest body)
+  "Change the cleartool directory to DIR, than execute BODY.
+The original cleartool directory is restored after BODY is
 executed."
-  (let ((old-dir (make-symbol "old-dir")))
-      `(let ((,old-dir (replace-regexp-in-string
-			"[\n\r]+" "" (ah-cleartool-ask "pwd"))))
-	 (unwind-protect
-	      (progn
-		(ah-cleartool "cd \"%s\"" ,dir)
-		,@forms)
-	   (ah-cleartool "cd \"%s\"" ,old-dir)))))
+  (let ((old-dir (make-symbol "old-dir"))
+	(new-dir (make-symbol "new-dir")))
+    `(let ((,old-dir (replace-regexp-in-string
+		      "[\n\r]+" "" (ah-cleartool-ask "pwd")))
+	   (,new-dir ,dir))             ; dir is evaluated once, here
+       (unwind-protect
+	    (progn
+	      (when (file-directory-p ,new-dir)
+		(ah-cleartool "cd \"%s\"" ,new-dir))
+	      ,@body)
+	 (ah-cleartool "cd \"%s\"" ,old-dir)))))
 
-(defmacro ignore-cleartool-errors (&rest forms)
-  "Execute forms, trapping any cleartool errors and ignoring them"
+(defmacro ignore-cleartool-errors (&rest body)
+  "Execute BODY, ignoring any cleartool error.
+The form returns nil if a cleartool error was signalled,
+otherwise it returns the value of the last form in BODY."
   `(condition-case nil
-       (progn ,@forms)
+       (progn ,@body)
      (ah-cleartool-error nil)))
 
 (put 'with-clearcase-checkout 'lisp-indent-function 1)
@@ -1360,10 +1356,30 @@ VIEW-TAG is passed to `ah-clearcase-get-vprop', which see."
 
 ;;;; Read an activity name from the minibuffer with completion
 
-(defun ah-clearcase-read-activity (view-tag prompt &optional initial)
-  "Read an activity from VIEW-TAG with completion.
-PROMPT is displayed to the user; INITIAL, when non-nil is the
-initial activity name presented to the user."
+(defun ah-clearcase-read-activity
+    (prompt &optional view-tag include-obsolete initial)
+  "Display PROMPT and read a UCM activity with completion.
+
+VIEW-TAG is the view from which activities are read -- when nil,
+the view is determined from `default-directory' (which is the
+current directory).
+
+When INCLUDE-OBSOLETE is not nil, obsolete activities are also
+included in the list.
+
+INITIAL is the initial activity name presented to the user.  When
+nil, the current activity in the view is presented to the user."
+
+  (with-cleartool-directory (expand-file-name default-directory)
+    (unless view-tag
+      (setq view-tag
+	    (replace-regexp-in-string
+	     "[\n\r]+" "" (ah-cleartool "pwv -short"))))
+    (unless initial
+      (setq initial
+	    (ignore-cleartool-errors
+	     (ah-cleartool-ask "lsact -cact -fmt \"%n\"")))))
+
   (lexical-let ((vprop (ah-clearcase-get-vprop view-tag)))
 
     ;; wait for a previous activity collection transaction
@@ -1376,7 +1392,8 @@ initial activity name presented to the user."
     ;; completions form that one.
 
     (let ((tid (ah-cleartool-ask
-		(format "lsact -fmt \"%%n\\n\" -view %s"
+		(format "lsact %s -fmt \"%%n\\n\" -view %s"
+			(if include-obsolete "-obsolete" "")
 			(ah-clearcase-vprop-name vprop))
 		'nowait
 		vprop
@@ -3268,22 +3285,19 @@ Two special activity names are also accepted: *NONE* which will
 cause the current activity to be unset and *NEW-ACTIVITY* which
 will create and set a new activity (the user is prompted for the
 activity headline)."
-  (interactive
-   (let* ((view (with-cleartool-directory (expand-file-name default-directory)
-		  (replace-regexp-in-string
-		   "[\n\r]+" "" (ah-cleartool "pwv -short")))))
-     (list (ah-clearcase-read-activity view "Set activity: "))))
+  (interactive (list (ah-clearcase-read-activity "Set activity: ")))
 
-  (cond
-    ((equal activity "*NONE*")
-     (ah-cleartool "setact -none"))
-    ((equal activity "*NEW-ACTIVITY*")
-     (let ((headline (read-from-minibuffer "Activity headline: ")))
-       (when (equal headline "")
-	 (error "Activity headline cannot be empty"))
-       (ah-cleartool "mkact -force -headline \"%s\"" headline)))
-    (t
-     (ah-cleartool "setact \"%s\"" activity))))
+  (with-cleartool-directory (expand-file-name default-directory)
+    (cond
+      ((equal activity "*NONE*")
+       (ah-cleartool "setact -none"))
+      ((equal activity "*NEW-ACTIVITY*")
+       (let ((headline (read-from-minibuffer "Activity headline: ")))
+	 (when (equal headline "")
+	   (error "Activity headline cannot be empty"))
+	 (ah-cleartool "mkact -force -headline \"%s\"" headline)))
+      (t
+       (ah-cleartool "setact \"%s\"" activity)))))
 
 ;;;###autoload
 (defun vc-clearcase-show-current-activity (&optional extra-info)

@@ -11,6 +11,10 @@
 	property to 'yes after registering the file.
 	(vc-clearcase-responsible-p): 1.121 returns t when the file is in
 	a clearcase view or it is in `vc-clearcase-dir-state-cache'
+	(vc-clearcase-workfile-unchanged-p, vc-clearcase-register)
+	(vc-clearcase-checkin): 1.122 don't expand the file name
+	(vc-clearcase-find-version): 1.122 use a file in the temp
+	directory.
 
 2007-10-18  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

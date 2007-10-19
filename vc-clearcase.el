@@ -1829,29 +1829,26 @@ configspec rule does not branch.  (we should check that an update
 checked it out.
 
 'unlocked-change -- file is hijacked."
-  ;; we cannot guarantee that vc.el will give us an expanded file
-  ;; name, and cleartool does not know about tilda expansion...
-  (setq file (expand-file-name file))
 
-  ;; we are asked for a reliable computation of state, so refresh all
-  ;; the properties.
+  ;; we are asked for a reliable computation of state, so refresh all the
+  ;; properties.
   (ah-clearcase-maybe-set-vc-state file 'force)
 
   (let ((fprop (ah-clearcase-file-fprop file)))
 
     ;; we are about to operate on the file, so check if the view is
-    ;; consistent.  Clearcase operations will occasionally fail saying
-    ;; that an update is already in progress for this view.  We can
-    ;; anticipate that, because the rule that selects this version
-    ;; will be "Rule: <rule info unavailable>".  In that case, we exit
-    ;; with an error telling the user to update his view.
+    ;; consistent.  Clearcase operations will occasionally fail saying that an
+    ;; update is already in progress for this view.  We can anticipate that,
+    ;; because the rule that selects this version will be "Rule: <rule info
+    ;; unavailable>".  In that case, we exit with an error telling the user to
+    ;; update his view.
 
     (when (and (ah-clearcase-snapshot-view-p fprop)
 	       (ah-clearcase-fprop-broken-view-p fprop))
       (error "Snapshot view is inconsistent, run an update"))
 
-    ;; We anticipate that the file's checkout comment might be needed
-    ;; shortly so ask for it before we return the state
+    ;; We anticipate that the file's checkout comment might be needed shortly
+    ;; so ask for it before we return the state
     (when (ah-clearcase-fprop-checkedout-p fprop)
       (setf (ah-clearcase-fprop-comment-tid fprop)
 	    (ah-cleartool-ask
@@ -1998,7 +1995,6 @@ separate version, so we return the parent version in that case."
 
 (defun vc-clearcase-workfile-unchanged-p (file)
   "Is FILE un-changed?"
-  (setq file (expand-file-name file))
   (let ((diff
 	 (ah-cleartool
 	  "diff -predecessor -options -headers_only \"%s\"" file)))
@@ -2054,7 +2050,6 @@ for the file insertion than a checkin.
 NOTE: if dir is not under clearcase, this code will fail.  We
 don't attempt to register a directory in clearcase even if one of
 it's parents is registered."
-  (setq file (expand-file-name file))
   (with-clearcase-checkout (file-name-directory file)
     (message "Registering %s" (file-name-nondirectory file))
     (let ((ah-cleartool-timeout (* 2 ah-cleartool-timeout)))
@@ -2086,14 +2081,12 @@ responsible if the transaction id is positive."
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
 REV is ignored, COMMENT is the checkin comment."
-  (setq file (expand-file-name file))
   (when rev
     (message "Ignoring revision specification: %s" rev))
   (with-clearcase-cfile (comment-file comment)
     ;; let the cleartool error be directly reported
     (ah-cleartool "checkin -ptime -nwarn -cfile %s \"%s\"" comment-file file)
     (ah-clearcase-maybe-set-vc-state file 'force)))
-
 
 (defun ah-clearcase-find-version-helper (file rev destfile)
   "Get the FILE revision REV into DESTFILE.
@@ -2114,21 +2107,16 @@ behavior."
 If REV nil, it will get the latest on the branch, if REV is the
 empty string, we signal an error, since head of trunk has no
 meaning in ClearCase."
-  (setq file (expand-file-name file))
-  (let ((tmpfile (make-temp-file (expand-file-name file))))
-    ;; it seems make-temp-file creates the file, and clearcase will
-    ;; refuse to get the version into an existing file.
-    (delete-file tmpfile)
+  ;; make-temp-file creates a file, and clearcase will refuse to get the
+  ;; version into an existing file...
+  (let ((tmp (make-temp-name (concat temporary-file-directory "vc-clearcase-"))))
     (unwind-protect
 	 (progn
-	   (ah-clearcase-find-version-helper file rev tmpfile)
+	   (ah-clearcase-find-version-helper file rev tmp)
 	   (with-current-buffer buffer
-	     (insert-file-contents-literally tmpfile)))
-      ;; If clearcase failed, the temp file will not exist and
-      ;; delete-file will signal an error.
-      (when (file-exists-p tmpfile)
-	(delete-file tmpfile)))))
-
+	     (insert-file-contents-literally tmp)))
+      (when (file-exists-p tmp)
+	(delete-file tmp)))))
 
 (defun ah-clearcase-finish-checkout (file rev comment mode)
   "Finish a checkout started by `vc-clearcase-checkout'.

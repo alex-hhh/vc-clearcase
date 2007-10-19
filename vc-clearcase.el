@@ -606,7 +606,7 @@ callback function if that is available."
 	  (setq received-some-data
 		(or received-some-data
 		    ;; will return t if some data was received
-		    (accept-process-output cleartool-process 2)))
+		    (accept-process-output cleartool-process 2 0 t)))
 
 	  ;; Hmm, sometimes the input from cleartool is not processed
 	  ;; in accept-process-output and we need to call sit-for with
@@ -1650,9 +1650,10 @@ vaste of resources."
 
 (defvar vc-clearcase-dir-state-cache
   (make-hash-table :test 'equal)
-  "Track transaction ids for directory state info.  See
-`vc-clearcase-dir-state' and `vc-clearcase-responsible-p' for how
-this is used.")
+  "Hold information about whether a directory is managed by
+clearcase or not.  If a directory is managed, the name of the
+directory is mapped to 'yes, if it is not, it is mapped to 'no.
+See `vc-clearcase-dir-state' for how this is used.")
 
 (defun ah-clearcase-get-keep-file-name (file-name)
   "Return a file name which can be used as a 'keep' file for FILE-NAME.
@@ -1757,41 +1758,54 @@ If FORCE is not nil, always read the properties."
   "Return non nil if FILE is registered in ClearCase.
 We consider it to be registered, if cleartool can tell us its
 version."
-  ;; we cannot guarantee that vc.el will give us an expanded file
-  ;; name, and cleartool does not know about tilde expansion...
-  (setq file (expand-file-name file))
-  ;; if the file already has a version set, or we asked for it
-  ;; already, return t
-  (let ((fprop (ah-clearcase-file-fprop file)))
-    (if (ah-clearcase-fprop-initialized-p fprop)
-	t
-	(ignore-cleartool-errors
-	 (unless fprop (setq fprop (ah-clearcase-make-fprop :file-name file)))
-	 (let ((ls-result (ah-cleartool "ls \"%s\"" file)))
-	   (if (string-match "Rule: \\(.*\\)$" ls-result)
-	       ;; file is registered
-	       (progn
-		 (ah-clearcase-set-fprop-version-stage-1 fprop ls-result)
-		 ;; anticipate that the version will be needed
-		 ;; shortly, so ask for it.  When a file is
-		 ;; hijacked, do the desc command on the version
-		 ;; extended name of the file, as cleartool will
-		 ;; return nothing for the hijacked version...
-		 (let ((pname
-			(if (ah-clearcase-fprop-hijacked-p fprop)
-			    (concat file "@@"
-				    (ah-clearcase-fprop-version fprop))
-			    file)))
-		   (setf (ah-clearcase-fprop-version-tid fprop)
-			 (ah-cleartool-ask
-			  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-			  'nowait fprop
-			  'ah-clearcase-set-fprop-version-stage-2))
-		   (vc-file-setprop file 'vc-clearcase-fprop fprop))
-		 t)                     ;file is registered
-	       nil)))                   ;file is not registered
-	)))
 
+  (catch 'done
+    ;; if the file already has a version set, or we asked for it already,
+    ;; return t
+    (let ((fprop (ah-clearcase-file-fprop file)))
+
+      (unless fprop
+	(let ((registered? (vc-file-getprop file 'vc-clearcase-registered)))
+	  ;; `vc-clearcase-dir-state' told us whether it is registered or not.
+	  ;; Note that we rely on `vc-dired' to call this function for each
+	  ;; file it processes and we know that we don't need to create a
+	  ;; FPROP in that case.  We might get into trouble if we don't create
+	  ;; the FPROP when the file is actually visited...
+	  (when registered?
+	    ;; This property is good for one use only, since the user might
+	    ;; register the file outside Emacs and than visit the file.
+	    (vc-file-setprop file 'vc-clearcase-registered nil)
+	    (throw 'done (eq registered? 'yes)))))
+
+      (when (ah-clearcase-fprop-initialized-p fprop)
+	(throw 'done t))
+
+      ;; we need to ask ClearCase if the file is registered or not.
+
+      (unless fprop
+	(setq fprop (ah-clearcase-make-fprop :file-name file)))
+
+      (ignore-cleartool-errors
+       (let ((ls-result (ah-cleartool "ls \"%s\"" file)))
+	 (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	   (throw 'done nil))           ; file is not registered
+
+	 (ah-clearcase-set-fprop-version-stage-1 fprop ls-result)
+	 ;; anticipate that the version will be needed shortly, so ask for
+	 ;; it.  When a file is hijacked, do the desc command on the version
+	 ;; extended name of the file, as cleartool will return nothing for
+	 ;; the hijacked version...
+	 (let ((pname (if (ah-clearcase-fprop-hijacked-p fprop)
+			  (concat file "@@" (ah-clearcase-fprop-version fprop))
+			  file)))
+	   (setf (ah-clearcase-fprop-version-tid fprop)
+		 (ah-cleartool-ask
+		  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		  'nowait
+		  fprop
+		  'ah-clearcase-set-fprop-version-stage-2))))
+       (vc-file-setprop file 'vc-clearcase-fprop fprop)
+       (throw 'done t)))))
 
 (defun vc-clearcase-state (file)
   "Return the current version control state of FILE.
@@ -1871,102 +1885,95 @@ information."
 		'needs-patch)))))
 
 (defun vc-clearcase-dir-state (dir)
-  "Find the state of all files in DIR.
+  "Determine the state of all files in DIR.
 This is a slow operation so it will not detect the proper state
 of the files: only checked out and hijacked files will be
 corectly identified.  Files which are visited in Emacs will also
-have a corect state.
-
-When `vc-dired-recurse' is t, we will fetch sub-directory state
-information in advance.  This improves the speed somewhat."
-
-  ;; Implementation Notes:
-  ;;
-  ;; To find the status of every file in DIR, we ask cleartool to do a "ls" in
-  ;; the directory.  For each listed file we look to see if it is checked out
-  ;; or hijacked -- if it is we set the state to 'edited or 'unlocked-changes
-  ;; respectively.  If it is not, we mark it as up-to-date. If a file is also
-  ;; visited in Emacs, we check the file's FPROP structure agrees with what
-  ;; cleartool just reported -- if it does not, we update the FPROP.
-  ;;
-  ;; To speed things up a bit, we ask cleartool to do a "ls" for each
-  ;; sub-directory of DIR, the transaction id is stored in
-  ;; `vc-clearcase-dir-state-cache' for subsequent invocations of this
-  ;; function and for `vc-clearcase-responsible-p' invocations.
+have a corect state."
 
   (message "vc-clearcase-dir-state: %s" dir)
-  (setq dir (expand-file-name dir))
 
-  (let ((tid (gethash dir vc-clearcase-dir-state-cache)))
-    ;; we should only be asked to fetch the state for a registered dir..
-    (assert (or (null tid) (> tid 0)))
-    (unless tid
-      (setq tid (ah-cleartool-ask
-		 (format "ls -visible -short \"%s\"" dir) 'nowait)))
-    (when tid (remhash dir vc-clearcase-dir-state-cache))
+  (catch 'done
+
+    (let ((responsible? (gethash dir vc-clearcase-dir-state-cache)))
+      (when (eq responsible? 'no)
+
+	;; ClearCase is not responsible for this directory, so we scan all the
+	;; files directly, marking them as unregistered for
+	;; `vc-clearcase-registered'
+
+	(dolist (file (directory-files dir 'full))
+	  (if (file-directory-p file)
+	      (when vc-dired-recurse
+		(puthash (expand-file-name (concat file "/")) 'no
+			 vc-clearcase-dir-state-cache))
+	      (vc-file-setprop file 'vc-clearcase-registered 'no)))
+
+	(throw 'done nil)))
+
+    ;; If we are here, ClearCase is responsible for DIR
+
+    ;; ClearCase does not like directory names ending in "/".
+    (setq dir (replace-regexp-in-string "[\\\/]$" "" dir))
 
     (let ((case-fold-search nil)
 	  (done nil))
-      (with-current-buffer (get-buffer-create " *vc-clearcase-dir-state*")
+      (with-current-buffer (get-buffer-create "*vc-clearcase-dir-state*")
 	(buffer-disable-undo)
 	(erase-buffer)
-	(insert (ah-cleartool-wait-for tid))
+	(insert (ah-cleartool "ls -visible -short \"%s\"" dir))
 	(goto-char (point-min))
 
 	(while (not done)
-	  (if (looking-at "^\\(.*\\)@@")
-	      (let ((file (expand-file-name (match-string 1)))
-		    (limit (c-point 'eol)))
-		(if (file-directory-p file)
-		    (when vc-dired-recurse
-		      ;; File is a directory, and it is registered.  Ask
-		      ;; cleartool for its contents now and put the TID in the
-		      ;; cache.
-		      (ah-cleartool-ask (format "cd \"%s\"" file) 'nowait)
-		      (puthash file
-			       (ah-cleartool-ask
-				(format "ls -visible -short \"%s\"" file) 'nowait)
-			       vc-clearcase-dir-state-cache))
+	  (cond
+	    ((looking-at "^\\(.*\\)@@")
+	     (let ((file (expand-file-name (match-string 1)))
+		   (limit (c-point 'eol)))
+	       (if (file-directory-p file)
+		   (when vc-dired-recurse
+		     (puthash (expand-file-name (concat file "/")) 'yes
+			      vc-clearcase-dir-state-cache))
 
-		    ;; Regular, version controlled file.  Set the state.
-		    (vc-file-setprop
-		     file 'vc-state
-		     (let ((state (cond
-				    ((progn
-				       (beginning-of-line)
-				       (re-search-forward "\\[hijacked\\]" limit 'noerror) )
-				     'unlocked-change)
-				    ((progn
-				       (beginning-of-line)
-				       (re-search-forward "CHECKOUT" limit 'noerror) )
-				     'edited)
-				    (t 'up-to-date)))
-			   (fprop (ah-clearcase-file-fprop file)))
-		       ;; when the file has a FPROP (meaning it is visited in
-		       ;; Emacs, we try to reconcile `state' with `fprop', but
-		       ;; we are carefull not to ask for a fprop refres unless
-		       ;; it is necessary.
-		       (when fprop
-			 (cond ((eq state 'edited)
-				(unless (ah-clearcase-fprop-checkedout-p fprop)
-				  ;; The file is marked as checked-out, but
-				  ;; the fprop is not.  Update the fprop.
-				  (ah-clearcase-maybe-set-vc-state file 'force)))
-			       ((eq state 'hijacked)
-				(setf (ah-clearcase-fprop-status fprop) 'hijacked)))
-			 (setq state (vc-clearcase-state-heuristic file)))
-		       state))))
+		   ;; Regular, version controlled file.  Set the state.
+		   (vc-file-setprop file 'vc-clearcase-registered 'yes)
+		   (vc-file-setprop
+		    file
+		    'vc-state
+		    (let ((state (cond
+				   ((progn
+				      (beginning-of-line)
+				      (re-search-forward "\\[hijacked\\]" limit 'noerror))
+				    'unlocked-change)
+				   ((progn
+				      (beginning-of-line)
+				      (re-search-forward "CHECKOUT" limit 'noerror))
+				    'edited)
+				   (t 'up-to-date)))
+			  (fprop (ah-clearcase-file-fprop file)))
+		      ;; when the file has a FPROP (meaning it is visited in
+		      ;; Emacs, we try to reconcile `state' with `fprop', but
+		      ;; we are carefull not to ask for a fprop refres unless
+		      ;; it is necessary.
+		      (when fprop
+			(cond ((eq state 'edited)
+			       (unless (ah-clearcase-fprop-checkedout-p fprop)
+				 ;; The file is marked as checked-out, but the
+				 ;; fprop is not.  Update the fprop.
+				 (ah-clearcase-maybe-set-vc-state file 'force)))
+			      ((eq state 'unlocked-change)
+			       (setf (ah-clearcase-fprop-status fprop) 'hijacked)))
+			(setq state (vc-clearcase-state-heuristic file)))
+		      state)))))
 
-	      ;; else, file is not managed by ClearCase, we mark it
-	      ;; up-to-date, otherwise vc-dired will ask
-	      ;; `vc-clearcase-responsible-p' to classify each of these files,
-	      ;; and this is quite expensive.
-	      (let ((file (expand-file-name (buffer-substring-no-properties
-					     (point) (c-point 'eol)))))
-		(if (file-directory-p file)
-		    (when vc-dired-recurse
-		      (puthash file -1 vc-clearcase-dir-state-cache))
-		    (vc-file-setprop file 'vs-state 'up-to-date))))
+	    ((looking-at "^.+$")        ; not an empty line
+	     ;; file is not managed by ClearCase
+	     (let ((file (expand-file-name (match-string 0))))
+	       (if (file-directory-p file)
+		   (when vc-dired-recurse
+		     (puthash (expand-file-name (concat file "/")) 'no
+			      vc-clearcase-dir-state-cache))
+		   ;; else
+		   (vc-file-setprop file 'vc-clearcase-registered 'no)))))
 	  (setq done (= (forward-line 1) 1))))))
   (message "vc-clearcase-dir-state: %s completed." dir))
 
@@ -2052,30 +2059,29 @@ it's parents is registered."
     (message "Registering %s" (file-name-nondirectory file))
     (let ((ah-cleartool-timeout (* 2 ah-cleartool-timeout)))
       (ah-cleartool "mkelem -nc \"%s\"" file))
+    ;; mark the file as registered, in case it was marked as unregistered.
+    (vc-file-setprop file 'vc-clearcase-registered 'yes)
     (ah-clearcase-maybe-set-vc-state file 'force)
     (vc-resynch-buffer file t t)))
 
 (defun vc-clearcase-responsible-p (file)
   "Return t if we responsible for FILE.
-We consider ourselves responsible if FILE has a version.
-
-Note that FILE can also be a directory.
+We consider ourselves responsible if FILE's directory has a
+version.  If FILE is a directory, we are responsible for it only
+if it is already registered; this means we are not responsible
+for non registered directories.
 
 If there is a transaction id for FILE in
 `vc-clearcase-dir-state-cache', it means `vc-clearcase-dir-state'
 is procesing that FILE.  In that case we consider ourselves
 responsible if the transaction id is positive."
-  (let ((tid (gethash file vc-clearcase-dir-state-cache)))
-    (if (null tid)
-	(ignore-cleartool-errors
-	 (not (string= (ah-cleartool "desc -fmt \"%%Vn\" \"%s\"" file) "")))
+  (cond
+    ((gethash file vc-clearcase-dir-state-cache) t)
 
-	;; if the tid is -1, `vc-clearcase-dir-state' put it in there
-	;; for us only, so we remove it now.
-	(progn
-	  (when (= tid -1)
-	    (remhash file vc-clearcase-dir-state-cache))
-	  (> tid 0)))))
+    (t (ignore-cleartool-errors
+	(not (string= (ah-cleartool
+		       "desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
+		      ""))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.

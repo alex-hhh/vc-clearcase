@@ -1276,26 +1276,24 @@ determine the root path for a snapshot view."
 
   (with-cleartool-directory dir
     (unless (ah-clearcase-vprop-properties vprop)
-      (let ((vdata (ah-cleartool "lsview -properties -full %s"
-				 (ah-clearcase-vprop-name vprop)))
-	    (case-fold-search t))
+      (let* ((view-tag (ah-clearcase-vprop-name vprop))
+	     (vdata (ah-cleartool "lsview -properties -full %s" view-tag))
+	     (case-fold-search t))
 	(if (string-match "^\\s-*properties:\\s-*\\(.*\\)\\s-*$" vdata)
 	    (setf (ah-clearcase-vprop-properties vprop)
 		  (mapcar 'intern (split-string (downcase (match-string 1 vdata)))))
-	    ;; else, report it as a message (should it be an error?
-	    (message "ah-clearcase-get-vprop: no props for %s"
-		     (ah-clearcase-vprop-name vprop))))
+	    ;; should it be an error?
+	    (message "ah-clearcase-get-vprop: no props for %s" view-tag))
 
-      (when (ah-clearcase-ucm-view-p vprop)
-	(setf (ah-clearcase-vprop-stream vprop)
-	      (format "lsstream -fmt \"%%n\" -view %s"
-		      (ah-clearcase-vprop-name vprop)))))
-    (when (and dir
-	       (null (ah-clearcase-vprop-root-path vprop))
-	       (ah-clearcase-snapshot-view-p vprop))
-      (setf (ah-clearcase-vprop-root-path vprop)
-	    (replace-regexp-in-string
-	     "[\n\r]+" "" (ah-cleartool "pwv -root")))))
+	(when (ah-clearcase-ucm-view-p vprop)
+	  (setf (ah-clearcase-vprop-stream vprop)
+		(ah-cleartool "lsstream -fmt \"%%n\" -view %s" view-tag))))
+
+      (when (and dir
+		 (null (ah-clearcase-vprop-root-path vprop))
+		 (ah-clearcase-snapshot-view-p vprop))
+	(setf (ah-clearcase-vprop-root-path vprop)
+	      (replace-regexp-in-string "[\n\r]+" "" (ah-cleartool "pwv -root"))))))
   vprop)
 
 
@@ -2019,7 +2017,7 @@ separate version, so we return the parent version in that case."
     (setq tag
 	  (if (ah-clearcase-ucm-view-p fprop)
 	      (let ((vprop (ah-clearcase-get-vprop fprop)))
-		(concat "<" (ah-clearcase-vprop-name vprop) ">"))
+		(concat "<" (ah-clearcase-vprop-stream vprop) ">"))
 	      (let ((branch (ah-clearcase-fprop-branch fprop))
 		    (version-number (ah-clearcase-fprop-version-number fprop)))
 		(concat branch "/" version-number))))

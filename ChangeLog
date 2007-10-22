@@ -1,3 +1,11 @@
+2007-10-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (ah-clearcase-setup-vprop): 1.123 bugfix:
+	actually ask for the stream name rather than recording the
+	lsstream command in the vprop.
+	(vc-clearcase-mode-line-string): 1.123 in UCM views, display the
+	stream name instead of the view name.
+
 2007-10-19  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-cleartool-wait-for): 1.121 arguments to

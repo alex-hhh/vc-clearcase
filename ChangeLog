@@ -1,3 +1,27 @@
+2007-10-25  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-read-activity): 1.2 moved here from vc-clearcase.el
+	(ucm-show-diff-link): 1.2 handle checked out files corectly.
+	(ucm-browse-activity): 1.2 remove the ah- prefix from called
+	functions.
+	(ucm-checkin-activity, ucm-checked-out-files): 1.2 moved here from
+	vc-clearcase.el
+
+	* vc-clearcase.el: 1.124 the "ah-" prefix was dropped from all
+	functions and variables from this package.  Old defcustom names
+	are defvaralias-ed to the new ones.
+	(clearcase-vprop): 1.125 add default initializers for the
+	`activities' and `activities-tid' structure members; constructor
+	call is now simpler.
+	(clearcase-refresh-files-in-view): 1.125 when VIEW-TAG is nil,
+	udpdate all ClearCase files.
+	(clearcase-read-activity, vc-clearcase-set-activity)
+	(vc-clearcase-show-current-activity): 1.125 moved to ucm.el under
+	new names.
+
+	Bug 1818879: Only add 'CLEARCASE to `vc-handled-backends' when the
+	cleartool program exists
+
 2007-10-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (ah-clearcase-setup-vprop): 1.123 bugfix:

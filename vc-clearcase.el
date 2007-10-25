@@ -3627,47 +3627,47 @@ See `clearcase-trace-cleartool-tq' and
 ;; compatibility with previous version
 
 ;;;###autoload
-(defvaralias 'cleartool-program 'ah-clearcase-cleartool-program)
+(defvaralias 'ah-clearcase-cleartool-program 'cleartool-program)
 (make-obsolete-variable
  'ah-clearcase-cleartool-program 'cleartool-program)
 
 ;;;###autoload
-(defvaralias 'clearcase-vtree-program 'ah-clearcase-vtree-program)
+(defvaralias 'ah-clearcase-vtree-program 'clearcase-vtree-program)
 (make-obsolete-variable
  'ah-clearcase-vtree-program 'clearcase-vtree-program)
 
 ;;;###autoload
-(defvaralias 'cleartool-timeout 'ah-cleartool-timeout)
+(defvaralias 'ah-cleartool-timeout 'cleartool-timeout)
 (make-obsolete-variable
  'ah-cleartool-timeout 'cleartool-timeout)
 
 ;;;###autoload
-(defvaralias 'cleartool-idle-timeout 'ah-cleartool-idle-timeout)
+(defvaralias 'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
 (make-obsolete-variable
  'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
 
 ;;;###autoload
-(defvaralias 'cleartool-save-stop-data 'ah-cleartool-save-stop-data)
+(defvaralias 'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
 (make-obsolete-variable
  'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
 
 ;;;###autoload
-(defvaralias 'clearcase-checkout-comment-type 'ah-clearcase-checkout-comment-type)
+(defvaralias 'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
 (make-obsolete-variable
  'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
 
 ;;;###autoload
-(defvaralias 'clearcase-checkout-policy 'ah-clearcase-checkout-policy)
+(defvaralias 'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
 (make-obsolete-variable
  'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
 
 ;;;###autoload
-(defvaralias 'clearcase-rmbranch-on-revert-flag 'ah-clearcase-rmbranch-on-revert-flag)
+(defvaralias 'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
 (make-obsolete-variable
  'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
 
 ;;;###autoload
-(defvaralias 'clearcase-diff-cleanup-flag 'ah-clearcase-diff-cleanup-flag)
+(defvaralias 'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
 (make-obsolete-variable
  'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
 
@@ -3677,12 +3677,12 @@ See `clearcase-trace-cleartool-tq' and
  'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
 
 ;;;###autoload
-(defvaralias 'clearcase-no-label-action 'ah-clearcase-no-label-action)
+(defvaralias 'ah-clearcase-no-label-action 'clearcase-no-label-action)
 (make-obsolete-variable
  'ah-clearcase-no-label-action 'clearcase-no-label-action)
 
 ;;;###autoload
-(defvaralias 'clearcase-confirm-label-move 'ah-clearcase-confirm-label-move)
+(defvaralias 'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
 (make-obsolete-variable
  'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
 

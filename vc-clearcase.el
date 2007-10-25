@@ -1239,9 +1239,9 @@ the parent version, to conform to vc.el semantics."
   name
   root-path                             ; for snapshot views only
   stream                                ; the UCM stream or nil
-  properties                           ; a list of 'snapshot 'dynamic 'ucmview
-  activities                           ; list of UCM activities in this stream
-  activities-tid                      ; transaction id for actitiviy retrieval
+  properties                            ; list of 'snapshot 'dynamic 'ucmview
+  (activities '("*NONE*" "*NEW-ACTIVITY*")) ; list of UCM activities in this stream
+  (activities-tid -1)                 ; transaction id for actitiviy retrieval
   )
 
 (defvar clearcase-all-vprops '())
@@ -1323,21 +1323,19 @@ asking cleartool for information.  See
 	(unless vprop
 	  (assert dir)
 	  (setq vprop (clearcase-setup-vprop
-		       (clearcase-make-vprop
-			:name vtag
-			:activities (list "*NONE*" "*NEW-ACTIVITY*")
-			:activities-tid -1)
+		       (clearcase-make-vprop :name vtag)
 		       dir))
 	  (push vprop clearcase-all-vprops))
 	vprop)))
 
-(defun clearcase-refresh-files-in-view (view-tag)
-  "Update all visited files from VIEW-TAG.
-This is useful when the view changes (by a setcs or update
-command).
+(defun clearcase-refresh-files-in-view (&optional view-tag)
+  "Refresh ClearCase info for all visited files from VIEW-TAG.
+VIEW-TAG can be a VPROP, a view name or nil.  When nil ClearCase
+info all visited files is refreshed.
 
-VIEW-TAG is passed to `clearcase-get-vprop', which see."
-  (when (clearcase-vprop-p view-tag)
+This function useful when the view changes, such as by a setcs or
+update command or when an UCM activity is checked in."
+  (when (and view-tag (clearcase-vprop-p view-tag))
     (setq view-tag (clearcase-vprop-name view-tag)))
   (dolist (buffer (buffer-list))
     (ignore-errors
@@ -1348,73 +1346,9 @@ VIEW-TAG is passed to `clearcase-get-vprop', which see."
 	(let* ((file (buffer-file-name buffer))
 	       (fprop (clearcase-file-fprop file))
 	       (vtag (clearcase-fprop-view-tag fprop)))
-	  (when (string= vtag view-tag)
+	  (when (or (null view-tag) (string= vtag view-tag))
 	    (clearcase-maybe-set-vc-state file 'force)
 	    (vc-resynch-buffer file t t)))))))
-
-;;;; Read an activity name from the minibuffer with completion
-
-(defun clearcase-read-activity
-    (prompt &optional view-tag include-obsolete initial)
-  "Display PROMPT and read a UCM activity with completion.
-
-VIEW-TAG is the view from which activities are read -- when nil,
-the view is determined from `default-directory' (which is the
-current directory).
-
-When INCLUDE-OBSOLETE is not nil, obsolete activities are also
-included in the list.
-
-INITIAL is the initial activity name presented to the user.  When
-nil, the current activity in the view is presented to the user."
-
-  (with-cleartool-directory (expand-file-name default-directory)
-    (unless view-tag
-      (setq view-tag
-	    (replace-regexp-in-string
-	     "[\n\r]+" "" (cleartool "pwv -short"))))
-    (unless initial
-      (setq initial
-	    (ignore-cleartool-errors
-	     (cleartool-ask "lsact -cact -fmt \"%n\"")))))
-
-  (lexical-let ((vprop (clearcase-get-vprop view-tag)))
-
-    ;; wait for a previous activity collection transaction
-
-    (cleartool-wait-for (clearcase-vprop-activities-tid vprop))
-
-    ;; Start reading the activities asynchronously.  By the time the user
-    ;; decides what activity it wants, we may have the answer already.  Note
-    ;; that the previous activity list still exists and the user can perform
-    ;; completions form that one.
-
-    (let ((tid (cleartool-ask
-		(format "lsact %s -fmt \"%%n\\n\" -view %s"
-			(if include-obsolete "-obsolete" "")
-			(clearcase-vprop-name vprop))
-		'nowait
-		vprop
-		(lambda (vprop answer)
-		  (setf (clearcase-vprop-activities vprop)
-			(append (list "*NONE*" "*NEW-ACTIVITY*")
-				(split-string answer "[\n\r]+" t)))))))
-      (setf (clearcase-vprop-activities-tid vprop) tid))
-
-    (completing-read
-     prompt
-     '(lambda (string predicate flag)
-       (let ((fn (cond ((eq flag t) 'all-completions)
-		       ((eq flag 'lambda)
-			;; test-completion does not exist in emacs 21.
-			'(lambda (x l &optional p) (member x l)))
-		       ((null flag) 'try-completion)
-		       (t (error "Unknown value for flag %S" flag)))))
-	 (funcall
-	  fn string (clearcase-vprop-activities vprop) predicate)))
-     nil
-     'require-match
-     initial)))
 
 ;;;; Read a view-tag from the minibuffer with completion
 
@@ -2065,8 +1999,8 @@ if it is already registered; this means we are not responsible
 for non registered directories.
 
 If there is a transaction id for FILE in
-`clearcase-dir-state-cache', it means `vc-clearcase-dir-state' is
-procesing that FILE.  In that case we consider ourselves
+`clearcase-dir-state-cache', it means `vc-clearcase-dir-state'
+is procesing that FILE.  In that case we consider ourselves
 responsible if the transaction id is positive."
   (cond
     ((gethash file clearcase-dir-state-cache) t)
@@ -3266,61 +3200,6 @@ are made to the views)."
 	  ;; from this view?
 	  )))))
 
-;;;###autoload
-(defun vc-clearcase-set-activity (&optional activity)
-  "Set the UCM ACTIVITY in the current directory.
-In interactive mode, the user is prompted for the available
-activities in the stream associated with the UCM view in the
-`default-directory', and the selected one is set.
-
-Two special activity names are also accepted: *NONE* which will
-cause the current activity to be unset and *NEW-ACTIVITY* which
-will create and set a new activity (the user is prompted for the
-activity headline)."
-  (interactive (list (clearcase-read-activity "Set activity: ")))
-
-  (with-cleartool-directory (expand-file-name default-directory)
-    (cond
-      ((equal activity "*NONE*")
-       (cleartool "setact -none"))
-      ((equal activity "*NEW-ACTIVITY*")
-       (let ((headline (read-from-minibuffer "Activity headline: ")))
-	 (when (equal headline "")
-	   (error "Activity headline cannot be empty"))
-	 (cleartool "mkact -force -headline \"%s\"" headline)))
-      (t
-       (cleartool "setact \"%s\"" activity)))))
-
-;;;###autoload
-(defun vc-clearcase-show-current-activity (&optional extra-info)
-  "Show the current activity in the view.
-With prefix arguument (EXTRA-INFO), also shows the number of
-files modified under this activity, number of versions and the
-number of checked out files."
-  (interactive "P")
-  (with-cleartool-directory (expand-file-name default-directory)
-    (let ((headline (cleartool "lsact -cact -fmt \"%%[headline]p\""))
-	  versions
-	  (files 0)
-	  (checkouts 0))
-      (if (equal headline "")
-	  (message "No current activity set.")
-	  (when extra-info
-	    (with-temp-message "Collecting activitiy statistics..."
-	      (setq versions
-		    (split-string
-		     (cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
-	      (setq files (make-hash-table :test 'equal))
-	      (dolist (v versions)
-		(when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
-		  (incf checkouts))
-		(when (string-match "^\\(.*\\)@@" v)
-		  (setf (gethash (match-string 1 v) files) t)))))
-	  (if extra-info
-	      (message "%s; %d files, %d revisions, %d checked-out"
-		       headline (hash-table-count files) (length versions) checkouts)
-	      (message "%s" headline))))))
-
 (when (fboundp 'define-button-type)
   (define-button-type 'vc-clearcase-start-ediff-button
       'face 'default
@@ -3567,7 +3446,6 @@ In interactive mode, prompts for a view-tag name."
   (define-key vc-prefix-map "e" 'vc-clearcase-edcs)
   (define-key vc-prefix-map "f" 'vc-clearcase-start-view)
   (define-key vc-prefix-map "j" 'vc-clearcase-gui-vtree-browser)
-  (define-key vc-prefix-map "k" 'vc-clearcase-set-activity)
   (define-key vc-prefix-map "o" 'vc-clearcase-list-checkouts)
   (define-key vc-prefix-map "p" 'vc-clearcase-update-view)
   (define-key vc-prefix-map "t" 'vc-clearcase-what-view-tag)
@@ -3615,14 +3493,6 @@ In interactive mode, prompts for a view-tag name."
     (define-key m [vc-clearcase-start-view]
       '(menu-item "Start dynamic view..." vc-clearcase-start-view
 	:help "Start a dynamic view"))
-    (define-key m [separator-clearcase-2]
-      '("----" 'separator-2))
-    (define-key m [vc-clearcase-show-current-activity]
-      '(menu-item "Show current UCM activity..." vc-clearcase-show-current-activity
-	:help "Show the current activity in the view"))
-    (define-key m [vc-clearcase-set-activity]
-      '(menu-item "Set UCM activity..." vc-clearcase-set-activity
-	:help "Set an UCM activity in the current view"))
     (fset 'clearcase-global-menu m)))
 
 ;;;###autoload
@@ -3744,65 +3614,82 @@ See `clearcase-trace-cleartool-tq' and
 
 ;;;; Finish up
 
+;; Bug 1818879: Only add 'CLEARCASE to `vc-handled-backends' and start the
+;; transaction queue when we can find cleartool.
+
 ;;;###autoload
-(if (boundp 'vc-handled-backends)
+(when (executable-find cleartool-program)
+  (if (boundp 'vc-handled-backends)
     (unless (memq 'CLEARCASE vc-handled-backends)
       (setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))
-    (setq vc-handled-backends '(RCS CVS CLEARCASE)))
-
-;; start cleartool here, we will need it anyway
-(cleartool-tq-maybe-start)
+    (setq vc-handled-backends '(RCS CVS CLEARCASE))))
 
 ;; compatibility with previous version
 
+;;;###autoload
 (defvaralias 'cleartool-program 'ah-clearcase-cleartool-program)
 (make-obsolete-variable
  'ah-clearcase-cleartool-program 'cleartool-program)
 
+;;;###autoload
 (defvaralias 'clearcase-vtree-program 'ah-clearcase-vtree-program)
 (make-obsolete-variable
  'ah-clearcase-vtree-program 'clearcase-vtree-program)
 
+;;;###autoload
 (defvaralias 'cleartool-timeout 'ah-cleartool-timeout)
 (make-obsolete-variable
  'ah-cleartool-timeout 'cleartool-timeout)
 
+;;;###autoload
 (defvaralias 'cleartool-idle-timeout 'ah-cleartool-idle-timeout)
 (make-obsolete-variable
  'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
 
+;;;###autoload
 (defvaralias 'cleartool-save-stop-data 'ah-cleartool-save-stop-data)
 (make-obsolete-variable
  'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
 
+;;;###autoload
 (defvaralias 'clearcase-checkout-comment-type 'ah-clearcase-checkout-comment-type)
 (make-obsolete-variable
  'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
 
+;;;###autoload
 (defvaralias 'clearcase-checkout-policy 'ah-clearcase-checkout-policy)
 (make-obsolete-variable
  'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
 
+;;;###autoload
 (defvaralias 'clearcase-rmbranch-on-revert-flag 'ah-clearcase-rmbranch-on-revert-flag)
 (make-obsolete-variable
  'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
 
+;;;###autoload
 (defvaralias 'clearcase-diff-cleanup-flag 'ah-clearcase-diff-cleanup-flag)
 (make-obsolete-variable
  'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
 
+;;;###autoload
 (defvaralias 'clearcase-use-external-diff 'ah-clearcase-use-external-diff)
 (make-obsolete-variable
  'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
 
+;;;###autoload
 (defvaralias 'clearcase-no-label-action 'ah-clearcase-no-label-action)
 (make-obsolete-variable
  'ah-clearcase-no-label-action 'clearcase-no-label-action)
 
+;;;###autoload
 (defvaralias 'clearcase-confirm-label-move 'ah-clearcase-confirm-label-move)
 (make-obsolete-variable
  'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
 
+
+;; start cleartool when we are loaded, we will need it anyway
+(when (executable-find cleartool-program)
+  (cleartool-tq-maybe-start))
 
 (provide 'vc-clearcase)
 

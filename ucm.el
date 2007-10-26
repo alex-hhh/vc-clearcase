@@ -48,7 +48,7 @@ nil, the current activity in the view is presented to the user."
     (unless initial
       (setq initial
 	    (ignore-cleartool-errors
-	     (cleartool-ask "lsact -cact -fmt \"%n\"")))))
+	      (cleartool-ask "lsact -cact -fmt \"%n\"")))))
 
   ;; The view might not be known, so we pass in the `default-directory' to
   ;; `clearcase-get-vprop' so it can be properly created.
@@ -152,56 +152,75 @@ number of checked out files."
   "A stack of previous activities we visited.
 Used to implement the BACK button.")
 
+(defun ucm-file-link-handler (button)
+  (with-current-buffer (button-get button 'buffer)
+    (pop-to-buffer (current-buffer))
+    (let ((file-name (button-get button 'file-name)))
+      (pop-to-buffer (find-file-noselect file-name)))))
+
 (define-button-type 'ucm-file-link
     'face 'default
     'help-echo "mouse-2, RET: Visit this file"
     'follow-link t
-    'action (lambda (button)
-	      (pop-to-buffer (button-get button 'buffer))
-	      (let ((file-name (button-get button 'file-name)))
-		(pop-to-buffer (find-file-noselect file-name))))
+    'action 'ucm-file-link-handler
     'skip t)
+
+(defun ucm-url-link-handler (button)
+  (browse-url (button-get button 'url)))
+
+(define-button-type 'ucm-url-link
+    'face 'default
+    'help-echo "mouse-2, RET: Visit this URL"
+    'follow-link t
+    'action 'ucm-url-link-handler)
+
+(defun ucm-activity-link-handler (button)
+  (with-current-buffer (button-get button 'buffer)
+    (pop-to-buffer (current-buffer))
+    (assert ucm-activity)
+    (push ucm-activity ucm-previous-activities)
+    (ucm-browse-activity (button-get button 'ucm-activity))))
 
 (define-button-type 'ucm-activity-link
     'face 'default
     'help-echo "mouse-2, RET: Browse this activity"
     'follow-link t
-    'action (lambda (button)
-	      (pop-to-buffer (button-get button 'buffer))
-	      (push ucm-activity ucm-previous-activities)
-	      (ucm-browse-activity (button-get button 'ucm-activity)))
+    'action 'ucm-activity-link-handler
     'skip t)
+
+(defun ucm-previous-activity-link-handler (button)
+  (with-current-buffer (button-get button 'buffer)
+    (pop-to-buffer (current-buffer))
+    (when ucm-previous-activities
+      (ucm-browse-activity (pop ucm-previous-activities)))))
 
 (define-button-type 'ucm-previous-activity-link
     'face 'default
     'help-echo "mouse-2, RET: Browse previous activity"
-    'action (lambda (button)
-	      (pop-to-buffer (button-get button 'buffer))
-	      (when ucm-previous-activities
-		(ucm-browse-activity (pop ucm-previous-activities))))
+    'action 'ucm-previous-activity-link-handler
     'follow-link t
     'skip t)
+
+(defun ucm-show-diff-link-handler (button)
+  (with-current-buffer (button-get button 'buffer)
+    (pop-to-buffer (current-buffer))
+    (let* ((file (expand-file-name (button-get button 'file-name)))
+	   (current (button-get button 'revision)))
+      ;; make sure file is loaded, as we need a proper FPROP to run the diff.
+      (find-file-noselect file)
+      (if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" current)
+	  ;; this is a checked out version, let's hope it is in our view...
+	  (vc-clearcase-diff file)
+	  ;; else
+	  (let ((previous (cleartool
+			   "desc -fmt \"%%PVn\" \"%s@@%s\"" file current)))
+	    (vc-clearcase-diff file previous current)))
+      (pop-to-buffer (get-buffer "*vc-diff*")))))
 
 (define-button-type 'ucm-show-diff-link
     'face 'default
     'help-echo "mouse-2, RET: Show diff"
-    'action (lambda (button)
-	      (pop-to-buffer (button-get button 'buffer))
-
-	      (let* ((file (expand-file-name (button-get button 'file-name)))
-		     (current (button-get button 'revision)))
-		;; make sure file is loaded, as we need a proper FPROP to run
-		;; the diff.
-		(find-file-noselect file)
-		(if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" current)
-		    ;; this is a checked out version, let's hope it is in our
-		    ;; view...
-		    (vc-clearcase-diff file)
-		    ;; else
-		    (let ((previous (cleartool
-				     "desc -fmt \"%%PVn\" \"%s@@%s\"" file current)))
-		      (vc-clearcase-diff file previous current)))
-		(pop-to-buffer (get-buffer "*vc-diff*"))))
+    'action 'ucm-show-diff-link-handler
     'follow-link t
     'skip t)
 
@@ -231,11 +250,20 @@ Used to implement the BACK button.")
 	  (set (make-local-variable 'ucm-activity) activity)
 	  (make-local-variable 'ucm-previous-activities)
 
-	  (let ((inhibit-read-only t))
+	  (let ((inhibit-read-only t)
+		(headline (cleartool "lsact -fmt \"%%[headline]p\" %s" activity)))
 	    (erase-buffer)
-	    (insert (cleartool
-		     "lsact -fmt \"%%[headline]p    (%%[locked]p)\" %s" activity))
-	    (insert "\nName: " activity)
+	    (insert "Name: " activity)
+	    (insert "\nHeadline: " headline)
+	    (insert "\nStatus: " (cleartool "lsact -fmt \"%%[locked]p\" %s" activity))
+	    (when (or (string-match "SFT-[0-9]+" activity)
+		      (string-match "SFT-[0-9]+" headline))
+	      (insert "\nJIRA Link: ")
+	      (let ((url (format "http://jira/browse/%s" (match-string 0 activity))))
+		(insert-text-button
+		 url
+		 'type 'ucm-url-link
+		 'url url)))
 	    (insert "\nCreated By: "
 		    (cleartool "lsact -fmt \"%%[owner]p\" %s" activity))
 	    (insert "\n\nFile Versions:\n"
@@ -277,6 +305,7 @@ Used to implement the BACK button.")
 		    (insert-text-button
 		     c
 		     'type 'ucm-activity-link
+		     'buffer (current-buffer)
 		     'ucm-activity c)
 		    (insert "\n")))))
 
@@ -284,7 +313,8 @@ Used to implement the BACK button.")
 	      (insert "\n\n")
 	      (insert-text-button
 	       "[back]"
-	       'type 'ucm-previous-activity-link)
+	       'type 'ucm-previous-activity-link
+	       'buffer (current-buffer))
 	      (insert "\n")))
 
 	  (set-buffer-modified-p nil)
@@ -315,7 +345,7 @@ checked-in using \\[log-edit-show-files]."
     (log-edit (lambda () (ucm-finish-activity-checkin checkin-activity))
 	      'setup
 	      (lambda () (ucm-checked-out-files checkin-activity)
-	      (get-buffer-create "*UCM-Checkin-Log*")))))
+		      (get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity)
   "Return the list of files checked out under ACTIVITY.

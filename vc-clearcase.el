@@ -836,7 +836,7 @@ executed."
        (unwind-protect
 	    (progn
 	      (when (file-directory-p ,new-dir)
-		(cleartool "cd \"%s\"" ,new-dir))
+		(cleartool "cd \"%s\"" (expand-file-name ,new-dir)))
 	      ,@body)
 	 (cleartool "cd \"%s\"" ,old-dir)))))
 
@@ -3527,6 +3527,7 @@ This is the string returned by the cleartool -version command."
     clearcase-annotate-date-rx
     clearcase-annotate-months
     clearcase-log-view-font-lock-keywords
+    clearcase-dir-state-cache
     cleartool-tq
 
     ;; this is handled specially in `vc-clearcase-report-bug'
@@ -3547,7 +3548,7 @@ easier to keep it up-to-date this way.")
     (mapatoms
      (lambda (a)
        (when (and (boundp a)
-		  (string-match "^\\(ah\\|vc\\)-clear\\(case\\|tool\\)-" (symbol-name a))
+		  (string-match "^\\(ah-\\|vc-\\)?clear\\(case\\|tool\\)-" (symbol-name a))
 		  (not (memq a clearcase-never-report)))
 	 (push a varlist)))
      obarray)
@@ -3627,63 +3628,51 @@ See `clearcase-trace-cleartool-tq' and
 ;; compatibility with previous version
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-cleartool-program 'cleartool-program)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-cleartool-program 'cleartool-program)
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-vtree-program 'clearcase-vtree-program)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-vtree-program 'clearcase-vtree-program)
 
 ;;;###autoload
-(defvaralias 'ah-cleartool-timeout 'cleartool-timeout)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-cleartool-timeout 'cleartool-timeout)
 
 ;;;###autoload
-(defvaralias 'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
 
 ;;;###autoload
-(defvaralias 'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
 
 ;;;###autoload
-(defvaralias 'clearcase-use-external-diff 'ah-clearcase-use-external-diff)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-no-label-action 'clearcase-no-label-action)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-no-label-action 'clearcase-no-label-action)
 
 ;;;###autoload
-(defvaralias 'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
-(make-obsolete-variable
+(define-obsolete-variable-alias
  'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
 
 

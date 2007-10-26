@@ -1,3 +1,27 @@
+2007-10-26  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-file-link, ucm-url-link, ucm-activity-link)
+	(ucm-previous-activity-link, ucm-show-diff-link): 1.4 all buttons
+	use handler functions instead of lambda expressions as their
+	action.
+	(ucm-file-link-handler, ucm-url-link-handler)
+	(ucm-activity-link-handler, ucm-previous-activity-link-handler)
+	(ucm-show-diff-link-handler): 1.4 handler functions for all
+	buttons.
+	(ucm-browse-activity): 1.4 add a link to a JIRA issue if the
+	activity name or headline matches a regexp.  Also add the buffer
+	to all the buttons we create.
+
+	* vc-clearcase.el (with-cleartool-directory): 1.127 use
+	`expand-file-name' on DIR.
+	(clearcase-never-report): 1.127 add `clearcase-dir-state-cache' to
+	the list.
+	(vc-clearcase-report-bug): 1.127 upate regexp to account for the
+	removing of the "ah-" prefix.
+
+	* vc-clearcase.el: 1.127 use `define-obsolete-variable-alias' for
+	all obsolete variables.
+
 2007-10-25  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-read-activity): 1.2 moved here from vc-clearcase.el

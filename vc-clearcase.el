@@ -37,85 +37,20 @@
 
 ;;;;; Installation:
 ;;
-;; To use this package you need to put it somewhere in your load-path
-;; (for example the site-lisp directory), byte compile it, than add
-;; the follwing line to your ~/.emacs file:
+;; 
+;; 1/ Copy this directory under the site-lisp directory of your GNU/Emacs
+;; installation.
 ;;
-;;     (require 'vc-clearcase)
+;; 2/ Byte compile vc-clearcase.el and ucm.el.  You can do it from inside
+;; Emacs, or from the command line:
 ;;
-;; You can also generate autoloads for the functions in this file,
-;; this will delay loading vc-clearcase.el until it is actually
-;; needed.
-
-;; The code below will byte-compile vc-clearcase.el and generate the
-;; autoloads in a file named vc-clearcase-auto.el in the same
-;; directory as vc-clearcase.el.  If you don't have vc-clearcase.el
-;; opened, or multiple copies of it are opened, we ask for the file
-;; name explicitely.
+;;   % emacs -batch -f batch-byte-compile vc-clearcase.el
+;;   % emacs -batch -f batch-byte-compile ucm.el
 ;;
-;; After the code below runs, the compilation results will be in a
-;; buffer named "*Compile-Log* (which you can switch to).  The
-;; vc-clearcase-auto.el file will be saved.
+;; 3/ Add the following line to your initialization file (~/.emacs.el):
 ;;
-;; After you generated the vc-clearcase-auto.el file, you need to add
-;; the follwing line to ~/.emacs:
-;;
-;;    (load "vc-clearcase-auto")
-;;
-;; To evaluate the code below, copy it into the *scratch* buffer,
-;; remove the comments, move the cursor at the end of it and type C-x
-;; C-e
-;;
-;; There are two versions of the code, this is the Emacs 22 version:
-;;
-;; (save-window-excursion
-;;   (require 'autoload)
-;;   (with-current-buffer
-;;       (or (get-buffer "vc-clearcase.el")
-;;           (find-file
-;;            (read-file-name "Find vc-clearcase.el: " nil nil 'must-match)))
-;;     (let* ((file (buffer-file-name (current-buffer)))
-;;            (base (file-name-nondirectory file))
-;;            (dir (file-name-directory file))
-;;            (generated-autoload-file
-;;             (expand-file-name "vc-clearcase-auto.el" dir)))
-;;       (unless (equal base "vc-clearcase.el")
-;;         (error "Expecting a file named vc-clearcase.el, got %s" base))
-;;       ;; byte-compile-file returns nil if there were errors
-;;       (unless (byte-compile-file file)
-;;         (error
-;;          "Failed to compile %s, check the *Compile-Log* buffer for errors"
-;;          file))
-;;       ;; update-file-autoloads returns nil if no autoloads were found.
-;;       (when (update-file-autoloads file 'save-after)
-;;         (error "Failed to find autoloads in %s" file)))))
-;;
-;; This is the Emacs 21 version:
-;;
-;; (save-window-excursion
-;;   (require 'autoload)
-;;   (with-current-buffer
-;;       (or (get-buffer "vc-clearcase.el")
-;;           (find-file
-;;            (read-file-name "Find vc-clearcase.el: " nil nil 'must-match)))
-;;     (let* ((file (buffer-file-name (current-buffer)))
-;;            (base (file-name-nondirectory file))
-;;            (dir (file-name-directory file))
-;;            (generated-autoload-file
-;;             (expand-file-name "vc-clearcase-auto.el" dir)))
-;;       (unless (equal base "vc-clearcase.el")
-;;         (error "Expecting a file named vc-clearcase.el, got %s" base))
-;;       ;; byte-compile-file returns nil if there were errors
-;;       (unless (byte-compile-file file)
-;;         (error
-;;          "Failed to compile %s, check the *Compile-Log* buffer for errors"
-;;          file))
-;;       (with-current-buffer (find-file generated-autoload-file)
-;;         (erase-buffer)
-;;         (insert "\f")
-;;         (generate-file-autoloads file)
-;;         (save-buffer)))))
-;;
+;;   (load "vc-clearcase-auto")
+;; 
 
 ;;;;; Implementation status of vc backend functions from vc.el
 ;;

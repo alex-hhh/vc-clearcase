@@ -226,7 +226,23 @@ Used to implement the BACK button.")
 
 ;;;###autoload
 (defun ucm-browse-activity (activity)
-  (interactive (list (ucm-read-activity "Browse activity: " nil 'include-obsolete)))
+  "Pop-up an information buffer about ACTIVITY.
+The buffer will contain a report about the file versions
+checked-in under the activity plus any contributing activities.
+The report contains buttons (hyperlinks) to files, versions and
+other activities.
+
+In interactive mode, the user is prompted for an activity name
+and completion is available.  ACTIVITY must be in the current
+stream (corresponding to the view in `default-directory').  With
+prefix argument, obsolete activities can also be selected.
+
+There are no restriction on ACTIVITY when called from another
+program."
+  (interactive
+   (list (ucm-read-activity
+	  "Browse activity: " nil
+	  (when current-prefix-arg 'include-obsolete))))
   (with-temp-message "Preparing report..."
     (with-cleartool-directory (expand-file-name default-directory)
       (let ((changeset (make-hash-table :test 'equal))

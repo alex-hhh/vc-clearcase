@@ -1,3 +1,8 @@
+2007-10-30  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-browse-activity): 1.5 doc update plus only allow
+	obsolete activities when current-prefix-arg is not nil.
+
 2007-10-26  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-file-link, ucm-url-link, ucm-activity-link)

@@ -37,7 +37,7 @@
 
 ;;;;; Installation:
 ;;
-;; 
+;;
 ;; 1/ Copy this directory under the site-lisp directory of your GNU/Emacs
 ;; installation.
 ;;
@@ -50,7 +50,7 @@
 ;; 3/ Add the following line to your initialization file (~/.emacs.el):
 ;;
 ;;   (load "vc-clearcase-auto")
-;; 
+;;
 
 ;;;;; Implementation status of vc backend functions from vc.el
 ;;
@@ -358,18 +358,11 @@ have their answer stored here for retrieval by
 (put 'cleartool-error 'error-message "cleartool")
 
 (defun cleartool-signal-error (message)
-  "Parse MESSAGE and signal a cleartool-error.
-MESSAGE is searched for an error from cleartool and that error is
-signaled as an `cleartool-error' error.  If MESSAGE does not
-contain a cleartool error, the entire MESSAGE is signaled.  If
-multiple cleartool errors are found, the first one is signaled,
-but the string \"(multiple)\" is prepended to it."
-  (let* ((tag "cleartool: Error: \\(.*\\)")
-	 (pos (string-match tag message))
-	 (str (if pos (match-string 1 message) message)))
-    (when (and pos (string-match tag message (1+ pos)))
-      (setq str (concat "(multiple) " str)))
-    (while t (signal 'cleartool-error (list str)))))
+  "Signal a cleartool-error with MESSAGE as an argument."
+  ;; Remove the "cleartool: Error: " message as it is annoying and just takes
+  ;; up space.
+  (let ((m (replace-regexp-in-string "cleartool: Error: " "" message)))
+    (while t (signal 'cleartool-error (list m)))))
 
 (defun cleartool-tq-sentinel (process event)
   "Sentinel for the cleartool PROCESS.
@@ -1246,6 +1239,11 @@ using (2).
 If the VPROP has to be created, some properties will be set by
 asking cleartool for information.  See
 `clearcase-setup-vprop'."
+
+  ;; Guard against the case where the result of a "pwv -short" in a non
+  ;; ClearCase directory is passed to us.
+  (when (equal view-tag "** NONE **")
+    (error "not a valid view-tag: %s" view-tag))
 
   (if (clearcase-vprop-p view-tag)
       view-tag                          ; case 1/

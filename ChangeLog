@@ -1,3 +1,10 @@
+2007-11-01  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-get-vprop): 1.129 signal an error if
+	the view tag is "** NONE **"
+	(cleartool-signal-error): 1.129 if the message from cleartool has
+	multiple lines, signal them all.
+
 2007-10-30  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-browse-activity): 1.5 doc update plus only allow

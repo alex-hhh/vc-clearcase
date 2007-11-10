@@ -355,39 +355,46 @@ checked-in using \\[log-edit-show-files]."
   (interactive (list (ucm-read-activity "Checkin activity: ")))
   (when (member activity '("*NONE*" "*NEW-ACTIVITY*"))
     (error "Not a real activity"))
-  (lexical-let ((checkin-activity (cleartool "lsact -fmt \"%%Xn\" %s" activity)))
-    (when (null (ucm-checked-out-files checkin-activity))
-      (error "No files checked out under this activity"))
-    (log-edit (lambda () (ucm-finish-activity-checkin checkin-activity))
-	      'setup
-	      (lambda () (ucm-checked-out-files checkin-activity)
-		      (get-buffer-create "*UCM-Checkin-Log*")))))
+  (with-cleartool-directory default-directory
+    (lexical-let ((checkin-activity (cleartool "lsact -fmt \"%%Xn\" %s" activity)))
+      (when (null (ucm-checked-out-files checkin-activity))
+	(error "No files checked out under this activity"))
+      (log-edit (lambda ()
+		  (interactive)
+		  (ucm-finish-activity-checkin checkin-activity))
+		'setup
+		(lambda ()
+		  (interactive)
+		  (ucm-checked-out-files checkin-activity))
+		(get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity)
   "Return the list of files checked out under ACTIVITY.
 The file names are relative to the `default-directory'"
-  (let ((files nil))
-    (dolist (v (split-string
-		(cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
-		", " 'omit-nulls))
-      (when (string-match "\\(.*\\)@@\\(.*\\)" v)
-	(let ((file (match-string 1 v))
-	      (revision (match-string 2 v)))
-	  (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
-	    (add-to-list 'files (file-relative-name file))))))
-    files))
+  (with-cleartool-directory default-directory
+    (let ((files nil))
+      (dolist (v (split-string
+		  (cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
+		  ", " 'omit-nulls))
+	(when (string-match "\\(.*\\)@@\\(.*\\)" v)
+	  (let ((file (match-string 1 v))
+		(revision (match-string 2 v)))
+	    (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
+	      (add-to-list 'files (file-relative-name file))))))
+      files)))
 
 (defun ucm-finish-activity-checkin (activity)
   "Check-in files under ACTIVITY using the contents of
 *UCM-Checkin-Log* as the comment."
   (interactive)
-  (with-temp-message (format "Checking in %s..." activity)
-    (let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
-			  (buffer-substring-no-properties (point-min) (point-max)))))
-      (if (string= comment-text "")
-	  (cleartool "checkin -nc %s" activity)
-	  (with-clearcase-cfile (comment comment-text)
-	    (cleartool "checkin -cfile \"%s\" %s" comment activity)))
-      (clearcase-refresh-files-in-view))))
+  (with-cleartool-directory default-directory
+    (with-temp-message (format "Checking in %s..." activity)
+      (let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
+			    (buffer-substring-no-properties (point-min) (point-max)))))
+	(if (string= comment-text "")
+	    (cleartool "checkin -nc %s" activity)
+	    (with-clearcase-cfile (comment comment-text)
+	      (cleartool "checkin -cfile \"%s\" %s" comment activity)))
+	(clearcase-refresh-files-in-view)))))
 
 (provide 'ucm)

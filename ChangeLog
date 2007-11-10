@@ -1,3 +1,11 @@
+2007-11-10  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-checkin-activity): 1.6 set the cleartool directory
+	to `default-directory'; add `interactive' forms to both lambda
+	expression arguments of `log-edit'.
+	(ucm-checked-out-files, ucm-finish-activity-checkin): 1.6 set the
+	cleartool directory to `default-directory'
+
 2007-11-01  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-get-vprop): 1.129 signal an error if

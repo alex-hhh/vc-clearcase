@@ -1574,12 +1574,14 @@ If FORCE is not nil, always read the properties."
     (before clearcase-prepare-checkin-comment
 	    (file rev comment initial-contents msg action &optional after-hook))
   "Insert an initial comment when checking-in files."
-  (let ((fprop (clearcase-file-fprop file)))
-    (when (and fprop (clearcase-fprop-checkedout-p fprop))
-      ;; so we are checking a file in
-      (cleartool-wait-for (clearcase-fprop-comment-tid fprop))
-      (setf comment (clearcase-fprop-comment fprop))
-      (setf initial-contents t))))
+  ;; vc-start-entry is called with a nil FILE from vc-dired.
+  (when file
+    (let ((fprop (clearcase-file-fprop file)))
+      (when (and fprop (clearcase-fprop-checkedout-p fprop))
+	;; so we are checking a file in
+	(cleartool-wait-for (clearcase-fprop-comment-tid fprop))
+	(setf comment (clearcase-fprop-comment fprop))
+	(setf initial-contents t)))))
 (ad-activate 'vc-start-entry)
 
 (defadvice vc-create-snapshot
@@ -1808,7 +1810,7 @@ have a corect state."
 				    'unlocked-change)
 				   ((progn
 				      (beginning-of-line)
-				      (re-search-forward "CHECKOUT" limit 'noerror))
+				      (re-search-forward "CHECKEDOUT" limit 'noerror))
 				    'edited)
 				   (t 'up-to-date)))
 			  (fprop (clearcase-file-fprop file)))
@@ -1921,8 +1923,10 @@ it's parents is registered."
       (cleartool "mkelem -nc \"%s\"" file))
     ;; mark the file as registered, in case it was marked as unregistered.
     (vc-file-setprop file 'vc-clearcase-registered 'yes)
-    (clearcase-maybe-set-vc-state file 'force)
-    (vc-resynch-buffer file t t)))
+
+    (let ((fprop (clearcase-make-fprop :file-name file)))
+      (vc-file-setprop file 'vc-clearcase-fprop fprop)
+      (clearcase-maybe-set-vc-state file 'force))))
 
 (defun vc-clearcase-responsible-p (file)
   "Return t if we responsible for FILE.
@@ -1948,9 +1952,14 @@ responsible if the transaction id is positive."
 REV is ignored, COMMENT is the checkin comment."
   (when rev
     (message "Ignoring revision specification: %s" rev))
-  (with-clearcase-cfile (comment-file comment)
-    ;; let the cleartool error be directly reported
-    (cleartool "checkin -ptime -nwarn -cfile %s \"%s\"" comment-file file)
+  (if (or (null comment) (equal comment ""))
+      ;; use the checkout comment, note that we can be called from vc-dired,
+      ;; so the checkout comment might not be known to us.
+      (cleartool "checkin -ptime -nwarn -nc \"%s\"" file)
+      (with-clearcase-cfile (cfile comment)
+	(cleartool "checkin -ptime -nwarn -cfile %s \"%s\"" cfile file)))
+  ;; we might not have a fprop if called from vc-dired
+  (when (clearcase-file-fprop file)
     (clearcase-maybe-set-vc-state file 'force)))
 
 (defun clearcase-find-version-helper (file rev destfile)
@@ -3554,59 +3563,59 @@ See `clearcase-trace-cleartool-tq' and
 ;;;###autoload
 (when (executable-find cleartool-program)
   (if (boundp 'vc-handled-backends)
-    (unless (memq 'CLEARCASE vc-handled-backends)
-      (setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))
-    (setq vc-handled-backends '(RCS CVS CLEARCASE))))
+      (unless (memq 'CLEARCASE vc-handled-backends)
+	(setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))
+      (setq vc-handled-backends '(RCS CVS CLEARCASE))))
 
 ;; compatibility with previous version
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-cleartool-program 'cleartool-program)
+    'ah-clearcase-cleartool-program 'cleartool-program)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-vtree-program 'clearcase-vtree-program)
+    'ah-clearcase-vtree-program 'clearcase-vtree-program)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-cleartool-timeout 'cleartool-timeout)
+    'ah-cleartool-timeout 'cleartool-timeout)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
+    'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
+    'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
+    'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
+    'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
+    'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
+    'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
+    'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-no-label-action 'clearcase-no-label-action)
+    'ah-clearcase-no-label-action 'clearcase-no-label-action)
 
 ;;;###autoload
 (define-obsolete-variable-alias
- 'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
+    'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
 
 
 ;; start cleartool when we are loaded, we will need it anyway

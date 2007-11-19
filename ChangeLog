@@ -1,3 +1,11 @@
+2007-11-19  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-start-entry): 1.130 defadvice will handle a
+	null FILE argument corectly
+	(vc-clearcase-dir-state): 1.130 bugfix: search for "CHECKEDOUT"
+	(vc-clearcase-register): 1.130 need to create a fprop for the file
+	we just registered
+
 2007-11-10  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-checkin-activity): 1.6 set the cleartool directory

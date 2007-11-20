@@ -23,12 +23,12 @@
 ;; Homepage: http://sourceforge.net/projects/vc-clearcase/
 ;; $Id$
 
-;;; Comentary
-;; This implements suppport for ClearCase UCM.  The user functions
+;;; Commentary
+;; This implements support for ClearCase UCM.  The user functions
 ;; `ucm-set-activity', `ucm-show-current-activity', `ucm-browse-activity' and
 ;; `ucm-checkin-activity'.  See their doc strings for details.  As of now,
 ;; these functions are not bound to keys and menus, so you need to invoke them
-;; usin M-x (`execute-extended-command').
+;; using M-x (`execute-extended-command').
 
 ;;; Code
 
@@ -127,7 +127,7 @@ activity headline)."
 ;;;###autoload
 (defun ucm-show-current-activity (&optional extra-info)
   "Show the current activity in the view.
-With prefix arguument (EXTRA-INFO), also shows the number of
+With prefix argument (EXTRA-INFO), also shows the number of
 files modified under this activity, number of versions and the
 number of checked out files."
   (interactive "P")
@@ -139,7 +139,7 @@ number of checked out files."
       (if (equal headline "")
 	  (message "No current activity set.")
 	  (when extra-info
-	    (with-temp-message "Collecting activitiy statistics..."
+	    (with-temp-message "Collecting activity statistics..."
 	      (setq versions
 		    (split-string
 		     (cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
@@ -318,7 +318,7 @@ program."
 	      ;; `activity' is not a rebase or integration activity an error
 	      ;; will be reported, but the status of the command will be 0
 	      ;; (meaning success).  We have to test the returned string
-	      ;; explicitely ...
+	      ;; explicitly ...
 	      (let ((contrib (cleartool
 			      "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
 		(when (and contrib
@@ -350,13 +350,13 @@ program."
 (defun ucm-checkin-activity (activity)
   "Check in all files checked-out under ACTIVITY.
 This will pop-up a `log-edit' buffer to enter the check in
-comment, than atempt to check in the files.
+comment, than attempt to check in the files.
 
 If the log buffer is empty, each file to be checked in using its
 original check out comment, otherwise the same log message will
 be used for all files.
 
-An error will be signaled if no files are checked out under
+An error will be signalled if no files are checked out under
 ACTIVITY.
 
 HINT: `log-edit-modes' allows to see what files will be

@@ -47,7 +47,7 @@
 ;;   % emacs -batch -f batch-byte-compile vc-clearcase.el
 ;;   % emacs -batch -f batch-byte-compile ucm.el
 ;;
-;; 3/ Add the following line to your initialization file (~/.emacs.el):
+;; 3/ Add the following line to your initialisation file (~/.emacs.el):
 ;;
 ;;   (load "vc-clearcase-auto")
 ;;
@@ -101,7 +101,7 @@
 ;;   vc-checkin-switches is ignored
 ;;
 ;; * find-version (file rev buffer) -- implemented, but will not
-;;   check-out the head of the trunk: will sigal an error when
+;;   check-out the head of the trunk: will signal an error when
 ;;   (string= rev "".  Head of trunk has no meaning in ClearCase.
 ;;
 ;; * checkout (file &optional editable rev) -- implemented, but not
@@ -131,7 +131,7 @@
 ;; * print-log (file &optional buffer) -- implemented, but as a
 ;;   separate function (vc-print-log is defadvice'd).  ClearCase logs
 ;;   look nothing like CVS logs, especially since revision names are
-;;   soo different.
+;;   so different.
 ;;
 ;; - show-log-entry (version) -- implemented, but see `print-log'
 ;;
@@ -326,7 +326,7 @@ timer has expired."
 
 
 (defvar cleartool-last-command-timestamp (float-time)
-  "Timestamp when the last cleartool command was issued.
+  "Time-stamp when the last cleartool command was issued.
 Used by `cleartool-ask' to know when to restart cleartool.")
 
 (defvar cleartool-ctid 0
@@ -336,7 +336,7 @@ than this value is considered completed.")
 
 (defvar cleartool-ntid 1
   "The next transaction id.
-Whenever `cleartool-ask' enqueues a transaction, it increments
+Whenever `cleartool-ask' en-queues a transaction, it increments
 this value.")
 
 (defvar cleartool-terr nil
@@ -351,7 +351,7 @@ Transactions that don't have a callback function attached, will
 have their answer stored here for retrieval by
 'cleartool-wait-for'.")
 
-;; Create an error that will be signaled when Cleartool reports an
+;; Create an error that will be signalled when Cleartool reports an
 ;; error.  We need it so we can filter errors that come from cleartool
 ;; itself (which we might want to ignore) and other errors.
 (put 'cleartool-error 'error-conditions '(error cleartool-error))
@@ -385,7 +385,7 @@ Cleans up properly if cleartool exits.  EVENT is not used."
       (when (not (eq system-type 'windows-nt))
 	;; on systems other than windows-nt, cleartool will print a prompt
 	;; when it starts up and tq will complain about it.  In these cases,
-	;; we wait until the prompt is printed, and start the tq afterward.
+	;; we wait until the prompt is printed, and start the tq after that.
 	(with-timeout (5 (error "Timeout waiting for cleartool to start"))
 	  (with-current-buffer (get-buffer " *cleartool*")
 	    (goto-char (point-min))
@@ -460,7 +460,7 @@ The report is appended to the *cleartool-aborts* buffer."
 (defun cleartool-tq-handler (closure answer)
   "Handle responses from cleartool-tq.
 
-CLOSURE the closure that was enqueued with `cleartool-ask', it
+CLOSURE the closure that was en-queued with `cleartool-ask', it
 is a vector containing the transaction id plus the closure and
 function that were passed to `cleartool-ask' (the last two
 might be null).
@@ -579,7 +579,7 @@ callback function if that is available."
 	t)))
 
 (defun cleartool-ask (question &optional wait closure fn)
-  "Enqueue QUESTION to the cleartool-tq.
+  "En-queue QUESTION to the cleartool-tq.
 
 If WAIT is different than 'nowait, the transaction is waited for
 with `cleartool-wait-for' and returns whatever
@@ -613,10 +613,10 @@ transaction is complete as funcall(fn closure answer)."
 (eval-when-compile
   (put 'cleartool 'byte-compile-format-like t))
 
-;;;; Cleartool subprocess interface
+;;;; Cleartool sub-process interface
 
 ;; For cleartool commands that take longer to complete that it takes
-;; cleartool to start, we use a subprocess interface.  This will start
+;; cleartool to start, we use a sub-process interface.  This will start
 ;; a cleartool process and put the command output in a buffer.
 ;;
 ;; The 'user' function in this section is cleartool-do.
@@ -1109,12 +1109,12 @@ without having to check first that it exists."
 (defun clearcase-set-fprop-version-stage-1 (fprop ls-string)
   "Set version information in FPROP from LS-STRING.
 Ls-string is returned by a 'cleartool ls file' command.  From it,
-we detemine the configspec rule, the intial version of the file
+we determine the configspec rule, the initial version of the file
 and whether the file is hijacked or in a broken view.
 
 Note that if the file is checked out, the revision will end in
 /CHECKEDOUT, which is not a valid revision for vc.el
-semantics (for example it cannot be used for diff'ing purposes).
+semantics (for example it cannot be used for diffing purposes).
 In that case, the version will be adjusted in
 `clearcase-set-fprop-version-stage-2'"
   (when (string-match "Rule: \\(.*\\)$" ls-string)
@@ -1169,7 +1169,7 @@ the parent version, to conform to vc.el semantics."
   stream                                ; the UCM stream or nil
   properties                            ; list of 'snapshot 'dynamic 'ucmview
   (activities '("*NONE*" "*NEW-ACTIVITY*")) ; list of UCM activities in this stream
-  (activities-tid -1)                 ; transaction id for actitiviy retrieval
+  (activities-tid -1)                 ; transaction id for activity retrieval
   )
 
 (defvar clearcase-all-vprops '())
@@ -1347,22 +1347,20 @@ to be read from cleartool."
 
 ;;;; Read a label form the minibuffer with completion.
 
-;;; Since the number of labels in a VOB can be quite large (17076 of
-;;; them according to 'cleartool lstype -kind lbtype | wc -l') We use
-;;; the same ideea as for reading the view-tags, with the following
-;;; exceptions:
+;;; Since the number of labels in a VOB can be quite large (17076 of them
+;;; according to 'cleartool lstype -kind lbtype | wc -l') We use the same idea
+;;; as for reading the view-tags, with the following exceptions:
 ;;;
-;;; 1/ We cannot use the cleartool lstype command as it is too slow.
-;;; We must use a cleartool dump command and parse its output.
+;;; 1/ We cannot use the cleartool lstype command as it is too slow.  We must
+;;; use a cleartool dump command and parse its output.
 ;;;
 ;;; 2/ Since the output of the dump command is large, we don't use the
-;;; transaction queue to cleartool or the subprocess interface,
-;;; instead we start the cleartool process ourselves and filter its
-;;; output.
+;;; transaction queue to cleartool or the sub-process interface, instead we
+;;; start the cleartool process ourselves and filter its output.
 ;;;
-;;; The list of labels is reset at each read, and populated on the
-;;; fly.  During the first few seconds of the read, not all the labels
-;;; will be available.
+;;; The list of labels is reset at each read, and populated on the fly.
+;;; During the first few seconds of the read, not all the labels will be
+;;; available.
 
 (defun clearcase-vob-tag-for-path (path)
   "Return the vob tag in which PATH resides.
@@ -1391,7 +1389,7 @@ This can be used to obtain the vob-tag required for the
 (defvar clearcase-collect-labels-finished nil
   "Becomes t when we finished processing the cleartool dump output.
 Used by `clearcase-collect-labels-sentinel' and
-`clearcase-collect-labels-filter' to synchrinize themselves.")
+`clearcase-collect-labels-filter' to synchronise themselves.")
 
 (defun clearcase-collect-labels-sentinel (process event)
   "Sentinel for the cleartool dump command.
@@ -1484,7 +1482,7 @@ Display PROMPT to the user and read a ClearCase label using the labels
 of VOB as possible completions.  When non-nil, INITIAL, is the initial
 label name presented to the user.
 
-Before promping the user, an asynchronous cleartool dump command will
+Before prompting the user, an asynchronous cleartool dump command will
 be started to fetch the list of labels.  The list of labels is
 populated incrementally, so completion is provided from an incomplete
 list for the first few seconds.  This implementation has been chosen
@@ -1494,7 +1492,7 @@ When REUSE-LABELS is non-nil, the previous list of labels will be used
 for completion, without starting a cleartool dump command.  This
 option should be used when a function needs to read several labels
 from the user, in which case starting several cleartool commands is a
-vaste of resources."
+waste of resources."
   (unless reuse-labels
     (clearcase-collect-labels-for-vob vob))
   (completing-read
@@ -1526,7 +1524,7 @@ ClearCase creates backup files with the string .keep plus a
 number appended to the original file name.  We keep the same
 convention when we need to create a backup.
 
-We try to append .keep, .keep.1, .keep.2 to FILE-NAME untill we
+We try to append .keep, .keep.1, .keep.2 to FILE-NAME until we
 find a file which does not exist and return that one.  This
 method is open to race conditions, but it seems to be what
 ClearCase uses."
@@ -1560,7 +1558,7 @@ If FORCE is not nil, always read the properties."
 
 (defadvice vc-version-backup-file-name
     (after clearcase-cleanup-version (file &optional rev manual regexp))
-  "Cleanup rev of \\ and / so it can be stored as a filename."
+  "Cleanup rev of \\ and / so it can be stored as a file name."
   (when (string-match "~.*~" ad-return-value)
     (let ((start (match-beginning 0))
 	  (data (match-string 0 ad-return-value)))
@@ -1752,8 +1750,8 @@ information."
   "Determine the state of all files in DIR.
 This is a slow operation so it will not detect the proper state
 of the files: only checked out and hijacked files will be
-corectly identified.  Files which are visited in Emacs will also
-have a corect state."
+correctly identified.  Files which are visited in Emacs will also
+have a correct state."
 
   (message "vc-clearcase-dir-state: %s" dir)
 
@@ -1816,7 +1814,7 @@ have a corect state."
 			  (fprop (clearcase-file-fprop file)))
 		      ;; when the file has a FPROP (meaning it is visited in
 		      ;; Emacs, we try to reconcile `state' with `fprop', but
-		      ;; we are carefull not to ask for a fprop refres unless
+		      ;; we are careful not to ask for a fprop refresh unless
 		      ;; it is necessary.
 		      (when fprop
 			(cond ((eq state 'edited)
@@ -1937,7 +1935,7 @@ for non registered directories.
 
 If there is a transaction id for FILE in
 `clearcase-dir-state-cache', it means `vc-clearcase-dir-state'
-is procesing that FILE.  In that case we consider ourselves
+is processing that FILE.  In that case we consider ourselves
 responsible if the transaction id is positive."
   (cond
     ((gethash file clearcase-dir-state-cache) t)
@@ -1967,7 +1965,7 @@ REV is ignored, COMMENT is the checkin comment."
 This is a helper function user by both
 `vc-clearcase-find-version' and `vc-clearcase-checkout' (since we
 want to preserve the Emacs 21.3 `vc-clearcase-checkout'
-behavior."
+behaviour."
   (when (string= rev "")
     (error "Refusing to checkout head of trunk"))
   (let ((fprop (clearcase-file-fprop file)))
@@ -2120,7 +2118,7 @@ This method does three completely different things:
 
 	    ;; if we are not latest on branch and we are asked to
 	    ;; checkout this version (eq rev nil), we checkout
-	    ;; unseserved.
+	    ;; unreserved.
 	    ((and (null rev)
 		  (not (string= (clearcase-fprop-latest fprop)
 				(clearcase-fprop-version fprop))))
@@ -2207,14 +2205,14 @@ attached.
 When EDITABLE is non nil, the file will be checked out and the
 contents of the deleted version will be placed in FILE.  A
 checkin at this point will create a new version with the same
-contents as the deleted version.  This is usefull if you checked
+contents as the deleted version.  This is useful if you checked
 the file in by mistake and want to rework some changes.
 
 When EDITABLE is nil, the version is removed completely.  The
 current branch might be removed as well if
 `clearcase-rmbranch-on-revert-flag' is non nil.
 
-If an error is signaled during the cancel, the original version
+If an error is signalled during the cancel, the original version
 is saved as a keep file in the same directory as FILE, so no data
 is lost."
 
@@ -2349,9 +2347,9 @@ VERSION is not used, and we signal an error if it is not nil.
 
 We save the current contents of the file, perform an unreserved
 checkout, put the contents of the file back in, than try to
-reserve theh checkout.  At the end of the process, FILE will be
+reserve the checkout.  At the end of the process, FILE will be
 checked out and the contents will be the one of the hijacked
-file.  File might be checked out unreseved, if someone already
+file.  File might be checked out unreserved, if someone already
 has a reserved checkout of the file."
   (when version
     (error "vc-clearcase-steal-lock: cannot steal a specific version"))
@@ -2470,10 +2468,10 @@ Only works for the clearcase log format defined in
 
 (defcustom vc-clearcase-diff-switches nil
   "*Extra switches for clearcase diff under VC.
-This is either a string or a list of strings.  Usefull options
+This is either a string or a list of strings.  Useful options
 are \"-diff_format\" or \"-serial_format\".
 
-To ignore the extra whitespace characters, you need the option
+To ignore the extra white space characters, you need the option
 \"-option \"-blank_ignore\"\".
 
 See the cleartool diff manual page for possible options.
@@ -2700,7 +2698,7 @@ There are three possible values for this variable:
 'ask -- ask the user whether she wants to create the label or
 not.
 
-NOTE: in ClearCase a label exists independentlty from the files
+NOTE: in ClearCase a label exists independently from the files
 it is applied to.  A label must be created first before it can be
 applied."
   :type '(choice (const :tag "Signal error" error)
@@ -2725,7 +2723,7 @@ C-x v s will not create a branch in ClearCase."
   "Label all files under DIR using NAME as the label.
 
 BRANCHP is used to move an existing label.  This is not the
-default behavior, but the default behavior is useless for
+default behaviour, but the default behaviour is useless for
 Clearcase.
 
 First, if the label NAME does not exist, if is created with
@@ -2761,7 +2759,7 @@ element * NAME -nocheckout"
     (let ((dir? (file-directory-p dir)))
       (message "Applying label...")
       ;; NOTE: the mklabel command might fail if some files are
-      ;; hijacked... The rest of the files will be labeled though...
+      ;; hijacked... The rest of the files will be labelled though...
       (cleartool
        "mklabel -nc %s %s lbtype:%s \"%s\""
        (if branchp "-replace" "") (if dir? "-recurse" "") name dir)
@@ -2869,7 +2867,7 @@ The list of files is not returned in any particular order."
 	;; exist, the string "*no version*" is used instead.
 	(report (make-hash-table :test 'equal))
 
-	;; We don't want the full pathname in front of each file so we remove
+	;; We don't want the full path name in front of each file so we remove
 	;; it by skipping SKIP chars.
 	(skip (length dir)))
 
@@ -3175,7 +3173,7 @@ and LABEL-2'."
 	    (l2 (clearcase-read-label "Label 2 (older): " vob nil t)))
        (list d l1 l2))))
   (setq dir (expand-file-name dir))
-  (message "Fetching label differencess...")
+  (message "Fetching label differences...")
   (let ((diff (vc-clearcase-get-label-differences dir label-1 label-2))
 	;; the format string for a line in the report
 	line-fmt)
@@ -3279,7 +3277,7 @@ view accessible from this machine."
     (cond
       ((clearcase-dynamic-view-p vprop)
        ;; in a dynamic view, we simply set the configspec, than
-       ;; trigger a resynch on all the visited files from that view.
+       ;; trigger a re-sync on all the visited files from that view.
        (cleartool "setcs -tag %s \"%s\"" view-tag configspec)
        (message "%s's confispec updated." view-tag)
        (clearcase-refresh-files-in-view view-tag))
@@ -3287,7 +3285,7 @@ view accessible from this machine."
       ((clearcase-snapshot-view-p vprop)
        ;; in a snapshot view, a update will be triggered, so we set
        ;; the configspec with a cleartool-do command, and trigger
-       ;; the resynch in its finished callback.
+       ;; the re-sync in its finished callback.
        (with-current-buffer (get-buffer-create "*clearcase-setcs*")
 	 (let ((inhibit-read-only t))
 	   (erase-buffer)

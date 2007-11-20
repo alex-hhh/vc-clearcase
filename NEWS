@@ -14,8 +14,8 @@
 *** ucm-checkin-activity
 
 ** Vc-Dired (C-x v d) now works for ClearCase
-   It is still slow in a large source tree with many directories, and still
-   considered beta functionality
+   It is still slow in a large source tree, and still considered beta
+   functionality
 
 ** The diff package can now be used for comparing revisions
    It can be enabled using the `clearcase-use-external-diff' variable.  Note

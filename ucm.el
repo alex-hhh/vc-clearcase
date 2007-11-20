@@ -23,6 +23,15 @@
 ;; Homepage: http://sourceforge.net/projects/vc-clearcase/
 ;; $Id$
 
+;;; Comentary
+;; This implements suppport for ClearCase UCM.  The user functions
+;; `ucm-set-activity', `ucm-show-current-activity', `ucm-browse-activity' and
+;; `ucm-checkin-activity'.  See their doc strings for details.  As of now,
+;; these functions are not bound to keys and menus, so you need to invoke them
+;; usin M-x (`execute-extended-command').
+
+;;; Code
+
 (eval-when-compile (require 'cl))
 (require 'vc-clearcase)
 (require 'button)
@@ -398,3 +407,4 @@ The file names are relative to the `default-directory'"
 	(clearcase-refresh-files-in-view)))))
 
 (provide 'ucm)
+;;; ucm.el ends here

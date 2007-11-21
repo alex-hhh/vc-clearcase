@@ -1,3 +1,9 @@
+2007-11-21  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el: 1.132 only enable the advices if the cleartool
+	program is found (prevents installing the vc-clearcase hooks on a
+	system where ClearCase is not present)
+
 2007-11-19  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-start-entry): 1.130 defadvice will handle a

@@ -1566,7 +1566,6 @@ If FORCE is not nil, always read the properties."
       (setq ad-return-value
 	    (concat (substring ad-return-value 0 start) data))))
   ad-return-value)
-(ad-activate 'vc-version-backup-file-name)
 
 (defadvice vc-start-entry
     (before clearcase-prepare-checkin-comment
@@ -1580,7 +1579,6 @@ If FORCE is not nil, always read the properties."
 	(cleartool-wait-for (clearcase-fprop-comment-tid fprop))
 	(setf comment (clearcase-fprop-comment fprop))
 	(setf initial-contents t)))))
-(ad-activate 'vc-start-entry)
 
 (defadvice vc-create-snapshot
     (before clearcase-provide-label-completion first
@@ -1597,8 +1595,6 @@ If FORCE is not nil, always read the properties."
 		 (clearcase-read-label "Label: " vob)
 		 (read-string "New snapshot name: "))
 	   current-prefix-arg))))
-
-(ad-activate 'vc-create-snapshot)
 
 
 
@@ -3560,10 +3556,15 @@ See `clearcase-trace-cleartool-tq' and
 
 ;;;###autoload
 (when (executable-find cleartool-program)
+  (ad-activate 'vc-version-backup-file-name)
+  (ad-activate 'vc-start-entry)
+  (ad-activate 'vc-create-snapshot)
   (if (boundp 'vc-handled-backends)
       (unless (memq 'CLEARCASE vc-handled-backends)
 	(setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))
-      (setq vc-handled-backends '(RCS CVS CLEARCASE))))
+      (setq vc-handled-backends '(RCS CVS CLEARCASE)))
+  ;; start cleartool when we are loaded, we will need it anyway
+  (cleartool-tq-maybe-start))
 
 ;; compatibility with previous version
 
@@ -3614,11 +3615,6 @@ See `clearcase-trace-cleartool-tq' and
 ;;;###autoload
 (define-obsolete-variable-alias
     'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
-
-
-;; start cleartool when we are loaded, we will need it anyway
-(when (executable-find cleartool-program)
-  (cleartool-tq-maybe-start))
 
 (provide 'vc-clearcase)
 

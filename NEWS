@@ -1,6 +1,6 @@
 -*- outline -*- 
 
-* Release 
+* Release 1.132
 
 ** The prefix "ah-" was removed from all functions and variables.
    Aliases were declared for the old variales that can be customized.

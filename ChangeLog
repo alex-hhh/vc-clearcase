@@ -1,3 +1,23 @@
+2007-11-23  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-start-entry): 1.133 bugfix: only set COMMENT
+	when it is nil, otherwise it interacts with unrelated uses of
+	`vc-start-entry'
+	(vc-clearcase-dir-state): 1.133 erase the working buffer after we
+	finish.
+	(vc-clearcase-workfile-unchanged-p): 1.133 bugfix: when file is
+	checked in, report it as unchanged (used to report it as changed
+	based on a diff between the last two versions)
+	(vc-clearcase-diff): 1.133 add a BUFFER argument.  When BUFFER is
+	the current buffer, don't erase it before inserting the diff --
+	this accounts for using it for versioning several files.
+	(toplevel forms): 1.133 add a ClearCase version backup regexp to
+	auto-mode-alist; activate the advices and start cleartool only
+	when the cleartool program exists and only at load time;
+	vc-handled-backends is updated only when the cleartool program
+	exists, but at autoload time.
+
+
 2007-11-21  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el: 1.132 only enable the advices if the cleartool

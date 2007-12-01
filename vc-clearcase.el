@@ -1518,6 +1518,11 @@ clearcase or not.  If a directory is managed, the name of the
 directory is mapped to 'yes, if it is not, it is mapped to 'no.
 See `vc-clearcase-dir-state' for how this is used.")
 
+(defadvice vc-dired-hook (after clearcase-clear-dir-state-cache)
+  "Clear `clearcase-clear-dir-state-cache' so that we start clean
+on the next `vc-directory' call"
+  (clrhash clearcase-clear-dir-state-cache))
+
 (defun clearcase-get-keep-file-name (file-name)
   "Return a file name which can be used as a 'keep' file for FILE-NAME.
 ClearCase creates backup files with the string .keep plus a
@@ -1826,11 +1831,14 @@ have a correct state."
 		      ;; we are careful not to ask for a fprop refresh unless
 		      ;; it is necessary.
 		      (when fprop
-			(cond ((eq state 'edited)
-			       (unless (clearcase-fprop-checkedout-p fprop)
-				 ;; The file is marked as checked-out, but the
-				 ;; fprop is not.  Update the fprop.
-				 (clearcase-maybe-set-vc-state file 'force)))
+			(cond ((and (eq state 'up-to-date)
+				    (clearcase-fprop-checkedout-p fprop))
+			       (clearcase-maybe-set-vc-state file 'force))
+			      ((and (eq state 'edited)
+				    (not (clearcase-fprop-checkedout-p fprop)))
+			       ;; The file is marked as checked-out, but the
+			       ;; fprop is not.  Update the fprop.
+			       (clearcase-maybe-set-vc-state file 'force))
 			      ((eq state 'unlocked-change)
 			       (setf (clearcase-fprop-status fprop) 'hijacked)))
 			(setq state (vc-clearcase-state-heuristic file)))
@@ -3600,6 +3608,7 @@ See `clearcase-trace-cleartool-tq' and
 ;; it anyway (but only if we find the cleartool program (meaning ClearCase is
 ;; installed on the system)
 (when (executable-find cleartool-program)
+  (ad-activate 'vc-dired-hook)
   (ad-activate 'vc-version-backup-file-name)
   (ad-activate 'vc-start-entry)
   (ad-activate 'vc-create-snapshot)

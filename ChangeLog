@@ -1,3 +1,10 @@
+2007-12-01  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-dired-hook): 1.134 new defadvice, clear
+	`clearcase-dir-state-cache' after vc-directory finishes running.
+	(vc-clearcase-dir-state): 1.134 also update the fprop when the
+	file is up-to-date, but the fprop has it marked as checked out
+
 2007-11-23  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-start-entry): 1.133 bugfix: only set COMMENT

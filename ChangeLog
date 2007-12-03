@@ -1,3 +1,7 @@
+2007-12-03  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-dired-hook): 1.135 fix variable name.
+
 2007-12-01  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-dired-hook): 1.134 new defadvice, clear

@@ -26,3 +26,4 @@
 	     file))
 	  (generate-file-autoloads file)))
       (save-buffer))))
+

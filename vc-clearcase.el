@@ -1521,7 +1521,7 @@ See `vc-clearcase-dir-state' for how this is used.")
 (defadvice vc-dired-hook (after clearcase-clear-dir-state-cache)
   "Clear `clearcase-clear-dir-state-cache' so that we start clean
 on the next `vc-directory' call"
-  (clrhash clearcase-clear-dir-state-cache))
+  (clrhash clearcase-dir-state-cache))
 
 (defun clearcase-get-keep-file-name (file-name)
   "Return a file name which can be used as a 'keep' file for FILE-NAME.

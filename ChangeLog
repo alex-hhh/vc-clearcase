@@ -1,3 +1,12 @@
+2007-12-06  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-browse-activity): 1.10 when invoked with a negative
+	prefix arg, accept any activity, not just the ones in the current
+	stream.
+
+	* vc-clearcase.el (vc-clearcase-diff): 1.136 when FILE is a ignore
+	`clearcase-use-external-diff' and use cleartool diff.
+
 2007-12-03  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-dired-hook): 1.135 fix variable name.

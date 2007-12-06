@@ -57,7 +57,7 @@ nil, the current activity in the view is presented to the user."
     (unless initial
       (setq initial
 	    (ignore-cleartool-errors
-	      (cleartool-ask "lsact -cact -fmt \"%n\"")))))
+	     (cleartool-ask "lsact -cact -fmt \"%n\"")))))
 
   ;; The view might not be known, so we pass in the `default-directory' to
   ;; `clearcase-get-vprop' so it can be properly created.
@@ -244,14 +244,21 @@ other activities.
 In interactive mode, the user is prompted for an activity name
 and completion is available.  ACTIVITY must be in the current
 stream (corresponding to the view in `default-directory').  With
-prefix argument, obsolete activities can also be selected.
+prefix argument, obsolete activities can also be selected.  With
+a negative prefix argument any activity can be selected, but no
+completion is provided.
 
 There are no restriction on ACTIVITY when called from another
 program."
   (interactive
-   (list (ucm-read-activity
-	  "Browse activity: " nil
-	  (when current-prefix-arg 'include-obsolete))))
+   (list
+    (if (or (eq current-prefix-arg '-)
+	    (and (integerp current-prefix-arg)
+		 (< current-prefix-arg 0)))
+	(read-string "Browse activity: ")
+	(ucm-read-activity
+	 "Browse activity: " nil
+	 (when current-prefix-arg 'include-obsolete)))))
   (with-temp-message "Preparing report..."
     (with-cleartool-directory (expand-file-name default-directory)
       (let ((changeset (make-hash-table :test 'equal))
@@ -314,25 +321,25 @@ program."
 		     'revision revision)
 		    (insert "\n")))
 	    (ignore-cleartool-errors
-	      ;; There seems to be a bug in my version of ClearCase: if
-	      ;; `activity' is not a rebase or integration activity an error
-	      ;; will be reported, but the status of the command will be 0
-	      ;; (meaning success).  We have to test the returned string
-	      ;; explicitly ...
-	      (let ((contrib (cleartool
-			      "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
-		(when (and contrib
-			   (not (string-match "^cleartool: Error: " contrib)))
-		  (insert "\nContributing Activities:\n"
-			  "========================\n\n")
-		  (dolist (c (split-string contrib " " 'omit-nulls))
-		    (insert "    ")
-		    (insert-text-button
-		     c
-		     'type 'ucm-activity-link
-		     'buffer (current-buffer)
-		     'ucm-activity c)
-		    (insert "\n")))))
+	     ;; There seems to be a bug in my version of ClearCase: if
+	     ;; `activity' is not a rebase or integration activity an error
+	     ;; will be reported, but the status of the command will be 0
+	     ;; (meaning success).  We have to test the returned string
+	     ;; explicitly ...
+	     (let ((contrib (cleartool
+			     "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
+	       (when (and contrib
+			  (not (string-match "^cleartool: Error: " contrib)))
+		 (insert "\nContributing Activities:\n"
+			 "========================\n\n")
+		 (dolist (c (split-string contrib " " 'omit-nulls))
+		   (insert "    ")
+		   (insert-text-button
+		    c
+		    'type 'ucm-activity-link
+		    'buffer (current-buffer)
+		    'ucm-activity c)
+		   (insert "\n")))))
 
 	    (when ucm-previous-activities
 	      (insert "\n\n")

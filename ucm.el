@@ -402,7 +402,6 @@ The file names are relative to the `default-directory'"
 (defun ucm-finish-activity-checkin (activity)
   "Check-in files under ACTIVITY using the contents of
 *UCM-Checkin-Log* as the comment."
-  (interactive)
   (with-cleartool-directory default-directory
     (with-temp-message (format "Checking in %s..." activity)
       (let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")

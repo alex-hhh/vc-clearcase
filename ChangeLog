@@ -1,3 +1,8 @@
+2007-12-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-finish-activity-checkin): 1.11 removed interactive
+	form
+
 2007-12-06  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-browse-activity): 1.10 when invoked with a negative

@@ -1,3 +1,9 @@
+2007-12-11  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-wash-mode-line-function): 1.137 new
+	variable.
+	(vc-clearcase-mode-line-string): 1.137 use it.
+
 2007-12-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-finish-activity-checkin): 1.11 removed interactive

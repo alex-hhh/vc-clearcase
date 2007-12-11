@@ -1081,20 +1081,6 @@ that case, we return the version of the parent."
 	     (clearcase-fprop-file-name fprop)
 	     (clearcase-fprop-latest-sel fprop)))
 
-(defun clearcase-wash-mode-line (mode-line)
-  "Make the MODE-LINE string shorter.
-We do this by replacing some of the words in it with shorter
-versions.  This is probably specific to my site, so it should be
-made configurable..."
-  (replace-regexp-in-string
-   "\\<release\\([0-9]*\\)\\>" "rel\\1"
-   (replace-regexp-in-string
-    "\\<branch\\([0-9]*\\)\\>" "br\\1"
-    (replace-regexp-in-string
-     "\\<patch\\([0-9]*\\)\\>" "pat\\1"
-     (replace-regexp-in-string
-      "iteration\\([0-9]+\\)" "I~\\1" mode-line)))))
-
 (defun clearcase-reset-fprop (fprop)
   "Clear the version fields in FPROP.
 This will mark fprop as not initialized for the functions that
@@ -1665,26 +1651,26 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-       (let ((ls-result (cleartool "ls \"%s\"" file)))
-	 (unless (string-match "Rule: \\(.*\\)$" ls-result)
-	   (throw 'done nil))           ; file is not registered
+	(let ((ls-result (cleartool "ls \"%s\"" file)))
+	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	    (throw 'done nil))          ; file is not registered
 
-	 (clearcase-set-fprop-version-stage-1 fprop ls-result)
-	 ;; anticipate that the version will be needed shortly, so ask for
-	 ;; it.  When a file is hijacked, do the desc command on the version
-	 ;; extended name of the file, as cleartool will return nothing for
-	 ;; the hijacked version...
-	 (let ((pname (if (clearcase-fprop-hijacked-p fprop)
-			  (concat file "@@" (clearcase-fprop-version fprop))
-			  file)))
-	   (setf (clearcase-fprop-version-tid fprop)
-		 (cleartool-ask
-		  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-		  'nowait
-		  fprop
-		  'clearcase-set-fprop-version-stage-2))))
-       (vc-file-setprop file 'vc-clearcase-fprop fprop)
-       (throw 'done t)))))
+	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
+	  ;; anticipate that the version will be needed shortly, so ask for
+	  ;; it.  When a file is hijacked, do the desc command on the version
+	  ;; extended name of the file, as cleartool will return nothing for
+	  ;; the hijacked version...
+	  (let ((pname (if (clearcase-fprop-hijacked-p fprop)
+			   (concat file "@@" (clearcase-fprop-version fprop))
+			   file)))
+	    (setf (clearcase-fprop-version-tid fprop)
+		  (cleartool-ask
+		   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		   'nowait
+		   fprop
+		   'clearcase-set-fprop-version-stage-2))))
+	(vc-file-setprop file 'vc-clearcase-fprop fprop)
+	(throw 'done t)))))
 
 (defun vc-clearcase-state (file)
   "Return the current version control state of FILE.
@@ -1891,11 +1877,28 @@ modified even if no modifications were made."
 		"Files are identical\n"))
       (t nil))))
 
+(defcustom clearcase-wash-mode-line-function nil
+  "Function to call to post-process the mode line string.
+This is a function which receives a string representing the
+version control mode line and must return a new string which will
+be used as the mode line.
+
+The VS modeline for a ClearCase file can be quite long because
+the branch or stream name is included.  This can be agravated by
+site conventions which insist on using strings as 'release',
+'branch' or 'iteration' as part of the branch name.  UCM streams
+have the user name as part of the stream name.
+
+This variable allows the user to implement a mechanism for
+abbreviating these strings based on site-specific information."
+  :type '(choice (const nil) function)
+  :group 'vc-clearcase)
+
 (defun vc-clearcase-mode-line-string (file)
   "Return the mode line string for FILE."
   (clearcase-maybe-set-vc-state file)
   (let ((fprop (clearcase-file-fprop file))
-	tag)
+	tag mode-line)
     (setq tag
 	  (if (clearcase-ucm-view-p fprop)
 	      (let ((vprop (clearcase-get-vprop fprop)))
@@ -1903,13 +1906,15 @@ modified even if no modifications were made."
 	      (let ((branch (clearcase-fprop-branch fprop))
 		    (version-number (clearcase-fprop-version-number fprop)))
 		(concat branch "/" version-number))))
-    (clearcase-wash-mode-line
-     (case (clearcase-fprop-status fprop)
-       ('hijacked "Cc:HIJACKED")
-       ('broken-view "Cc:BROKEN-VIEW")
-       ('reserved (concat "Cc:(R)" tag))
-       ('unreserved (concat "Cc:(U)" tag))
-       (t (concat "Cc:" tag))))))
+    (setq mode-line (case (clearcase-fprop-status fprop)
+		      ('hijacked "Cc:HIJACKED")
+		      ('broken-view "Cc:BROKEN-VIEW")
+		      ('reserved (concat "Cc:(R)" tag))
+		      ('unreserved (concat "Cc:(U)" tag))
+		      (t (concat "Cc:" tag))))
+    (when clearcase-wash-mode-line-function
+      (setq mode-line (funcall clearcase-wash-mode-line-function mode-line)))
+    mode-line))
 
 (defun vc-clearcase-dired-state-info (file)
   "Return a string corresponding to the status of FILE.
@@ -1956,9 +1961,9 @@ responsible if the transaction id is positive."
     ((gethash file clearcase-dir-state-cache) t)
 
     (t (ignore-cleartool-errors
-	(not (string= (cleartool
-		       "desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
-		      ""))))))
+	 (not (string= (cleartool
+			"desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
+		       ""))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
@@ -2298,7 +2303,7 @@ is lost."
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
       (ignore-cleartool-errors
-       (cleartool "reserve -ncomment \"%s\"" file))
+	(cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
     (clearcase-maybe-set-vc-state file 'force)
@@ -2382,7 +2387,7 @@ has a reserved checkout of the file."
 	  (set-file-modes file (logior (file-modes file) #o220))
 	  (delete-file keep-file)
 	  (ignore-cleartool-errors
-	   (cleartool "reserve -ncomment \"%s\"" file))
+	    (cleartool "reserve -ncomment \"%s\"" file))
 	  (clearcase-maybe-set-vc-state file 'force))
 
       (cleartool-error
@@ -2802,12 +2807,12 @@ element * NAME -nocheckout"
       (when dir?                        ; apply label to parent directories
 	(message "Applying label to parent directories...")
 	(ignore-cleartool-errors
-	 (while t                       ; until cleartool will throw an error
-	   (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-	   (setq dir (file-name-directory dir))
-	   (cleartool
-	    "mklabel -nc %s lbtype:%s \"%s\""
-	    (if branchp "-replace" "") name dir)))))
+	  (while t                      ; until cleartool will throw an error
+	    (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	    (setq dir (file-name-directory dir))
+	    (cleartool
+	     "mklabel -nc %s lbtype:%s \"%s\""
+	     (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
 

@@ -1553,7 +1553,7 @@ If FORCE is not nil, always read the properties."
   (when (string-match "~.*~" ad-return-value)
     (let ((start (match-beginning 0))
 	  (data (match-string 0 ad-return-value)))
-      (setq data (replace-regexp-in-string "[\\\\/]" "~" data))
+      (setq data (replace-regexp-in-string "[\\\\/]" "_" data))
       (setq ad-return-value
 	    (concat (substring ad-return-value 0 start) data))))
   ad-return-value)
@@ -2306,8 +2306,6 @@ is lost."
 	(cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
-    (clearcase-maybe-set-vc-state file 'force)
-
     (when (and (not editable)
 	       clearcase-rmbranch-on-revert-flag
 	       (string-match "[/\\]0$" (clearcase-fprop-parent fprop)))
@@ -2316,10 +2314,12 @@ is lost."
 		 file (clearcase-fprop-version-base fprop))
       ;; see vc-clearcase-revert on why we do this...
       (when (clearcase-snapshot-view-p fprop)
-	(cleartool "update -overwrite -force \"%s\"" file))
-      (clearcase-maybe-set-vc-state file 'force))
+	(cleartool "update -overwrite -force \"%s\"" file)))
 
-    (delete-file keep-file)))
+    (when editable
+      (delete-file keep-file))
+
+    (clearcase-maybe-set-vc-state file 'force)))
 
 
 (defun vc-clearcase-merge (file rev1 rev2)
@@ -3608,13 +3608,18 @@ See `clearcase-trace-cleartool-tq' and
       (setq vc-handled-backends '(RCS CVS CLEARCASE))))
 
 ;; Version controlled backups for ClearCase files are in the format:
-;; file.c.~~main~some_branch~3~, this is currently not recognized by Emacs as
-;; a C file, so we add in an auto-mode-alist that strips off the version part.
+;; file.c.~_main_some_branch_3~.  Similarly, ClearCase will also create
+;; 'backups' by appending a .keep or .contrib to the filename. These are not
+;; currently not recognized by Emacs, so we add in an auto-mode-alist that
+;; strips off the version part so the file type can be properly identified.
 
 ;;;###autoload
-(let ((clearcase-backup-regexp ".~~[a-zA-Z0-9_-~]+~$"))
-  (unless (assoc clearcase-backup-regexp auto-mode-alist)
-    (push (list clearcase-backup-regexp nil t) auto-mode-alist)))
+(let ((backup-regexp "\\.~[a-zA-Z0-9_-~]+\\'")
+      (garbage-regexp "\\.\\(contrib\\|keep\\)\\(\\.[0-9]+\\)?\\'"))
+  (unless (assoc backup-regexp auto-mode-alist)
+    (push (list backup-regexp nil t) auto-mode-alist))
+  (unless (assoc garbage-regexp auto-mode-alist)
+    (push (list garbage-regexp nil t) auto-mode-alist)))
 
 ;; Activate the advices and start cleartool when we are loaded, we will need
 ;; it anyway (but only if we find the cleartool program (meaning ClearCase is

@@ -1,5 +1,26 @@
 -*- outline -*- 
 
+* Release 1.139
+
+** `vc-clearcase-diff' now works for directory diffs
+   even when `clearcase-use-external-diff' is t.  This is usefull for browsing
+   activities that contain changes to directories.
+
+** M-- M-x ucm-browse-activity accepts any activity
+   not just activities in the current stream.  Activity name completion is not
+   available.
+
+** The version control modeline can be customized
+   `clearcase-wash-mode-line-function' can be set to a function which can
+   process a modeline string.  This can be used to abbreviate long branch and
+   UCM stream names.
+
+** `vc-clearcase-cancel-version' -- fix Bug 1849139
+
+** keep contrib and versioned backup files are corectly handled
+   For example when opening a file named "foo.c.keep.1", Emacs will corectly
+   recognize it as a C file.
+
 * Release 1.136
 
 A few bugfixes to 1.132.  See the ChangeLog for details.

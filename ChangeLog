@@ -1,3 +1,14 @@
+2007-12-12  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-version-backup-file-name): 1.138 replace the
+	slashes with '_' instead of "~"
+	(vc-clearcase-cancel-version): 1.138 fix Bug 1849139: only refresh
+	the FPROP after we completed all clearcase operations so we won't
+	remove the branch when there is still one version left on it.
+	(backup-regexp, garbage-regexp): 1.138 put the keep, contrib and
+	versioned backups in `auto-mode-alist' so the original file type
+	is recognized.
+
 2007-12-11  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-wash-mode-line-function): 1.137 new

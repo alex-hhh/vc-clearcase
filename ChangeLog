@@ -1,3 +1,17 @@
+2007-12-14  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-checkin-activity): 1.12 undo checkout on unchanged
+	files.
+
+	* vc-clearcase.el (clearcase-refresh-files-in-view): 1.139 clear
+	all cached vc properties for the file as well, also check for
+	errors explicitely instead of relying on `ignore-errors'.
+	(clearcase-diff-with-diff): 1.139 new function
+	(clearcase-diff-with-cleartool): 1.139 new function.
+	(vc-clearcase-diff): 1.139 use the new functions.  Also make sure
+	we don't put anything in the *vc-diff* buffer if the revisions are
+	identical.
+
 2007-12-12  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-version-backup-file-name): 1.138 replace the

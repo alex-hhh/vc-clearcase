@@ -1257,17 +1257,19 @@ update command or when an UCM activity is checked in."
   (when (and view-tag (clearcase-vprop-p view-tag))
     (setq view-tag (clearcase-vprop-name view-tag)))
   (dolist (buffer (buffer-list))
-    (ignore-errors
-      ;; ignore modified buffers, don't rob the user from the joy of
-      ;; figuring out that he just changed the view and he had
-      ;; modified files in it...
-      (unless (buffer-modified-p buffer)
-	(let* ((file (buffer-file-name buffer))
-	       (fprop (clearcase-file-fprop file))
-	       (vtag (clearcase-fprop-view-tag fprop)))
-	  (when (or (null view-tag) (string= vtag view-tag))
-	    (clearcase-maybe-set-vc-state file 'force)
-	    (vc-resynch-buffer file t t)))))))
+    (let ((file (buffer-file-name buffer)))
+      ;; ignore modified buffers, don't rob the user from the joy of figuring
+      ;; out that he just changed the view and he had modified files in it...
+      (when (and file (not (buffer-modified-p buffer)))
+	(let ((fprop (clearcase-file-fprop file)))
+	  (when fprop
+	    (let ((vtag (clearcase-fprop-view-tag fprop)))
+	      (when (or (null view-tag) (string= vtag view-tag))
+		;; clear any properties vc.el might have cached.
+		(vc-file-clearprops file)
+		(vc-file-setprop file 'vc-clearcase-fprop fprop)
+		(clearcase-maybe-set-vc-state file 'force)
+		(vc-resynch-buffer file t t)))))))))
 
 ;;;; Read a view-tag from the minibuffer with completion
 
@@ -1651,26 +1653,26 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-	(let ((ls-result (cleartool "ls \"%s\"" file)))
-	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
-	    (throw 'done nil))          ; file is not registered
+       (let ((ls-result (cleartool "ls \"%s\"" file)))
+	 (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	   (throw 'done nil))           ; file is not registered
 
-	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
-	  ;; anticipate that the version will be needed shortly, so ask for
-	  ;; it.  When a file is hijacked, do the desc command on the version
-	  ;; extended name of the file, as cleartool will return nothing for
-	  ;; the hijacked version...
-	  (let ((pname (if (clearcase-fprop-hijacked-p fprop)
-			   (concat file "@@" (clearcase-fprop-version fprop))
-			   file)))
-	    (setf (clearcase-fprop-version-tid fprop)
-		  (cleartool-ask
-		   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-		   'nowait
-		   fprop
-		   'clearcase-set-fprop-version-stage-2))))
-	(vc-file-setprop file 'vc-clearcase-fprop fprop)
-	(throw 'done t)))))
+	 (clearcase-set-fprop-version-stage-1 fprop ls-result)
+	 ;; anticipate that the version will be needed shortly, so ask for
+	 ;; it.  When a file is hijacked, do the desc command on the version
+	 ;; extended name of the file, as cleartool will return nothing for
+	 ;; the hijacked version...
+	 (let ((pname (if (clearcase-fprop-hijacked-p fprop)
+			  (concat file "@@" (clearcase-fprop-version fprop))
+			  file)))
+	   (setf (clearcase-fprop-version-tid fprop)
+		 (cleartool-ask
+		  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		  'nowait
+		  fprop
+		  'clearcase-set-fprop-version-stage-2))))
+       (vc-file-setprop file 'vc-clearcase-fprop fprop)
+       (throw 'done t)))))
 
 (defun vc-clearcase-state (file)
   "Return the current version control state of FILE.
@@ -1961,9 +1963,9 @@ responsible if the transaction id is positive."
     ((gethash file clearcase-dir-state-cache) t)
 
     (t (ignore-cleartool-errors
-	 (not (string= (cleartool
-			"desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
-		       ""))))))
+	(not (string= (cleartool
+		       "desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
+		      ""))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
@@ -2303,7 +2305,7 @@ is lost."
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
       (ignore-cleartool-errors
-	(cleartool "reserve -ncomment \"%s\"" file))
+       (cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
     (when (and (not editable)
@@ -2387,7 +2389,7 @@ has a reserved checkout of the file."
 	  (set-file-modes file (logior (file-modes file) #o220))
 	  (delete-file keep-file)
 	  (ignore-cleartool-errors
-	    (cleartool "reserve -ncomment \"%s\"" file))
+	   (cleartool "reserve -ncomment \"%s\"" file))
 	  (clearcase-maybe-set-vc-state file 'force))
 
       (cleartool-error
@@ -2517,6 +2519,69 @@ When nil, the ClearCase internal diff is used instead."
   :type 'boolean
   :group 'vc-clearcase)
 
+(defun clearcase-diff-with-diff (file rev1 rev2)
+  "Do a diff on FILE revisions REV1 and REV2 using the diff package.
+The diff is stored in the current buffer.  The function returns t
+if the revisions are identical and nil otherwise.
+This is a helper function for `vc-clearcase-diff'"
+
+  ;; The `diff' function likes to display the diff buffer, but within vc, the
+  ;; choice to display it or not is left to `vc-version-diff'.
+  (save-window-excursion
+    (let ((diff-start-pos (point))
+	  (old (vc-version-backup-file-name file rev1 'manual))
+	  (new (if rev2
+		   (vc-version-backup-file-name file rev2 'manual)
+		   file)))
+
+      (when (file-exists-p old)
+	(delete-file old))
+      (cleartool "get -to \"%s\" \"%s@@%s\"" old file rev1)
+
+      (when rev2
+	(when (file-exists-p new)
+	  (delete-file new))
+	(cleartool "get -to \"%s\" \"%s@@%s\"" new file rev2))
+
+      (let ((diff-buffer (diff old new nil 'no-async)))
+	(insert-buffer-substring diff-buffer)
+	(kill-buffer diff-buffer))
+
+      ;; delete the temporary files we created
+      (delete-file old)
+      (when rev2 (delete-file new))
+
+      (goto-char diff-start-pos)
+      (and (re-search-forward "(no differences)" (point-max) 'noerror) t))))
+
+(defun clearcase-diff-with-cleartool (file rev1 rev2)
+  "Do a diff on FILE revisions REV1 and REV2 using the cleartool diff.
+The diff is stored in the current buffer.  The function returns t
+if the revisions are identical and nil otherwise.  This is a
+helper function for `vc-clearcase-diff'"
+  (let ((diff-start-pos (point))
+	(fver1 (concat file "@@" rev1))
+	(fver2 (if rev2 (concat file "@@" rev2) file))
+	(opts (mapconcat 'identity
+			 (if (listp vc-clearcase-diff-switches)
+			     vc-clearcase-diff-switches
+			     (list vc-clearcase-diff-switches))
+			 " ")))
+    (insert (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2))
+    (goto-char diff-start-pos)
+    (when clearcase-diff-cleanup-flag
+      (while (re-search-forward "\r$" nil t)
+	(replace-match "" nil nil))
+      (goto-char diff-start-pos))
+    ;; the way we determine whether the files are identical depends
+    ;; on the diff format we use.
+    (not
+     (or
+      ;; diff format has an empty buffer
+      (equal diff-start-pos (point-max))
+      ;; serial format prints "Files are identical", so we look for that.
+      (looking-at "\\(Files\\|Directories\\) are identical")))))
+
 (defun vc-clearcase-diff (file &optional rev1 rev2 buffer)
   "Put the FILE's diff between REV1 and REV2 in BUFFER.
 Return t if the revisions are identical, nil otherwise.
@@ -2526,17 +2591,18 @@ and not the directory contents.
 When BUFFER is nil, *vc-diff* is used instead.
 When REV1 is nil, the files latest (checked-in) revision is used,
 when REV2 is nil, the current contents of the file are used."
-  (setq file (expand-file-name file))
-
-  (unless buffer
-    (setq buffer (get-buffer-create "*vc-diff*")))
 
   ;; `vc-clearcase-diff' is called by both vc-diff and vc-diff-tree, in the
   ;; first case, we need to erase the buffer but in the second we should not,
   ;; as several diffs will accumulate in it.  The only way to tell the two
   ;; cases appart is that in vc-diff-tree case BUFFER is already the current
-  ;; buffer.
+  ;; buffer.  Also, if the files are identical, vc.el expects us not to put
+  ;; anything in the buffer.
 
+  (setq file (expand-file-name file))
+
+  (unless buffer
+    (setq buffer (get-buffer-create "*vc-diff*")))
   (unless (eq buffer (current-buffer))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
@@ -2553,63 +2619,22 @@ when REV2 is nil, the current contents of the file are used."
 	(let ((inhibit-read-only t)
 	      (fprop (clearcase-file-fprop file))
 	      (default-directory (file-name-directory file))
-	      (diff-start-pos (point)))
+	      (diff-start-pos (point))
+	      (identical nil))
+
 	  (unless rev1
 	    (setq rev1 (clearcase-fprop-version fprop)))
 	  (setq file (file-name-nondirectory file))
 
-	  (if clearcase-use-external-diff
+	  (setq identical
+		(if clearcase-use-external-diff
+		    (clearcase-diff-with-diff file rev1 rev2)
+		    (clearcase-diff-with-cleartool file rev1 rev2)))
 
-	      (let ((old (vc-version-backup-file-name file rev1 'manual))
-		    (new (if rev2
-			     (vc-version-backup-file-name file rev2 'manual)
-			     file)))
-
-		(when (file-exists-p old)
-		  (delete-file old))
-		(cleartool "get -to \"%s\" \"%s@@%s\"" old file rev1)
-
-		(when rev2
-		  (when (file-exists-p new)
-		    (delete-file new))
-		  (cleartool "get -to \"%s\" \"%s@@%s\"" new file rev2))
-
-		(let ((diff-buffer (diff old new nil 'no-async)))
-		  (insert-buffer-substring diff-buffer)
-		  (kill-buffer diff-buffer))
-
-		;; delete the temporary files we created
-		(delete-file old)
-		(when rev2 (delete-file new))
-
-		(goto-char diff-start-pos)
-		(beginning-of-line)
-		;; return t when there are no differences
-		(and (re-search-forward "(no differences)" (point-max) 'noerror) t))
-
-	      ;; else use the internal diff provided by cleartool
-	      (let ((fver1 (concat file "@@" rev1))
-		    (fver2 (if rev2 (concat file "@@" rev2) file))
-		    (opts (mapconcat 'identity
-				     (if (listp vc-clearcase-diff-switches)
-					 vc-clearcase-diff-switches
-					 (list vc-clearcase-diff-switches))
-				     " ")))
-		(insert (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2))
-		(goto-char diff-start-pos)
-		(when clearcase-diff-cleanup-flag
-		  (while (re-search-forward "\r$" nil t)
-		    (replace-match "" nil nil))
-		  (goto-char diff-start-pos))
-		;; the way we determine whether the files are identical depends
-		;; on the diff format we use.
-		(not
-		 (or
-		  ;; diff format has an empty buffer
-		  (equal diff-start-pos (point-max))
-		  ;; serial format prints "Files are identical", so we look for
-		  ;; that.
-		  (looking-at "\\(Files\\|Directories\\) are identical"))))))))))
+	  (when identical
+	    (kill-region diff-start-pos (point-max)))
+	  (goto-char diff-start-pos)
+	  identical)))))
 
 (defun vc-clearcase-annotate-command (file buf rev)
   "Get the annotations for FILE and put them in BUF.
@@ -2807,12 +2832,12 @@ element * NAME -nocheckout"
       (when dir?                        ; apply label to parent directories
 	(message "Applying label to parent directories...")
 	(ignore-cleartool-errors
-	  (while t                      ; until cleartool will throw an error
-	    (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-	    (setq dir (file-name-directory dir))
-	    (cleartool
-	     "mklabel -nc %s lbtype:%s \"%s\""
-	     (if branchp "-replace" "") name dir)))))
+	 (while t                       ; until cleartool will throw an error
+	   (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	   (setq dir (file-name-directory dir))
+	   (cleartool
+	    "mklabel -nc %s lbtype:%s \"%s\""
+	    (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
 

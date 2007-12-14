@@ -373,8 +373,22 @@ checked-in using \\[log-edit-show-files]."
     (error "Not a real activity"))
   (with-cleartool-directory default-directory
     (lexical-let ((checkin-activity (cleartool "lsact -fmt \"%%Xn\" %s" activity)))
-      (when (null (ucm-checked-out-files checkin-activity))
-	(error "No files checked out under this activity"))
+
+      (let ((modified-files nil)
+	    (reverted-files nil))
+	;; Checked out files which have no changes are reverted now.
+	(dolist (file (ucm-checked-out-files activity))
+	  (if (vc-clearcase-workfile-unchanged-p file)
+	      (progn
+		(message "Undo checkout for unmodified file %s" file)
+		(cleartool "uncheckout -keep \"%s\"" file)
+		(push file reverted-files))
+	      (push file modified-files)))
+	(when reverted-files
+	  (clearcase-refresh-files-in-view))
+	(when (null modified-files)
+	  (error "No files to checkin.")))
+
       (log-edit (lambda ()
 		  (interactive)
 		  (ucm-finish-activity-checkin checkin-activity))

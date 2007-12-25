@@ -1,3 +1,8 @@
+2007-12-25  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-checkin-activity): 1.13 visit all files on which we
+	undo the checkout.
+
 2007-12-14  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-checkin-activity): 1.12 undo checkout on unchanged

@@ -1,3 +1,34 @@
+2008-01-02  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el
+	(clearcase-lshistory-fmt, clearcase-lshistory-fmt-ucm): 1.140
+	changed to a more compact format
+	(clearcase-log-view-file-re, clearcase-log-view-message-re): 1.140
+	new variables
+	(clearcase-log-view-font-lock-keywords): 1.140 updated to use
+	faces from log-view.el and regexps from
+	`clearcase-log-view-file-re', `clearcase-log-view-message-re' for
+	files and revisions.
+	(clearcase-log-view-font-lock-defaults): 1.140 new variable
+	(clearcase-log-view-mode): 1.140 defined as a derived mode of
+	`log-view-mode'.
+	(clearcase-record-separator-rx, clearcase-log-view-bor)
+	(clearcase-log-view-eor, clearcase-log-view-record-field)
+	(clearcase-log-view-again, clearcase-log-view-forward-record)
+	(clearcase-log-view-backward-record)
+	(clearcase-log-view-forward-version)
+	(clearcase-log-view-backward-version)
+	(clearcase-log-view-visit-file, clearcase-log-view-wash-record)
+	(clearcase-log-view-wash-log): removed.
+	(clearcase-find-version-helper): 1.140 handle corectly revisions
+	that specify the checked out version of a file.
+	(clearcase-diff-with-diff): 1.140 use
+	`clearcase-find-version-helper' instead of issuing cleartool get
+	commands directly.
+	(vc-clearcase-diff): 1.140 put the *vc-diff* buffer in `diff-mode'
+	(cleartool-lsco-fmt): 1.140 updated for the new
+	`clearcase-log-view-mode'
+
 2007-12-25  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-checkin-activity): 1.13 visit all files on which we

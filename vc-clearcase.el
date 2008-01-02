@@ -789,196 +789,48 @@ otherwise it returns the value of the last form in BODY."
 
 (defvar clearcase-lshistory-fmt
   (concat "----------------------------\n"
-	  "revision %Vn\n"
-	  "date: %d; author: %u; what: %e\n"
+	  "revision %Vn (%e)\n"
+	  "date: %d; author: %u\n"
 	  "%c")
   "Format string to use when listing file history.")
 
 (defvar clearcase-lshistory-fmt-ucm
   (concat "----------------------------\n"
-	  "revision %Vn\n"
-	  "date: %d; author: %u; what: %e\n"
+	  "revision %Vn (%e)\n"
+	  "date: %d; author: %u\n"
 	  "activity: %[activity]p\n"
 	  "%c")
   "Format string so use when listing file history.
 This is used when the file is in a UCM project.")
 
+(defconst clearcase-log-view-file-re
+  "^Working file: \\(.+\\)$"
+  "Regexp to match the filename in a lshistory listing
+The actual filename is the first match subexpression")
+
+(defconst clearcase-log-view-message-re
+  "^revision \\(\\S-+\\) (\\(?:create\\|checkout\\) version)"
+  "Regexp to match the start of a lshistory record
+The revision is the first match subexpression.")
+
 (defconst clearcase-log-view-font-lock-keywords
-  '(("-+" . font-lock-comment-face)
-    ("^revision .*$" . font-lock-keyword-face)
+  `(("-+" . font-lock-comment-face)
+    (,clearcase-log-view-file-re . log-view-file-face)
+    (,clearcase-log-view-message-re . log-view-message-face)
     ("(reserved)" . font-lock-variable-name-face)
     ("<No-tag-in-region>" . font-lock-warning-face)))
+(defconst clearcase-log-view-font-lock-defaults
+  '(clearcase-log-view-font-lock-keywords t nil nil nil))
 
-(defconst clearcase-record-separator-rx "^-+$"
-  "Regexp for a record separator.")
-
-(defun clearcase-log-view-bor ()
-  "Move to the beginning of the current log record."
-  (interactive)
-  (unless (eolp)
-    (end-of-line))
-  (if (re-search-backward clearcase-record-separator-rx (point-min) 'noerror)
-      (progn
-	(goto-char (match-beginning 0))
-	(forward-line 1)
-	(beginning-of-line))
-      (goto-char (point-min))))
-
-(defun clearcase-log-view-eor ()
-  "Move to the end of the current log record."
-  (interactive)
-  (unless (eolp)
-    (end-of-line))
-  (if (re-search-forward clearcase-record-separator-rx (point-max) 'noerror)
-      (progn
-	(goto-char (match-beginning 0))
-	(forward-char -1))
-      (goto-char (point-max))))
-
-(defun clearcase-log-view-record-field (field-name)
-  "Return the value of FIELD-NAME in the current record.
-
-This method assumes that the record fields look like:
-'field-name: value' and returns 'value'.  If the field is not
-found, nil is returned."
-  (save-match-data
-    (save-excursion
-      (let ((field-re (format "\\<%s:?\\s-+" field-name))
-	    (limit (progn (clearcase-log-view-eor) (point)))
-	    start end)
-	(clearcase-log-view-bor)
-	(when (re-search-forward field-re limit 'noerror)
-	  (progn
-	    (setq start (match-end 0))
-	    (setq end
-		  (if (looking-at "(")
-		      ;; If the field value is enclosed in
-		      ;; parenthesis, the value is the SEXP
-		      (progn
-			(setq start (1+ start))
-			(forward-sexp)
-			(forward-char -1)
-			(point))
-		      ;; else, a field value ends at the end of line or
-		      ;; at the ';' char
-		      (when (re-search-forward ";\\|$" limit 'noerror)
-			(match-beginning 0))))
-	    (buffer-substring-no-properties start end)))))))
-
-(defun clearcase-log-view-again ()
-  "Re-run the cleartool command that generated this log."
-  (interactive)
-  (when (and (boundp 'cleartool-last-command) cleartool-last-command)
-    (let ((inhibit-read-only t))
-      (erase-buffer))
-    (cleartool-do (car cleartool-last-command)
-		  (cdr cleartool-last-command)
-		  (current-buffer))))
-
-(defun clearcase-log-view-forward-record (num-records)
-  "Move forward NUM-RECORDS, if negative, move backward.
-Return the number of records actually moved."
-  (interactive "p")
-  (destructuring-bind (search-fn limit adjust)
-      (if (>= num-records 0)
-	  (list 're-search-forward (point-max) 1)
-	  (list 're-search-backward (point-min) -1))
-    (if (funcall search-fn clearcase-record-separator-rx limit 'noerror
-		 (abs num-records))
-	(progn
-	  (forward-line adjust)
-	  (clearcase-log-view-bor)
-	  t)
-	nil)))
-
-(defun clearcase-log-view-backward-record (num-records)
-  "Move backwards NUM-RECORDS, if positive, move forward."
-  (interactive "p")
-  (clearcase-log-view-forward-record (- num-records)))
-
-(defun clearcase-log-view-forward-version (num)
-  "Visit the log record next NUM versions from the current one.
-Will visit previous records if NUM is negative).
-
-NOTE: you can only move forward if the current version is on the
-version path of the current file."
-  (interactive "p")
-  (let ((version (clearcase-log-view-record-field "revision"))
-	(move-version-fn (if (>= num 0) 'vc-clearcase-next-version
-			     'vc-clearcase-previous-version))
-	(file (with-current-buffer vc-parent-buffer
-		(buffer-file-name))))
-
-    (if (or (null version) (string= version ""))
-	(message "No version record in the current field")
-	(catch 'exit
-	  (dotimes (i (abs num))
-	    (when (null version)
-	      (throw 'exit nil))
-	    (setq version (funcall move-version-fn file version))))
-	(if (null version)
-	    (message "End of version chain")
-	    (vc-clearcase-show-log-entry version)))))
-
-(defun clearcase-log-view-backward-version (num)
-  "Visit the log record previous NUM versions from the current record.
-Will move to the next record if NUM is negative."
-  (interactive "p")
-  (clearcase-log-view-forward-version (- num)))
-
-(defun clearcase-log-view-visit-file ()
-  "Visit the file specified by this log record."
-  (interactive)
-  (let ((file-name (clearcase-log-view-record-field "file")))
-    (if file-name
-	(if (file-exists-p file-name)
-	    (switch-to-buffer (find-file-noselect file-name))
-	    (message "File %s does not exist" file-name))
-	(message "No file found in record"))))
-
-
-(defun clearcase-log-view-wash-record ()
-  "Fill the comment part of a log record."
-  (let ((inhibit-read-only t)
-	(start (progn (clearcase-log-view-bor) (point)))
-	(end (progn (clearcase-log-view-eor) (point))))
-    (goto-char start)
-    (when (re-search-forward "^$" end)
-      (let ((cstart (match-end 0)))
-	(goto-char cstart)
-	(fill-region (point) end)))))
-
-(defun clearcase-log-view-wash-log ()
-  "Wash the whole log file."
-  (interactive)
-  (save-excursion
-    (goto-char (point-min))
-    (clearcase-log-view-wash-record)
-    (while (clearcase-log-view-forward-record 1)
-      (clearcase-log-view-wash-record))))
-
-(define-derived-mode clearcase-log-view-mode fundamental-mode
+(define-derived-mode clearcase-log-view-mode log-view-mode
   "Cc-Log-View"
-  "Generic mode to view clearcase log listings."
-  ;; this gets reset when we switch modes
-  (make-local-variable 'font-lock-defaults)
-  (setq case-fold-search nil)
-  (setq font-lock-defaults '(clearcase-log-view-font-lock-keywords nil nil))
-  (font-lock-mode t)
-  (setq buffer-read-only t))
-
-(easy-mmode-defmap clearcase-log-view-mode-map
-		   '(("n" . clearcase-log-view-forward-record)
-		     ("p" . clearcase-log-view-backward-record)
-		     ("N" . clearcase-log-view-forward-version)
-		     ("P" . clearcase-log-view-backward-version)
-		     ("\M-a" . clearcase-log-view-bor)
-		     ("\M-e" . clearcase-log-view-eor)
-		     ("g" . clearcase-log-view-again)
-		     ("f" . clearcase-log-view-visit-file)
-		     ("w" . clearcase-log-view-wash-log))
-		   "Mode map for Clearcase Log View mode")
-
+  "View clearcase log listings"
+  (set (make-local-variable 'font-lock-defaults)
+       clearcase-log-view-font-lock-defaults)
+  (set (make-local-variable 'log-view-message-re)
+       clearcase-log-view-message-re)
+  (set (make-local-variable 'log-view-file-re)
+       clearcase-log-view-file-re))
 
 ;;;; Clearcase file properties
 
@@ -1993,8 +1845,13 @@ behaviour."
   (let ((fprop (clearcase-file-fprop file)))
     (unless rev
       (setq rev (clearcase-fprop-latest-sel fprop)))
-    (cleartool "get -to \"%s\" \"%s@@%s\"" destfile file rev)))
-
+    ;; Handle the case when we are asked by a checked out file by its version
+    ;; extended pathname.
+    (if (and (string-match "\\(.+\\)[\\/]CHECKEDOUT\\(?:\.[0-9]+\\)?$" rev)
+	     (clearcase-fprop-checkedout-p fprop)
+	     (string= (match-string 1 rev) (clearcase-fprop-version-base fprop)))
+	(copy-file file destfile)
+	(cleartool "get -to \"%s\" \"%s@@%s\"" destfile file rev))))
 
 (defun vc-clearcase-find-version (file rev buffer)
   "Fetch FILE revision REV and place it into BUFFER.
@@ -2536,12 +2393,12 @@ This is a helper function for `vc-clearcase-diff'"
 
       (when (file-exists-p old)
 	(delete-file old))
-      (cleartool "get -to \"%s\" \"%s@@%s\"" old file rev1)
+      (clearcase-find-version-helper file rev1 old)
 
       (when rev2
 	(when (file-exists-p new)
 	  (delete-file new))
-	(cleartool "get -to \"%s\" \"%s@@%s\"" new file rev2))
+	(clearcase-find-version-helper file rev2 new))
 
       (let ((diff-buffer (diff old new nil 'no-async)))
 	(insert-buffer-substring diff-buffer)
@@ -2606,7 +2463,8 @@ when REV2 is nil, the current contents of the file are used."
   (unless (eq buffer (current-buffer))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
-	(erase-buffer))))
+	(erase-buffer)
+	(diff-mode))))
 
   (let ((clearcase-use-external-diff clearcase-use-external-diff))
     (when (file-directory-p file)
@@ -3142,10 +3000,8 @@ will open the specified version in another window, using
 ;;;; Additional vc clearcase commands (for directories)
 
 (defconst cleartool-lsco-fmt
-  (concat "----------------------------\n"
-	  "file: %n\n"
-	  "parent-version: %PVn\n"
-	  "checkout-status: (%Rf)\n"
+  (concat "Working file: %n\n"
+	  "revision %PVn (%Rf)\n"
 	  "user: %u; view: %Tf; date: %Sd (%Ad days ago)\n\n"
 	  "%c")
   "Format string to use when listing checkouts.")

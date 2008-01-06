@@ -2262,6 +2262,24 @@ has a reserved checkout of the file."
 (make-variable-buffer-local 'clearcase-file-name)
 (put 'clearcase-file-name 'permanent-local t)
 
+(defcustom clearcase-print-log-show-labels 'some
+  "How to display the labels in the log (lshistory) output.
+The value of this variable should be one of the three symbols:
+
+none -- no labels are displayed, this setting will result in the
+    fastest print-log output
+
+some -- the most recent labels for each version are displayed.
+
+all -- all the labels for each version are displayed.  This
+    setting can make `vc-print-log' (\\[vc-print-log]) command
+    very slow."
+  :type '(choice
+	  (const :tag "None" none)
+	  (const :tag "Some" some)
+	  (const :tag "All" all))
+  :group 'vc-clearcase)
+
 (defun vc-clearcase-print-log (file)
   "Insert the history of FILE into the *clearcase-lshistory* buffer.
 
@@ -2278,15 +2296,22 @@ for Clearcase registered files."
 
     (vc-setup-buffer buf)
 
-    (with-temp-message "Collecting label information..."
-      (dolist (v (split-string
-		  (cleartool "lsvtree -nco -all \"%s\"" file) "[\n\r]+"))
-	(when (string-match "@@\\([^ ]+\\) (\\(.*\\))" v)
-	  (let ((revision (match-string 1 v))
-		(labels (match-string 2 v)))
-	    (dolist (label (split-string labels ", "))
-	      (setq max-label-length (max max-label-length (length label)))
-	      (push (cons label revision) label-revisions))))))
+    (when (memq clearcase-print-log-show-labels '(some all))
+      (with-temp-message "Collecting label information..."
+	(dolist (v (split-string
+		    (cleartool "lsvtree -nco %s \"%s\""
+			       (if (eq clearcase-print-log-show-labels 'all)
+				   "-all"
+				   "")
+			       file)
+		    "[\n\r]+"))
+	  (when (string-match "@@\\([^ ]+\\) (\\(.*\\))" v)
+	    (let ((revision (match-string 1 v))
+		  (labels (match-string 2 v)))
+	      (dolist (label (split-string labels ", "))
+		(unless (string= label "...")
+		  (setq max-label-length (max max-label-length (length label)))
+		  (push (cons label revision) label-revisions))))))))
 
     (with-current-buffer buf
       (let ((inhibit-read-only t))
@@ -2295,11 +2320,13 @@ for Clearcase registered files."
 	(clearcase-log-view-mode)
 
 	(insert (format "Working file: %s\n" file))
-	(insert "Labels:\n")
 
-	(let ((fmtstr (format "\t%%-%ds %%s\n" max-label-length)))
-	  (dolist (label label-revisions)
-	    (insert (format fmtstr (car label) (cdr label)))))
+	(when (memq clearcase-print-log-show-labels '(some all))
+	  (insert "Labels:\n")
+
+	  (let ((fmtstr (format "\t%%-%ds %%s\n" max-label-length)))
+	    (dolist (label label-revisions)
+	      (insert (format fmtstr (car label) (cdr label))))))
 
 	(let* ((args (list "-fmt" (if (clearcase-ucm-view-p
 				       (clearcase-file-fprop file))

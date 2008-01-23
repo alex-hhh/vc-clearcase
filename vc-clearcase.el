@@ -1112,7 +1112,11 @@ update command or when an UCM activity is checked in."
     (let ((file (buffer-file-name buffer)))
       ;; ignore modified buffers, don't rob the user from the joy of figuring
       ;; out that he just changed the view and he had modified files in it...
-      (when (and file (not (buffer-modified-p buffer)))
+      ;; also ignore buffers for which the file no longer exists (yes it can
+      ;; happen.  See `vc-delete-file')
+      (when (and file
+		 (file-exists-p file)
+		 (not (buffer-modified-p buffer)))
 	(let ((fprop (clearcase-file-fprop file)))
 	  (when fprop
 	    (let ((vtag (clearcase-fprop-view-tag fprop)))
@@ -1477,7 +1481,7 @@ If FORCE is not nil, always read the properties."
   "Return non nil if FILE is registered in ClearCase.
 We consider it to be registered, if cleartool can tell us its
 version."
-
+  (setq file (expand-file-name file))
   (catch 'done
     ;; if the file already has a version set, or we asked for it already,
     ;; return t
@@ -1548,6 +1552,7 @@ configspec rule does not branch.  (we should check that an update
 checked it out.
 
 'unlocked-change -- file is hijacked."
+  (setq file (expand-file-name file))
 
   ;; we are asked for a reliable computation of state, so refresh all the
   ;; properties.
@@ -1585,6 +1590,7 @@ checked it out.
 Use whatever `clearcase-maybe-set-vc-state' gave us.  See
 `vc-clearcase-state' for how states are mapped to ClearCase
 information."
+  (setq file (expand-file-name file))
   (clearcase-maybe-set-vc-state file)
   (let ((fprop (clearcase-file-fprop file)))
     (if (clearcase-fprop-hijacked-p fprop)
@@ -1638,6 +1644,7 @@ have a correct state."
 	(buffer-disable-undo)
 	(erase-buffer)                  ; just in case
 	(insert (cleartool "ls -visible -short \"%s\"" dir))
+	(message "vc-clearcase-dir-state: %s." dir)
 	(goto-char (point-min))
 
 	(while (not done)
@@ -1723,6 +1730,7 @@ no modifications are made.  If it is hijacked, we consider it
 modified even if no modifications were made."
   ;; NOTE: apparently, the -status_only option does not work: it returns
   ;; success all the time in the interactive cleartool process.
+  (setq file (expand-file-name file))
   (let ((fprop (clearcase-file-fprop file)))
     (cond
       ((null (clearcase-fprop-status fprop)) t)
@@ -1789,8 +1797,8 @@ for the file insertion than a checkin.
 NOTE: if dir is not under clearcase, this code will fail.  We
 don't attempt to register a directory in clearcase even if one of
 it's parents is registered."
+  (setq file (expand-file-name file))
   (with-clearcase-checkout (file-name-directory file)
-    (message "Registering %s" (file-name-nondirectory file))
     (let ((cleartool-timeout (* 2 cleartool-timeout)))
       (cleartool "mkelem -nc \"%s\"" file))
     ;; mark the file as registered, in case it was marked as unregistered.
@@ -1822,6 +1830,7 @@ responsible if the transaction id is positive."
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
 REV is ignored, COMMENT is the checkin comment."
+  (setq file (expand-file-name file))
   (when rev
     (message "Ignoring revision specification: %s" rev))
   (if (or (null comment) (equal comment ""))
@@ -1840,6 +1849,7 @@ This is a helper function user by both
 `vc-clearcase-find-version' and `vc-clearcase-checkout' (since we
 want to preserve the Emacs 21.3 `vc-clearcase-checkout'
 behaviour."
+  (setq file (expand-file-name file))
   (when (string= rev "")
     (error "Refusing to checkout head of trunk"))
   (let ((fprop (clearcase-file-fprop file)))
@@ -2459,12 +2469,11 @@ helper function for `vc-clearcase-diff'"
       (goto-char diff-start-pos))
     ;; the way we determine whether the files are identical depends
     ;; on the diff format we use.
-    (not
-     (or
-      ;; diff format has an empty buffer
-      (equal diff-start-pos (point-max))
-      ;; serial format prints "Files are identical", so we look for that.
-      (looking-at "\\(Files\\|Directories\\) are identical")))))
+    (or
+     ;; diff format has an empty buffer
+     (equal diff-start-pos (point-max))
+     ;; serial format prints "Files are identical", so we look for that.
+     (looking-at "\\(Files\\|Directories\\) are identical"))))
 
 (defun vc-clearcase-diff (file &optional rev1 rev2 buffer)
   "Put the FILE's diff between REV1 and REV2 in BUFFER.

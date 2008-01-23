@@ -3035,6 +3035,36 @@ will open the specified version in another window, using
 
 ;;;; Additional vc clearcase commands (for directories)
 
+;;;###autoload
+(defun vc-clearcase-checkout-directory (dir)
+  "Checkout directory DIR, or do nothing if already checked out.
+To register, rename or remove files, the directory needs to be
+checked out.  vc-clearcase will checkout a directory when needed
+and check it in again, but if you need to register (or rename or
+delete) several files, a new directory revision will be created
+for each operation.  In such a case, it might be useful to
+checkout/checkin the directory explicitely, so that a single
+directory revision is created instead."
+  (interactive "D")
+  (setq dir (expand-file-name dir))
+  (if (member (cleartool "desc -fmt \"%%Rf\" \"%s\"" dir)
+	      '("reserved" "unreserved"))
+      (message "%s already checked out" dir)
+      (with-temp-message (format "Checking out %s" dir)
+	(cleartool "checkout -nc \"%s\"" dir))))
+
+;;;###autoload
+(defun vc-clearcase-checkin-directory (dir)
+  "Checkin directory DIR, or do nothing if already checked in.
+See `vc-clearcase-checkout-directory' for why this function might
+be usefull."
+  (interactive "D")
+  (setq dir (expand-file-name dir))
+  (if (equal "" (cleartool "desc -fmt \"%%Rf\" \"%s\"" dir))
+      (message "%s is not checked out" dir)
+      (with-temp-message (format "Checking in %s" dir)
+	(cleartool "checkin -nc \"%s\"" dir))))
+
 (defconst cleartool-lsco-fmt
   (concat "Working file: %n\n"
 	  "revision %PVn (%Rf)\n"
@@ -3391,6 +3421,14 @@ In interactive mode, prompts for a view-tag name."
     (define-key m [vc-clearcase-start-view]
       '(menu-item "Start dynamic view..." vc-clearcase-start-view
 	:help "Start a dynamic view"))
+    (define-key m [separator-clearcase-2]
+      '("----" 'separator-2))
+    (define-key m [vc-clearcase-checkin-directory]
+      '(menu-item "Checkin directory..." vc-clearcase-checkin-directory
+	:help "Checkin a directory"))
+    (define-key m [vc-clearcase-checkout-directory]
+      '(menu-item "Checkout directory..." vc-clearcase-checkout-directory
+	:help "Checkout a directory"))
     (fset 'clearcase-global-menu m)))
 
 ;;;###autoload

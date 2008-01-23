@@ -36,6 +36,10 @@
 (require 'vc-clearcase)
 (require 'button)
 
+(defgroup ucm nil
+  "Support for UCM under ClearCase"
+  :group 'vc-clearcase)
+
 (defun ucm-read-activity (prompt &optional view-tag include-obsolete initial)
   "Display PROMPT and read a UCM activity with completion.
 
@@ -154,6 +158,26 @@ number of checked out files."
 		       headline (hash-table-count files) (length versions) checkouts)
 	      (message "%s" headline))))))
 
+(defface ucm-field-name-face
+    '((t (:inherit font-lock-keyword-face :weight bold)))
+  "Face used for field names in UCM browse buffers."
+  :group 'ucm)
+
+(defface ucm-file-name-face
+    '((t (:weight bold)))
+  "Face used for file names in UCM browse buffers."
+  :group 'ucm)
+
+(defface ucm-revision-face
+    '((t (:slant italic)))
+  "Face used for revisions in UCM browse buffers."
+  :group 'ucm)
+
+(defface ucm-checkedout-revision-face
+    '((t (:foreground "IndianRed" :slant italic)))
+  "Face used for checkedout revisions in UCM browse buffers."
+  :group 'ucm)
+
 (defvar ucm-activity nil
   "The name of the current activity being browsed.")
 
@@ -265,7 +289,7 @@ program."
 	    (view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
 
 	(unless (string= view "")
-	  (let ((vprop (clearcase-get-vprop view)))
+	  (let ((vprop (clearcase-get-vprop view default-directory)))
 	    (setq view (clearcase-vprop-root-path vprop))))
 
 	(dolist (v (split-string
@@ -285,27 +309,32 @@ program."
 	  (let ((inhibit-read-only t)
 		(headline (cleartool "lsact -fmt \"%%[headline]p\" %s" activity)))
 	    (erase-buffer)
-	    (insert "Name: " activity)
-	    (insert "\nHeadline: " headline)
-	    (insert "\nStatus: " (cleartool "lsact -fmt \"%%[locked]p\" %s" activity))
+	    (insert (propertize "Name: " 'face 'ucm-field-name-face) activity
+		    "\n"
+		    (propertize "Headline: " 'face 'ucm-field-name-face) headline
+		    "\n"
+		    (propertize "Status: " 'face 'ucm-field-name-face)
+		    (cleartool "lsact -fmt \"%%[locked]p\" %s" activity))
 	    (when (or (string-match "SFT-[0-9]+" activity)
 		      (string-match "SFT-[0-9]+" headline))
-	      (insert "\nJIRA Link: ")
+	      (insert "\n" (propertize "JIRA Link: " 'face 'ucm-field-name-face))
 	      (let ((url (format "http://jira/browse/%s" (match-string 0 activity))))
 		(insert-text-button
 		 url
 		 'type 'ucm-url-link
 		 'url url)))
-	    (insert "\nCreated By: "
+	    (insert "\n"
+		    (propertize "Created By: " 'face 'ucm-field-name-face)
 		    (cleartool "lsact -fmt \"%%[owner]p\" %s" activity))
-	    (insert "\n\nFile Versions:\n"
-		    "==============\n")
+	    (insert "\n\n"
+		    (propertize "File Versions:" 'face 'ucm-field-name-face)
+		    "\n==============\n")
 	    (loop for file being the hash-keys of changeset
 	       do (progn
 		    (insert "\n    ")
 		    (insert-text-button
 		     (file-name-nondirectory file)
-		     'face 'bold
+		     'face 'ucm-file-name-face
 		     'type 'ucm-file-link
 		     'buffer (current-buffer)
 		     'file-name file)
@@ -314,7 +343,9 @@ program."
 		    (insert "        ")
 		    (insert-text-button
 		     (concat "@@" revision)
-		     'face 'italic
+		     'face (if (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'" revision)
+			       'ucm-checkedout-revision-face
+			       'ucm-revision-face)
 		     'type 'ucm-show-diff-link
 		     'buffer (current-buffer)
 		     'file-name file
@@ -330,8 +361,9 @@ program."
 			     "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
 	       (when (and contrib
 			  (not (string-match "^cleartool: Error: " contrib)))
-		 (insert "\nContributing Activities:\n"
-			 "========================\n\n")
+		 (insert "\n"
+			 (propertize "Contributing Activities:" 'face 'ucm-field-name-face)
+			 "\n========================\n\n")
 		 (dolist (c (split-string contrib " " 'omit-nulls))
 		   (insert "    ")
 		   (insert-text-button

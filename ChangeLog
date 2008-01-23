@@ -1,3 +1,29 @@
+2008-01-23  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm): 1.14 new customize group
+	(ucm-field-name-face, ucm-file-name-face, ucm-revision-face)
+	(ucm-checkedout-revision-face): 1.14 new faces
+	(ucm-browse-activity): 1.14 pass in `default-directory' to
+	`clearcase-get-vprop', plus use the faces to compose the report.
+	(ucm-lock-activity, ucm-unlock-activity): 1.15 new functions.
+
+	* vc-clearcase.el (clearcase-refresh-files-in-view): 1.142 ignore
+	buffers who's file is no longer on disk
+	(vc-clearcase-registered, vc-clearcase-state)
+	(vc-clearcase-state-heuristic, vc-clearcase-workfile-unchanged-p,
+	(vc-clearcase-register, vc-clearcase-checkin)
+	(clearcase-find-version-helper): 1.142 use `expand-file-name' on
+	the FILE arg
+	(vc-clearcase-dir-state): 1.142 add a message about the directory
+	we are scanning
+	(vc-clearcase-register): 1.142 remove the "registering..."
+	message.
+	(clearcase-diff-with-cleartool): 1.142 bugfix: return t when the
+	revisions are identical
+	(vc-clearcase-checkout-directory, vc-clearcase-checkin-directory):
+	1.143 new functions
+	(clearcase-global-menu): 1.143 added them to the menu bar
+
 2008-01-06  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-print-log-show-labels): 1.141 new

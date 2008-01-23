@@ -459,5 +459,34 @@ The file names are relative to the `default-directory'"
 	      (cleartool "checkin -cfile \"%s\" %s" comment activity)))
 	(clearcase-refresh-files-in-view)))))
 
+;;;###autoload
+(defun ucm-lock-activity (activity)
+  "Lock ACTIVITY.  With prefix arg, mark it as obsolete."
+  (interactive (list (ucm-read-activity "Lock activity: ")))
+  (with-cleartool-directory default-directory
+    (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))
+      (if (member status '("locked" "obsolete"))
+	  (message "%s is already locked" activity)
+	  (progn
+	    (cleartool "lock %s activity:%s@/projects"
+		       (if current-prefix-arg "-obsolete" "") activity)
+	    (message "%s is now locked" activity))))))
+
+;;;###autoload
+(defun ucm-unlock-activity (activity)
+  "Unlock ACTIVITY. With prefix arg, allow selecting obsolete activities."
+  (interactive
+   (list (ucm-read-activity
+	  "Browse activity: " nil
+	  (when current-prefix-arg 'include-obsolete))))
+  (with-cleartool-directory default-directory
+    (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))
+      (if (equal status "unlocked")
+	  (message "%s is already unlocked" activity)
+	  (progn
+	    (cleartool "unlock activity:%s@/projects" activity)
+	    (message "%s is now unlocked" activity))))))
+
+
 (provide 'ucm)
 ;;; ucm.el ends here

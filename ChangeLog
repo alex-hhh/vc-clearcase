@@ -1,3 +1,15 @@
+2008-01-30  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-checkin-activity): 1.16 try to undo checkouts only
+	for regular files (and not directories)
+
+	* vc-clearcase.el (vc-clearcase-revert): 1.144 handle hijacked
+	files as well.
+	(clearcase-hijack-file-handler): 1.144 new function, added to
+	`after-save-hook'
+	(vc-clearcase-checkout): 1.144 pass "-force" to the cleartool
+	update command.
+
 2008-01-23  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm): 1.14 new customize group

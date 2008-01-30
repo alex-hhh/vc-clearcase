@@ -411,7 +411,8 @@ checked-in using \\[log-edit-show-files]."
 	;; Checked out files which have no changes are reverted now.
 	(dolist (file (ucm-checked-out-files activity))
 	  (find-file-noselect file)     ; read in file so it has a fprop
-	  (if (vc-clearcase-workfile-unchanged-p file)
+	  (if (and (file-regular-p file)
+		   (vc-clearcase-workfile-unchanged-p file))
 	      (progn
 		(message "Undo checkout for unmodified file %s" file)
 		(cleartool "uncheckout -keep \"%s\"" file)

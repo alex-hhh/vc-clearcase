@@ -9,6 +9,9 @@
 	`after-save-hook'
 	(vc-clearcase-checkout): 1.144 pass "-force" to the cleartool
 	update command.
+	(vc-clearcase-revert): 1.145 don't refresh the state before
+	checking for hijacked status, `clearcase-hijack-file-handler'
+	takes care of marking a file as hijacked.
 
 2008-01-23  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

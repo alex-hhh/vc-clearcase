@@ -2042,7 +2042,7 @@ This method does three completely different things:
      (clearcase-find-version-helper file rev destfile))
     ((and (not editable) (or (null rev) (eq rev t)))
      ;; Update the file in the view (no-op in dynamic views)
-     (let ((update-result (cleartool "update -rename \"%s\"" file)))
+     (let ((update-result (cleartool "update -force -rename \"%s\"" file)))
        (when (string-match
 	      "^Update log has been written to .*$" update-result)
 	 (message (match-string 0 update-result)))
@@ -2066,21 +2066,27 @@ checkout in the same view will recreate the branch.)"
   :group 'vc-clearcase)
 
 (defun vc-clearcase-revert (file &optional contents-done)
-  "Cancel a checkout on FILE.
+  "Cancel a checkout or a hijacking on FILE.
 CONTENTS-DONE is ignored.  The
 `clearcase-rmbranch-on-revert-flag' is honoured."
   (setq file (expand-file-name file))
+  ;; recompute the state here, this will allow us to recognize a hijacked
+  ;; file.
+  (clearcase-maybe-set-vc-state file 'force)
   (let* ((fprop (clearcase-file-fprop file))
 	 (empty-branch-p (equal "0" (clearcase-fprop-version-number fprop))))
-    (cleartool "uncheckout -keep \"%s\"" file)
-    (when (and empty-branch-p clearcase-rmbranch-on-revert-flag)
-      (let ((base (clearcase-fprop-version-base fprop)))
-	(cleartool "rmbranch -force -nc \"%s@@%s\"" file base)
-	;; in snapshot views, the file seems to be listed as "[special
-	;; selection, deleted version]", after removing the branch, so we need
-	;; an update.
-	(when (clearcase-snapshot-view-p fprop)
-	  (cleartool "update -overwrite -force \"%s\"" file))))
+    (if (clearcase-fprop-hijacked-p fprop)
+	(cleartool "update -overwrite -force \"%s\"" file)
+	(progn
+	  (cleartool "uncheckout -keep \"%s\"" file)
+	  (when (and empty-branch-p clearcase-rmbranch-on-revert-flag)
+	    (let ((base (clearcase-fprop-version-base fprop)))
+	      (cleartool "rmbranch -force -nc \"%s@@%s\"" file base)
+	      ;; in snapshot views, the file seems to be listed as "[special
+	      ;; selection, deleted version]", after removing the branch, so
+	      ;; we need an update.
+	      (when (clearcase-snapshot-view-p fprop)
+		(cleartool "update -overwrite -force \"%s\"" file))))))
     (clearcase-maybe-set-vc-state file 'force)))
 
 
@@ -3025,6 +3031,23 @@ will open the specified version in another window, using
 	  (vc-version-other-window version)
 	  t                             ; return t, so no other handler works
 	  )))))
+
+(defun clearcase-hijack-file-handler ()
+  "Detect the hijacking of a file and update the FPROP accordingly."
+  (let ((file (buffer-file-name)))
+    (when file
+      (let ((fprop (clearcase-file-fprop file)))
+	(when fprop
+	  (unless (clearcase-fprop-checkedout-p fprop)
+	    ;; we are hijacking a file
+	    (vc-file-setprop file 'vc-state 'unlocked-changes)
+	    (setf (clearcase-fprop-status fprop) 'hijacked)
+	    (vc-resynch-buffer file t t))))))
+  nil)
+
+;; This does not have to be autoloaded, we only need to detect hijacking of
+;; files after we load vc-clearcase
+(add-hook 'after-save-hook 'clearcase-hijack-file-handler)
 
 ;;;###autoload
 (cond

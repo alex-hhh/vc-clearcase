@@ -2070,9 +2070,6 @@ checkout in the same view will recreate the branch.)"
 CONTENTS-DONE is ignored.  The
 `clearcase-rmbranch-on-revert-flag' is honoured."
   (setq file (expand-file-name file))
-  ;; recompute the state here, this will allow us to recognize a hijacked
-  ;; file.
-  (clearcase-maybe-set-vc-state file 'force)
   (let* ((fprop (clearcase-file-fprop file))
 	 (empty-branch-p (equal "0" (clearcase-fprop-version-number fprop))))
     (if (clearcase-fprop-hijacked-p fprop)

@@ -1,3 +1,21 @@
+2008-01-31  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-browse-activity): 1.17 sort the files in the report
+	(ucm-checkin-activity): 1.17 make sure `default-directory' is
+	always used.
+	(ucm-checked-out-files, ucm-finish-activity-checkin): 1.17 new
+	arg, DIR used as `default-directory'
+	(ucm-lock-activity): 1.17 when obsoleting an activity, the message
+	sais so.
+	(ucm-unlock-activity): 1.17 fix message prompt
+
+	* vc-clearcase.el (clearcase-fprop-checkout-denied-p): 1.146 new
+	function.
+	(vc-clearcase-state-heuristic): 1.146 when checkout is denied,
+	consider the file 'up-to-date
+	(vc-clearcase-checkout): 1.146 signal an error when checkout is
+	denied.
+
 2008-01-30  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-checkin-activity): 1.16 try to undo checkouts only

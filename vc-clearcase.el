@@ -901,7 +901,13 @@ The branch creation might still fail if the branch already exists
 somewhere in the version-tree of this element.  So what we really
 check is whether ClearCase will try to branch this file at
 checkout."
-  (string-match "-mkbranch" (clearcase-fprop-what-rule fprop)))
+  (string-match "-mkbranch\\>" (clearcase-fprop-what-rule fprop)))
+
+(defsubst clearcase-fprop-checkout-denied-p (fprop)
+  "Return true if checkouts are not permited on this FPROP.
+This is indicated by a -nocheckout directive in the configspec
+rule for the file."
+  (string-match "-nocheckout\\>" (clearcase-fprop-what-rule fprop)))
 
 (defun clearcase-fprop-branch (fprop)
   "Return the branch part of FPROP.
@@ -1509,26 +1515,26 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-       (let ((ls-result (cleartool "ls \"%s\"" file)))
-	 (unless (string-match "Rule: \\(.*\\)$" ls-result)
-	   (throw 'done nil))           ; file is not registered
+	(let ((ls-result (cleartool "ls \"%s\"" file)))
+	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	    (throw 'done nil))          ; file is not registered
 
-	 (clearcase-set-fprop-version-stage-1 fprop ls-result)
-	 ;; anticipate that the version will be needed shortly, so ask for
-	 ;; it.  When a file is hijacked, do the desc command on the version
-	 ;; extended name of the file, as cleartool will return nothing for
-	 ;; the hijacked version...
-	 (let ((pname (if (clearcase-fprop-hijacked-p fprop)
-			  (concat file "@@" (clearcase-fprop-version fprop))
-			  file)))
-	   (setf (clearcase-fprop-version-tid fprop)
-		 (cleartool-ask
-		  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-		  'nowait
-		  fprop
-		  'clearcase-set-fprop-version-stage-2))))
-       (vc-file-setprop file 'vc-clearcase-fprop fprop)
-       (throw 'done t)))))
+	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
+	  ;; anticipate that the version will be needed shortly, so ask for
+	  ;; it.  When a file is hijacked, do the desc command on the version
+	  ;; extended name of the file, as cleartool will return nothing for
+	  ;; the hijacked version...
+	  (let ((pname (if (clearcase-fprop-hijacked-p fprop)
+			   (concat file "@@" (clearcase-fprop-version fprop))
+			   file)))
+	    (setf (clearcase-fprop-version-tid fprop)
+		  (cleartool-ask
+		   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		   'nowait
+		   fprop
+		   'clearcase-set-fprop-version-stage-2))))
+	(vc-file-setprop file 'vc-clearcase-fprop fprop)
+	(throw 'done t)))))
 
 (defun vc-clearcase-state (file)
   "Return the current version control state of FILE.
@@ -1593,18 +1599,22 @@ information."
   (setq file (expand-file-name file))
   (clearcase-maybe-set-vc-state file)
   (let ((fprop (clearcase-file-fprop file)))
-    (if (clearcase-fprop-hijacked-p fprop)
-	'unlocked-changes
-	(if (clearcase-fprop-checkedout-p fprop)
-	    (if (string= (clearcase-fprop-latest fprop)
-			 (clearcase-fprop-parent fprop))
-		'edited
-		'needs-merge)
-	    (if (or (clearcase-fprop-checkout-will-branch-p fprop)
-		    (string= (clearcase-fprop-latest fprop)
-			     (clearcase-fprop-version fprop)))
-		'up-to-date
-		'needs-patch)))))
+    (cond
+      ((clearcase-fprop-hijacked-p fprop)
+       'unlocked-changes)
+      ((clearcase-fprop-checkedout-p fprop)
+       (if (string= (clearcase-fprop-latest fprop)
+		    (clearcase-fprop-parent fprop))
+	   'edited
+	   'needs-merge))
+      ((or (clearcase-fprop-checkout-denied-p fprop)
+	   (clearcase-fprop-checkout-will-branch-p fprop)
+	   (string= (clearcase-fprop-latest fprop)
+		    (clearcase-fprop-version fprop)))
+       'up-to-date)
+      ;; revision is not latest on its branch and a checkout will not
+      ;; branch...
+      (t 'needs-patch))))
 
 (defun vc-clearcase-dir-state (dir)
   "Determine the state of all files in DIR.
@@ -1823,9 +1833,9 @@ responsible if the transaction id is positive."
     ((gethash file clearcase-dir-state-cache) t)
 
     (t (ignore-cleartool-errors
-	(not (string= (cleartool
-		       "desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
-		      ""))))))
+	 (not (string= (cleartool
+			"desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
+		       ""))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
@@ -1994,6 +2004,8 @@ This method does three completely different things:
      ;; this is the real checkout operation
      (let* ((fprop (clearcase-file-fprop file))
 	    checkout)
+       (when (clearcase-fprop-checkout-denied-p fprop)
+	 (error "Configspec rule forbids checkout of this file."))
        ;; need to find out if we have to checkout reserved or
        ;; unreserved.
        (ecase clearcase-checkout-policy
@@ -2175,7 +2187,7 @@ is lost."
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
       (ignore-cleartool-errors
-       (cleartool "reserve -ncomment \"%s\"" file))
+	(cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
     (when (and (not editable)
@@ -2259,7 +2271,7 @@ has a reserved checkout of the file."
 	  (set-file-modes file (logior (file-modes file) #o220))
 	  (delete-file keep-file)
 	  (ignore-cleartool-errors
-	   (cleartool "reserve -ncomment \"%s\"" file))
+	    (cleartool "reserve -ncomment \"%s\"" file))
 	  (clearcase-maybe-set-vc-state file 'force))
 
       (cleartool-error
@@ -2729,12 +2741,12 @@ element * NAME -nocheckout"
       (when dir?                        ; apply label to parent directories
 	(message "Applying label to parent directories...")
 	(ignore-cleartool-errors
-	 (while t                       ; until cleartool will throw an error
-	   (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-	   (setq dir (file-name-directory dir))
-	   (cleartool
-	    "mklabel -nc %s lbtype:%s \"%s\""
-	    (if branchp "-replace" "") name dir)))))
+	  (while t                      ; until cleartool will throw an error
+	    (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	    (setq dir (file-name-directory dir))
+	    (cleartool
+	     "mklabel -nc %s lbtype:%s \"%s\""
+	     (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
 

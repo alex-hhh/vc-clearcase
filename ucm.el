@@ -61,7 +61,7 @@ nil, the current activity in the view is presented to the user."
     (unless initial
       (setq initial
 	    (ignore-cleartool-errors
-	     (cleartool-ask "lsact -cact -fmt \"%n\"")))))
+	      (cleartool-ask "lsact -cact -fmt \"%n\"")))))
 
   ;; The view might not be known, so we pass in the `default-directory' to
   ;; `clearcase-get-vprop' so it can be properly created.
@@ -286,6 +286,7 @@ program."
   (with-temp-message "Preparing report..."
     (with-cleartool-directory (expand-file-name default-directory)
       (let ((changeset (make-hash-table :test 'equal))
+	    (changeset-files nil)
 	    (view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
 
 	(unless (string= view "")
@@ -299,6 +300,13 @@ program."
 	    (let ((file (match-string 1 v))
 		  (revision (match-string 2 v)))
 	      (push revision (gethash file changeset)))))
+
+	(maphash (lambda (k v) (push k changeset-files)) changeset)
+	(setq changeset-files
+	      (sort changeset-files
+		    (lambda (a b)
+		      (string< (file-name-nondirectory a)
+			       (file-name-nondirectory b)))))
 
 	(with-current-buffer (get-buffer-create "*UCM Activity*")
 	  (setq buffer-read-only t)
@@ -329,49 +337,48 @@ program."
 	    (insert "\n\n"
 		    (propertize "File Versions:" 'face 'ucm-field-name-face)
 		    "\n==============\n")
-	    (loop for file being the hash-keys of changeset
-	       do (progn
-		    (insert "\n    ")
-		    (insert-text-button
-		     (file-name-nondirectory file)
-		     'face 'ucm-file-name-face
-		     'type 'ucm-file-link
-		     'buffer (current-buffer)
-		     'file-name file)
-		    (insert " in " (file-relative-name (file-name-directory file) view) "\n"))
-	       do (dolist (revision (gethash file changeset))
-		    (insert "        ")
-		    (insert-text-button
-		     (concat "@@" revision)
-		     'face (if (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'" revision)
-			       'ucm-checkedout-revision-face
-			       'ucm-revision-face)
-		     'type 'ucm-show-diff-link
-		     'buffer (current-buffer)
-		     'file-name file
-		     'revision revision)
-		    (insert "\n")))
+	    (dolist (file changeset-files)
+	      (insert "\n    ")
+	      (insert-text-button
+	       (file-name-nondirectory file)
+	       'face 'ucm-file-name-face
+	       'type 'ucm-file-link
+	       'buffer (current-buffer)
+	       'file-name file)
+	      (insert " in " (file-relative-name (file-name-directory file) view) "\n")
+	      (dolist (revision (gethash file changeset))
+		(insert "        ")
+		(insert-text-button
+		 (concat "@@" revision)
+		 'face (if (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'" revision)
+			   'ucm-checkedout-revision-face
+			   'ucm-revision-face)
+		 'type 'ucm-show-diff-link
+		 'buffer (current-buffer)
+		 'file-name file
+		 'revision revision)
+		(insert "\n")))
 	    (ignore-cleartool-errors
-	     ;; There seems to be a bug in my version of ClearCase: if
-	     ;; `activity' is not a rebase or integration activity an error
-	     ;; will be reported, but the status of the command will be 0
-	     ;; (meaning success).  We have to test the returned string
-	     ;; explicitly ...
-	     (let ((contrib (cleartool
-			     "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
-	       (when (and contrib
-			  (not (string-match "^cleartool: Error: " contrib)))
-		 (insert "\n"
-			 (propertize "Contributing Activities:" 'face 'ucm-field-name-face)
-			 "\n========================\n\n")
-		 (dolist (c (split-string contrib " " 'omit-nulls))
-		   (insert "    ")
-		   (insert-text-button
-		    c
-		    'type 'ucm-activity-link
-		    'buffer (current-buffer)
-		    'ucm-activity c)
-		   (insert "\n")))))
+	      ;; There seems to be a bug in my version of ClearCase: if
+	      ;; `activity' is not a rebase or integration activity an error
+	      ;; will be reported, but the status of the command will be 0
+	      ;; (meaning success).  We have to test the returned string
+	      ;; explicitly ...
+	      (let ((contrib (cleartool
+			      "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
+		(when (and contrib
+			   (not (string-match "^cleartool: Error: " contrib)))
+		  (insert "\n"
+			  (propertize "Contributing Activities:" 'face 'ucm-field-name-face)
+			  "\n========================\n\n")
+		  (dolist (c (split-string contrib " " 'omit-nulls))
+		    (insert "    ")
+		    (insert-text-button
+		     c
+		     'type 'ucm-activity-link
+		     'buffer (current-buffer)
+		     'ucm-activity c)
+		    (insert "\n")))))
 
 	    (when ucm-previous-activities
 	      (insert "\n\n")
@@ -404,12 +411,12 @@ checked-in using \\[log-edit-show-files]."
   (when (member activity '("*NONE*" "*NEW-ACTIVITY*"))
     (error "Not a real activity"))
   (with-cleartool-directory default-directory
-    (lexical-let ((checkin-activity (cleartool "lsact -fmt \"%%Xn\" %s" activity)))
-
+    (lexical-let ((checkin-activity (cleartool "lsact -fmt \"%%Xn\" %s" activity))
+		  (dir default-directory))
       (let ((modified-files nil)
 	    (reverted-files nil))
 	;; Checked out files which have no changes are reverted now.
-	(dolist (file (ucm-checked-out-files activity))
+	(dolist (file (ucm-checked-out-files activity dir))
 	  (find-file-noselect file)     ; read in file so it has a fprop
 	  (if (and (file-regular-p file)
 		   (vc-clearcase-workfile-unchanged-p file))
@@ -425,40 +432,42 @@ checked-in using \\[log-edit-show-files]."
 
       (log-edit (lambda ()
 		  (interactive)
-		  (ucm-finish-activity-checkin checkin-activity))
+		  (ucm-finish-activity-checkin checkin-activity dir))
 		'setup
 		(lambda ()
 		  (interactive)
-		  (ucm-checked-out-files checkin-activity))
+		  (ucm-checked-out-files checkin-activity dir))
 		(get-buffer-create "*UCM-Checkin-Log*")))))
 
-(defun ucm-checked-out-files (activity)
+(defun ucm-checked-out-files (activity dir)
   "Return the list of files checked out under ACTIVITY.
 The file names are relative to the `default-directory'"
-  (with-cleartool-directory default-directory
-    (let ((files nil))
-      (dolist (v (split-string
-		  (cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
-		  ", " 'omit-nulls))
-	(when (string-match "\\(.*\\)@@\\(.*\\)" v)
-	  (let ((file (match-string 1 v))
-		(revision (match-string 2 v)))
-	    (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
-	      (add-to-list 'files (file-relative-name file))))))
-      files)))
+  (let ((default-directory dir))
+    (with-cleartool-directory dir
+      (let ((files nil))
+	(dolist (v (split-string
+		    (cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
+		    ", " 'omit-nulls))
+	  (when (string-match "\\(.*\\)@@\\(.*\\)" v)
+	    (let ((file (match-string 1 v))
+		  (revision (match-string 2 v)))
+	      (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
+		(add-to-list 'files (file-relative-name file))))))
+	files))))
 
-(defun ucm-finish-activity-checkin (activity)
+(defun ucm-finish-activity-checkin (activity dir)
   "Check-in files under ACTIVITY using the contents of
 *UCM-Checkin-Log* as the comment."
-  (with-cleartool-directory default-directory
-    (with-temp-message (format "Checking in %s..." activity)
-      (let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
-			    (buffer-substring-no-properties (point-min) (point-max)))))
-	(if (string= comment-text "")
-	    (cleartool "checkin -nc %s" activity)
-	    (with-clearcase-cfile (comment comment-text)
-	      (cleartool "checkin -cfile \"%s\" %s" comment activity)))
-	(clearcase-refresh-files-in-view)))))
+  (let ((default-directory dir))
+    (with-cleartool-directory dir
+      (with-temp-message (format "Checking in %s..." activity)
+	(let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
+			      (buffer-substring-no-properties (point-min) (point-max)))))
+	  (if (string= comment-text "")
+	      (cleartool "checkin -nc %s" activity)
+	      (with-clearcase-cfile (comment comment-text)
+		(cleartool "checkin -cfile \"%s\" %s" comment activity)))
+	  (clearcase-refresh-files-in-view))))))
 
 ;;;###autoload
 (defun ucm-lock-activity (activity)
@@ -471,14 +480,15 @@ The file names are relative to the `default-directory'"
 	  (progn
 	    (cleartool "lock %s activity:%s@/projects"
 		       (if current-prefix-arg "-obsolete" "") activity)
-	    (message "%s is now locked" activity))))))
+	    (message "%s is now %s" activity
+		     (if current-prefix-arg "obsolete" "locked")))))))
 
 ;;;###autoload
 (defun ucm-unlock-activity (activity)
   "Unlock ACTIVITY. With prefix arg, allow selecting obsolete activities."
   (interactive
    (list (ucm-read-activity
-	  "Browse activity: " nil
+	  "Unlock activity: " nil
 	  (when current-prefix-arg 'include-obsolete))))
   (with-cleartool-directory default-directory
     (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))

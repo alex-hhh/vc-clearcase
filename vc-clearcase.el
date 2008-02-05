@@ -222,6 +222,7 @@
 (require 'tq)
 (require 'vc-hooks)
 (require 'vc)
+(require 'log-view)
 
 ;; Bug 1608947: This is needed at runtime for the `find' call.
 (require 'cl)
@@ -713,7 +714,7 @@ that were run to create this buffer."
   "Ensure that THING is checked out, than execute BODY.
 If THING was checked out by us, we check it back in.  THING can
 be either a file or a directory."
-  ;; NOTE: we could use make-symbol with the same effect
+  (declare (debug (form &rest form)) (indent 1))
   (let ((checkout-needed (make-symbol "checkout-needed"))
 	(real-thing (make-symbol "real-thing")))
     `(let* ((,real-thing ,thing)
@@ -725,7 +726,8 @@ be either a file or a directory."
 	    (progn
 	      (when ,checkout-needed
 		(message "Checking out %s" ,real-thing)
-		(cleartool "checkout -nquery -ptime -nwarn -reserved -nc \"%s\"" ,real-thing))
+		(cleartool "checkout -nquery -ptime -nwarn -reserved -nc \"%s\""
+			   ,real-thing))
 	      ,@body)
 	 (when ,checkout-needed
 	   (message "Checking in %s" ,real-thing)
@@ -737,6 +739,7 @@ COMMENT-VARS is a list of (comment-file comment-text),
 comment-file will be bound to a temporary file name and
 comment-text will be saved into it.  When all is finished, the
 comment file is removed."
+  (declare (debug ((symbolp form) &rest form)) (indent 1))
   ;; NOTE: we could have used
   ;; (defmacro* with-cleacase-cfile ((comment-file comment-text) &body forms)
   ;;    ;; blah blah)
@@ -756,6 +759,7 @@ comment file is removed."
   "Change the cleartool directory to DIR, than execute BODY.
 The original cleartool directory is restored after BODY is
 executed."
+  (declare (debug (form &rest form)) (indent 1))
   (let ((old-dir (make-symbol "old-dir"))
 	(new-dir (make-symbol "new-dir")))
     `(let ((,old-dir (replace-regexp-in-string
@@ -772,14 +776,10 @@ executed."
   "Execute BODY, ignoring any cleartool error.
 The form returns nil if a cleartool error was signalled,
 otherwise it returns the value of the last form in BODY."
+  (declare (debug (&rest form)) (indent 0))
   `(condition-case nil
        (progn ,@body)
      (cleartool-error nil)))
-
-(put 'with-clearcase-checkout 'lisp-indent-function 1)
-(put 'with-clearcase-cfile 'lisp-indent-function 1)
-(put 'with-cleartool-directory 'lisp-indent-function 1)
-(put 'ignore-cleartool-errors 'lisp-indent-function 0)
 
 ;;;; Clearcase Log View mode
 

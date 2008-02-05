@@ -1,3 +1,13 @@
+2008-02-05  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-checked-out-files, ucm-finish-activity-checkin):
+	1.18 dont make DIR the `default-directory'
+
+	* vc-clearcase.el (with-clearcase-checkout)
+	(with-clearcase-cfile, with-cleartool-directory)
+	(ignore-cleartool-errors): 1.147 use debug and indent
+	declarations.
+
 2008-01-31  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-browse-activity): 1.17 sort the files in the report

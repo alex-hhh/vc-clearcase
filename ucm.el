@@ -442,32 +442,30 @@ checked-in using \\[log-edit-show-files]."
 (defun ucm-checked-out-files (activity dir)
   "Return the list of files checked out under ACTIVITY.
 The file names are relative to the `default-directory'"
-  (let ((default-directory dir))
-    (with-cleartool-directory dir
-      (let ((files nil))
-	(dolist (v (split-string
-		    (cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
-		    ", " 'omit-nulls))
-	  (when (string-match "\\(.*\\)@@\\(.*\\)" v)
-	    (let ((file (match-string 1 v))
-		  (revision (match-string 2 v)))
-	      (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
-		(add-to-list 'files (file-relative-name file))))))
-	files))))
+  (with-cleartool-directory dir
+    (let ((files nil))
+      (dolist (v (split-string
+		  (cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
+		  ", " 'omit-nulls))
+	(when (string-match "\\(.*\\)@@\\(.*\\)" v)
+	  (let ((file (match-string 1 v))
+		(revision (match-string 2 v)))
+	    (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
+	      (add-to-list 'files (file-relative-name file))))))
+      files)))
 
 (defun ucm-finish-activity-checkin (activity dir)
   "Check-in files under ACTIVITY using the contents of
 *UCM-Checkin-Log* as the comment."
-  (let ((default-directory dir))
-    (with-cleartool-directory dir
-      (with-temp-message (format "Checking in %s..." activity)
-	(let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
-			      (buffer-substring-no-properties (point-min) (point-max)))))
-	  (if (string= comment-text "")
-	      (cleartool "checkin -nc %s" activity)
-	      (with-clearcase-cfile (comment comment-text)
-		(cleartool "checkin -cfile \"%s\" %s" comment activity)))
-	  (clearcase-refresh-files-in-view))))))
+  (with-cleartool-directory dir
+    (with-temp-message (format "Checking in %s..." activity)
+      (let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
+			    (buffer-substring-no-properties (point-min) (point-max)))))
+	(if (string= comment-text "")
+	    (cleartool "checkin -nc %s" activity)
+	    (with-clearcase-cfile (comment comment-text)
+	      (cleartool "checkin -cfile \"%s\" %s" comment activity)))
+	(clearcase-refresh-files-in-view)))))
 
 ;;;###autoload
 (defun ucm-lock-activity (activity)

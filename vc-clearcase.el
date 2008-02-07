@@ -710,28 +710,65 @@ that were run to create this buffer."
 
 ;;;; Some helper macros
 
-(defmacro with-clearcase-checkout (thing &rest body)
-  "Ensure that THING is checked out, than execute BODY.
-If THING was checked out by us, we check it back in.  THING can
-be either a file or a directory."
+(defun clearcase-register-path (path)
+  "Register PATH and all its parents with ClearCase.
+If PATH is already registered, do nothing.  Return a list of all
+the directories that were checked out (the caller is responsible
+for checking them back in)."
+  (let ((dir (directory-file-name path))
+	(elements nil)
+	(need-checkin? nil))
+
+    (while (equal "" (cleartool "desc -fmt \"%%Vn\" \"%s\"" dir))
+      ;; dir is not registered
+      (push dir elements)
+      (let ((parent (file-name-directory dir)))
+	(when (equal parent dir)        ; reached toplevel
+	  (error "%s is not inside a ClearCase view" dir))
+	(setq dir (directory-file-name parent))))
+
+    ;; DIR now contains the element we neeed to checkout, ELEMENTS contain all
+    ;; the elements we need to register
+
+    (when elements         ; if DIR was already registered, don't check it out
+      (when (equal (cleartool "desc -fmt \"%%Rf\" \"%s\"" dir) "")
+	(cleartool "co -nquery -ptime -nwarn -reserved -nc \"%s\"" dir)
+	(setq need-checkin? t))
+      (dolist (e elements)
+	(cleartool "mkelem -nc \"%s\"" e)))
+
+    (if need-checkin?
+	(cons dir elements)
+	elements)))
+
+(defmacro with-clearcase-checkout (elem &rest body)
+  "Ensure that ELEM is checked out, than execute BODY.
+If ELEM is not registered, register it and all its parents.  If
+BODY succeeds, we checkin all the checkouts we made, if BODY
+fails, we undo them. ELEM can be either a file or a directory."
   (declare (debug (form &rest form)) (indent 1))
-  (let ((checkout-needed (make-symbol "checkout-needed"))
-	(real-thing (make-symbol "real-thing")))
-    `(let* ((,real-thing ,thing)
-	    (,checkout-needed
-	     (string=
-	      (cleartool "desc -fmt \"%%Rf\" \"%s\"" ,real-thing)
-	      "")))
+  (let ((checkouts (make-symbol "checkouts"))
+	(path (make-symbol "path"))
+	(succeded? (make-symbol "succeded?")))
+    `(let* ((,path ,elem)
+	    (,checkouts nil)    ; a list of all directories we had to checkout
+	    (,succeded? nil))
        (unwind-protect
 	    (progn
-	      (when ,checkout-needed
-		(message "Checking out %s" ,real-thing)
-		(cleartool "checkout -nquery -ptime -nwarn -reserved -nc \"%s\""
-			   ,real-thing))
-	      ,@body)
-	 (when ,checkout-needed
-	   (message "Checking in %s" ,real-thing)
-	   (cleartool "checkin -ptime -nwarn -nc \"%s\"" ,real-thing))))))
+	      (if (equal (cleartool "desc -fmt \"%%Vn\" \"%s\"" ,path) "")
+		  ;; path does not have a version, register it
+		  (setq ,checkouts (clearcase-register-path ,path))
+		  (when (equal (cleartool "desc -fmt \"%%Rf\" \"%s\"" ,path) "")
+		    ;; path is registered, but not checked out
+		    (cleartool "co -nquery -ptime -nwarn -reserved -nc \"%s\"" ,path)
+		    (setq ,checkouts (list ,path))))
+	      ,@body
+	      (setq ,succeded? t))
+	 (if ,succeded?
+	     (dolist (e ,checkouts)
+	       (cleartool "checkin -ptime -nwarn -nc \"%s\"" e))
+	     (dolist (e ,checkouts)
+	       (cleartool "uncheckout \"%s\"" e)))))))
 
 (defmacro with-clearcase-cfile (comment-vars &rest body)
   "Save a comment in a temporary file, than execute BODY.
@@ -765,10 +802,11 @@ executed."
     `(let ((,old-dir (replace-regexp-in-string
 		      "[\n\r]+" "" (cleartool-ask "pwd")))
 	   (,new-dir ,dir))             ; dir is evaluated once, here
+       (unless (file-directory-p ,new-dir)
+	 (error "with-cleartool-directory: not a directory: %s" ,new-dir))
        (unwind-protect
 	    (progn
-	      (when (file-directory-p ,new-dir)
-		(cleartool "cd \"%s\"" (expand-file-name ,new-dir)))
+	      (cleartool "cd \"%s\"" (expand-file-name ,new-dir))
 	      ,@body)
 	 (cleartool "cd \"%s\"" ,old-dir)))))
 
@@ -1455,10 +1493,9 @@ If FORCE is not nil, always read the properties."
   (interactive
    (let* ((d (read-file-name "Directory: "
 			     default-directory default-directory t))
-	  (vob (condition-case nil
-		   (clearcase-vob-tag-for-path
-		    (if (file-directory-p d) d (file-name-directory d)))
-		 (cleartool-error nil))))
+	  (vob (ignore-cleartool-errors
+		(clearcase-vob-tag-for-path
+		 (if (file-directory-p d) d (file-name-directory d))))))
      (list d (if vob
 		 (clearcase-read-label "Label: " vob)
 		 (read-string "New snapshot name: "))
@@ -1820,22 +1857,22 @@ it's parents is registered."
 
 (defun vc-clearcase-responsible-p (file)
   "Return t if we responsible for FILE.
-We consider ourselves responsible if FILE's directory has a
-version.  If FILE is a directory, we are responsible for it only
-if it is already registered; this means we are not responsible
-for non registered directories.
+We consider ourselves responsible if FILE is inside a ClearCase
+view.
 
 If there is a transaction id for FILE in
-`clearcase-dir-state-cache', it means `vc-clearcase-dir-state'
-is processing that FILE.  In that case we consider ourselves
+`clearcase-dir-state-cache', it means `vc-clearcase-dir-state' is
+processing that FILE.  In that case we consider ourselves
 responsible if the transaction id is positive."
   (cond
     ((gethash file clearcase-dir-state-cache) t)
 
-    (t (ignore-cleartool-errors
-	 (not (string= (cleartool
-			"desc -fmt \"%%Vn\" \"%s\"" (file-name-directory file))
-		       ""))))))
+    (t
+     (ignore-cleartool-errors
+       (with-cleartool-directory (file-name-directory file)
+	 (not (equal (replace-regexp-in-string
+		      "[\n\r]+" "" (cleartool "pwv -short"))
+		     "** NONE **")))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
@@ -3054,17 +3091,6 @@ will open the specified version in another window, using
 	    (vc-resynch-buffer file t t))))))
   nil)
 
-;; This does not have to be autoloaded, we only need to detect hijacking of
-;; files after we load vc-clearcase
-(add-hook 'after-save-hook 'clearcase-hijack-file-handler)
-
-;;;###autoload
-(cond
-  ((boundp 'find-file-not-found-functions)
-   (add-hook 'find-file-not-found-functions 'clearcase-file-not-found-handler))
-  ((boundp 'find-file-not-found-hooks)
-   (add-hook 'find-file-not-found-hooks 'clearcase-file-not-found-handler)))
-
 ;;;; Additional vc clearcase commands (for directories)
 
 ;;;###autoload
@@ -3584,6 +3610,17 @@ See `clearcase-trace-cleartool-tq' and
 
 ;;;; Finish up
 
+;; This does not have to be autoloaded, we only need to detect hijacking of
+;; files after we load vc-clearcase
+(add-hook 'after-save-hook 'clearcase-hijack-file-handler)
+
+;;;###autoload
+(cond
+  ((boundp 'find-file-not-found-functions)
+   (add-hook 'find-file-not-found-functions 'clearcase-file-not-found-handler))
+  ((boundp 'find-file-not-found-hooks)
+   (add-hook 'find-file-not-found-hooks 'clearcase-file-not-found-handler)))
+
 ;; Bug 1818879: Only add 'CLEARCASE to `vc-handled-backends' and start the
 ;; transaction queue when we can find cleartool.
 
@@ -3618,6 +3655,30 @@ See `clearcase-trace-cleartool-tq' and
   (ad-activate 'vc-create-snapshot)
   (ad-activate 'vc-print-log)
   (cleartool-tq-maybe-start))
+
+(defun vc-clearcase-unload-hook ()
+  (remove-hook 'after-save-hook 'clearcase-hijack-file-handler)
+  (ad-disable-advice
+   'vc-dired-hook 'after 'clearcase-clear-dir-state-cache)
+  (ad-activate 'vc-dired-hook)
+  (ad-disable-advice
+   'vc-version-backup-file-name 'after 'clearcase-cleanup-version)
+  (ad-activate 'vc-version-backup-file-name)
+  (ad-disable-advice
+   'vc-start-entry 'before 'clearcase-prepare-checkin-comment)
+  (ad-activate 'vc-start-entry)
+  (ad-disable-advice
+   'vc-create-snapshot 'before 'clearcase-provide-label-completion)
+  (ad-activate 'vc-create-snapshot)
+  (ad-disable-advice
+   'vc-print-log 'around 'clearcase-print-log-advice)
+  (ad-activate 'vc-print-log)
+
+  ;; unfortunately, I don't know how to restore the autoload for the
+  ;; `vc-clearcase-registered' so we remove ourselves completely
+  (setq vc-handled-backends (delq 'CLEARCASE vc-handled-backends)))
+
+(add-hook 'vc-clearcase-unload-hook 'vc-clearcase-unload-hook)
 
 ;; compatibility with previous version
 

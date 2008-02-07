@@ -1,3 +1,16 @@
+2008-02-07  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-register-path): 1.148 new function
+	(with-clearcase-checkout): 1.148 if we are asked to checkout an
+	unregistered directory, register it and all its parents.  If BODY
+	fails, undo all checkouts.
+	(with-cleartool-directory): 1.148 signal an error if DIR is not a
+	directory
+	(vc-create-snapshot): 1.148 use `ignore-cleartool-errors'
+	(vc-clearcase-responsible-p): 1.148 we are now responsible for all
+	files inside a ClearCase view
+	(vc-clearcase-unload-hook): 1.148 new function
+
 2008-02-05  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-checked-out-files, ucm-finish-activity-checkin):

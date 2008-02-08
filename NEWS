@@ -27,6 +27,11 @@
 
    This makes directory handling completely transparent for the user.
 
+** better handling of files that cannot be checked out 
+   these are files which have a configspec rule with "-nocheckout" in it.
+   Trying to checkout such a file will result in an error message from
+   vc-clearcase instead of a cleartool error.
+
 ** various minor bugfixes.
 
 * Release 1.139

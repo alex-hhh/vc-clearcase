@@ -1,10 +1,10 @@
 -*- outline -*-
 
-* Pre-release checklist
+* Emacs 23 Changes
 
-** update vc-clearcase-report-bug
+** vc-clearcase-dir-state
 
-   M-x occur <RET> def\(var\|const\|custom\)
-
-   To find all the variables in the package.
+   vc.el has changed so that dir-state should now scan all directories
+   recursively instead of just processing the files in the specified
+   directory.
 

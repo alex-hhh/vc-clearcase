@@ -1,3 +1,20 @@
+2008-02-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (cleartool-error-not-a-vob-object)
+	(cleartool-error-label-not-found): 1.149 new error conditions.
+	(cleartool-signal-error): 1.149 signal a mode specific error
+	condition than 'cleartool-error in some cases, also format the
+	error message so it is easier to read.
+	(clearcase-register-path): 1.149 reverse the returned checkout
+	list.
+	(with-clearcase-checkout): 1.149 only trap
+	'cleartool-error-not-a-vob-object in the condition-case
+	(clearcase-setup-vprop): 1.149 ask for obsolete streams too,
+	handles the case when the stream of a view has been obsoleted.
+	(vc-clearcase-create-snapshot): 1.149 trap only
+	'cleartool-error-label-not-found -- only create the label when the
+	error said that the label does not exist.
+
 2008-02-07  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-register-path): 1.148 new function

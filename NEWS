@@ -1,5 +1,34 @@
 -*- outline -*- 
 
+* Release 
+
+** ucm-checkin-activity will undo checkout on unchanged files
+   This allows the checkin to succeed when there are unchanged files
+   (ClearCase will not checkin a file with no changes)
+
+** The lshistory (print-log) format has changed to resemble the CVS format
+   A new customization variable `clearcase-print-log-show-labels' controls
+   whether labels are shown in the `print-log' buffer.
+
+** added functions for checkout/checkin a directory
+   see `vc-clearcase-checkout-directory' and `vc-clearcase-checkin-directory',
+   they are also present in the menu-bar
+
+** hijacked files can be reverted (C-x v u, `vc-clearcase-revert')
+   diffing (C-x v =) also works on them.
+
+** vc-clearcase will now register the parent directory when registering a file
+   When registering a file and its directory is not registered with ClearCase,
+   vc-clearcase will now register its directory (and any of its parents).
+   
+   This also works when a file is renamed (`vc-rename-file') to a directory
+   which is not registered with ClearCase, however the directory has to be
+   inside a ClearCase view.
+
+   This makes directory handling completely transparent for the user.
+
+** various minor bugfixes.
+
 * Release 1.139
 
 ** `vc-clearcase-diff' now works for directory diffs

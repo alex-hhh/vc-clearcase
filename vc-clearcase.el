@@ -355,15 +355,41 @@ have their answer stored here for retrieval by
 ;; Create an error that will be signalled when Cleartool reports an
 ;; error.  We need it so we can filter errors that come from cleartool
 ;; itself (which we might want to ignore) and other errors.
-(put 'cleartool-error 'error-conditions '(error cleartool-error))
-(put 'cleartool-error 'error-message "cleartool")
+(put 'cleartool-error-not-a-vob-object
+     'error-conditions
+     '(error cleartool-error cleartool-error-not-a-vob-object))
+(put 'cleartool-error-not-a-vob-object 'error-message "ClearCase error")
+
+(put 'cleartool-error-label-not-found
+     'error-conditions
+     '(error cleartool-error cleartool-error-label-not-found))
+(put 'cleartool-error-label-not-found 'error-message "ClearCase error")
+
+(put 'cleartool-error
+     'error-conditions
+     '(error cleartool-error))
+(put 'cleartool-error 'error-message "ClearCase error")
 
 (defun cleartool-signal-error (message)
   "Signal a cleartool-error with MESSAGE as an argument."
   ;; Remove the "cleartool: Error: " message as it is annoying and just takes
   ;; up space.
-  (let ((m (replace-regexp-in-string "cleartool: Error: " "" message)))
-    (while t (signal 'cleartool-error (list m)))))
+  (while t
+    (signal
+     (cond ((or (string-match "^cleartool: Error: Not a vob object: " message)
+		(string-match "^cleartool: Error: Unable to access " message))
+	    'cleartool-error-not-a-vob-object)
+	   ((string-match "^cleartool: Error: Label type not found: " message)
+	    'cleartool-error-label-not-found)
+	   (t
+	    'cleartool-error))
+     (list
+      ;; make the error mesasge look nicer
+      (replace-regexp-in-string
+       "\n$" ""
+       (replace-regexp-in-string
+	"\"" "'"
+	(replace-regexp-in-string "cleartool: Error: " "" message)))))))
 
 (defun cleartool-tq-sentinel (process event)
   "Sentinel for the cleartool PROCESS.
@@ -737,9 +763,12 @@ for checking them back in)."
       (dolist (e elements)
 	(cleartool "mkelem -nc \"%s\"" e)))
 
-    (if need-checkin?
-	(cons dir elements)
-	elements)))
+    ;; Return the elements in the order they can be uncheckedout without
+    ;; errors (checking them in works in any order).
+    (nreverse
+     (if need-checkin?
+	 (cons dir elements)
+	 elements))))
 
 (defmacro with-clearcase-checkout (elem &rest body)
   "Ensure that ELEM is checked out, than execute BODY.
@@ -750,18 +779,18 @@ fails, we undo them. ELEM can be either a file or a directory."
   (let ((checkouts (make-symbol "checkouts"))
 	(path (make-symbol "path"))
 	(succeded? (make-symbol "succeded?")))
-    `(let* ((,path ,elem)
+    `(let* ((,path (expand-file-name ,elem))
 	    (,checkouts nil)    ; a list of all directories we had to checkout
 	    (,succeded? nil))
        (unwind-protect
 	    (progn
-	      (if (equal (cleartool "desc -fmt \"%%Vn\" \"%s\"" ,path) "")
-		  ;; path does not have a version, register it
-		  (setq ,checkouts (clearcase-register-path ,path))
+	      (condition-case error
 		  (when (equal (cleartool "desc -fmt \"%%Rf\" \"%s\"" ,path) "")
-		    ;; path is registered, but not checked out
 		    (cleartool "co -nquery -ptime -nwarn -reserved -nc \"%s\"" ,path)
-		    (setq ,checkouts (list ,path))))
+		    (setq ,checkouts (list ,path)))
+		(cleartool-error-not-a-vob-object
+		 ;; path is not registered with clearcase
+		 (setq ,checkouts (clearcase-register-path ,path))))
 	      ,@body
 	      (setq ,succeded? t))
 	 (if ,succeded?
@@ -1097,7 +1126,7 @@ determine the root path for a snapshot view."
 
 	(when (clearcase-ucm-view-p vprop)
 	  (setf (clearcase-vprop-stream vprop)
-		(cleartool "lsstream -fmt \"%%n\" -view %s" view-tag))))
+		(cleartool "lsstream -obsolete -fmt \"%%n\" -view %s" view-tag))))
 
       (when (and dir
 		 (null (clearcase-vprop-root-path vprop))
@@ -1552,26 +1581,26 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-	(let ((ls-result (cleartool "ls \"%s\"" file)))
-	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
-	    (throw 'done nil))          ; file is not registered
+       (let ((ls-result (cleartool "ls \"%s\"" file)))
+	 (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	   (throw 'done nil))           ; file is not registered
 
-	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
-	  ;; anticipate that the version will be needed shortly, so ask for
-	  ;; it.  When a file is hijacked, do the desc command on the version
-	  ;; extended name of the file, as cleartool will return nothing for
-	  ;; the hijacked version...
-	  (let ((pname (if (clearcase-fprop-hijacked-p fprop)
-			   (concat file "@@" (clearcase-fprop-version fprop))
-			   file)))
-	    (setf (clearcase-fprop-version-tid fprop)
-		  (cleartool-ask
-		   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-		   'nowait
-		   fprop
-		   'clearcase-set-fprop-version-stage-2))))
-	(vc-file-setprop file 'vc-clearcase-fprop fprop)
-	(throw 'done t)))))
+	 (clearcase-set-fprop-version-stage-1 fprop ls-result)
+	 ;; anticipate that the version will be needed shortly, so ask for
+	 ;; it.  When a file is hijacked, do the desc command on the version
+	 ;; extended name of the file, as cleartool will return nothing for
+	 ;; the hijacked version...
+	 (let ((pname (if (clearcase-fprop-hijacked-p fprop)
+			  (concat file "@@" (clearcase-fprop-version fprop))
+			  file)))
+	   (setf (clearcase-fprop-version-tid fprop)
+		 (cleartool-ask
+		  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		  'nowait
+		  fprop
+		  'clearcase-set-fprop-version-stage-2))))
+       (vc-file-setprop file 'vc-clearcase-fprop fprop)
+       (throw 'done t)))))
 
 (defun vc-clearcase-state (file)
   "Return the current version control state of FILE.
@@ -1869,10 +1898,10 @@ responsible if the transaction id is positive."
 
     (t
      (ignore-cleartool-errors
-       (with-cleartool-directory (file-name-directory file)
-	 (not (equal (replace-regexp-in-string
-		      "[\n\r]+" "" (cleartool "pwv -short"))
-		     "** NONE **")))))))
+      (with-cleartool-directory (file-name-directory file)
+	(not (equal (replace-regexp-in-string
+		     "[\n\r]+" "" (cleartool "pwv -short"))
+		    "** NONE **")))))))
 
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
@@ -2224,7 +2253,7 @@ is lost."
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
       (ignore-cleartool-errors
-	(cleartool "reserve -ncomment \"%s\"" file))
+       (cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
     (when (and (not editable)
@@ -2308,7 +2337,7 @@ has a reserved checkout of the file."
 	  (set-file-modes file (logior (file-modes file) #o220))
 	  (delete-file keep-file)
 	  (ignore-cleartool-errors
-	    (cleartool "reserve -ncomment \"%s\"" file))
+	   (cleartool "reserve -ncomment \"%s\"" file))
 	  (clearcase-maybe-set-vc-state file 'force))
 
       (cleartool-error
@@ -2755,7 +2784,7 @@ element * NAME -nocheckout"
     ;; let's see if the label exists
     (condition-case nil
 	(cleartool "desc -fmt \"ok\" lbtype:%s" name)
-      (cleartool-error
+      (cleartool-error-label-not-found
        (let ((should-create
 	      (ecase clearcase-no-label-action
 		('create t)
@@ -2778,12 +2807,12 @@ element * NAME -nocheckout"
       (when dir?                        ; apply label to parent directories
 	(message "Applying label to parent directories...")
 	(ignore-cleartool-errors
-	  (while t                      ; until cleartool will throw an error
-	    (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-	    (setq dir (file-name-directory dir))
-	    (cleartool
-	     "mklabel -nc %s lbtype:%s \"%s\""
-	     (if branchp "-replace" "") name dir)))))
+	 (while t                       ; until cleartool will throw an error
+	   (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	   (setq dir (file-name-directory dir))
+	   (cleartool
+	    "mklabel -nc %s lbtype:%s \"%s\""
+	    (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
 

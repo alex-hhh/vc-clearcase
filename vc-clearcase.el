@@ -1284,8 +1284,6 @@ to be read from cleartool."
 This can be used to obtain the vob-tag required for the
 `clearcase-read-label' function."
   (setq path (expand-file-name path))
-  (unless (file-exists-p path)
-    (error "%s does not exist" path))
   (with-cleartool-directory
       (if (file-directory-p path) path (file-name-directory path))
     (let ((view-root (cleartool "pwv -root")))
@@ -2869,16 +2867,27 @@ Previous versions of the directory will still contain FILE."
 
 (defun vc-clearcase-rename-file (old new)
   "Rename file from OLD to NEW.
-Both in the working area and in the repository are renamed."
+When both OLD and NEW are in the same VOB, a ClearCase rename is
+used, this will preserve the file's history.  When OLD and NEW
+are in different VOBs, the file is copied and registered in the
+new location and removed from the old."
   ;; Unfortunately vc-rename-file will not expand these for us
   (setq old (expand-file-name old))
   (setq new (expand-file-name new))
   (with-clearcase-checkout (file-name-directory old)
     (with-clearcase-checkout (file-name-directory new)
-      (with-clearcase-cfile (comment-file
-			     (format "*renamed from %s to %s*" old new))
-	;; let the cleartool error be directly reported
-	(cleartool "mv -cfile %s \"%s\" \"%s\"" comment-file old new)))))
+      (with-clearcase-cfile (comment (format "*renamed from %s to %s*" old new))
+	(let ((old-vob (clearcase-vob-tag-for-path old))
+	      (new-vob (clearcase-vob-tag-for-path new)))
+	  (if (equal old-vob new-vob)
+	      (cleartool "mv -cfile %s \"%s\" \"%s\"" comment old new)
+	      (progn
+		;; renaming a file accross different vobs is not supported by
+		;; ClearCase.
+		(copy-file old new)
+		(cleartool "mkelem -cfile %s \"%s\"" comment new)
+		(cleartool "rmname -cfile %s \"%s\"" comment old)
+		(cleartool "checkin -nc \"%s\"" new))))))))
 
 
 ;;;; A library of clearcase utilities

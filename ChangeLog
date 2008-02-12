@@ -1,3 +1,9 @@
+2008-02-12  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-clearcase-rename-file): 1.151 handle the
+	case when the source and destinations are in different VOBs
+	(clearcase-vob-tag-for-path): 1.151 don't check if PATH exists.
+
 2008-02-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (cleartool-error-not-a-vob-object)

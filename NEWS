@@ -2,6 +2,8 @@
 
 * Release 
 
+** renaming files works when the destination is in a different VOB
+
 ** ucm-checkin-activity will undo checkout on unchanged files
    This allows the checkin to succeed when there are unchanged files
    (ClearCase will not checkin a file with no changes)

@@ -1,5 +1,7 @@
 2008-02-13  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
+	* version 1.152 released
+
 	* ucm.el (ucm-show-current-activity): 1.19 when the current file
 	is checked out under a different activity than the one set in the
 	view, show both

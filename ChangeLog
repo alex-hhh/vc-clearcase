@@ -1,3 +1,9 @@
+2008-02-13  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-show-current-activity): 1.19 when the current file
+	is checked out under a different activity than the one set in the
+	view, show both
+
 2008-02-12  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-rename-file): 1.151 handle the

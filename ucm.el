@@ -139,24 +139,44 @@ number of checked out files."
     (let ((headline (cleartool "lsact -cact -fmt \"%%[headline]p\""))
 	  versions
 	  (files 0)
-	  (checkouts 0))
-      (if (equal headline "")
-	  (message "No current activity set.")
-	  (when extra-info
-	    (with-temp-message "Collecting activity statistics..."
-	      (setq versions
-		    (split-string
-		     (cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
-	      (setq files (make-hash-table :test 'equal))
-	      (dolist (v versions)
-		(when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
-		  (incf checkouts))
-		(when (string-match "^\\(.*\\)@@" v)
-		  (setf (gethash (match-string 1 v) files) t)))))
-	  (if extra-info
-	      (message "%s; %d files, %d revisions, %d checked-out"
-		       headline (hash-table-count files) (length versions) checkouts)
-	      (message "%s" headline))))))
+	  (checkouts 0)
+	  file-activity-headline)
+
+      ;; If the current file is checked out under a different activity,
+      ;; display that in the message...
+
+      (let ((file (buffer-file-name (current-buffer))))
+	(when file
+	  (let ((fprop (clearcase-file-fprop file)))
+	    (when fprop
+	      (when (clearcase-fprop-checkedout-p fprop)
+		(setq file-activity-headline
+		      (cleartool "lsact -fmt \"%%[headline]p\" %s"
+				 (cleartool "desc -fmt \"%%[activity]p\" \"%s\""
+					    file))))))))
+      (if (and file-activity-headline
+	       (not (equal headline file-activity-headline)))
+
+	  (message "View activity: %s; File's checkout activity: %s"
+		   headline file-activity-headline)
+
+	  (if (equal headline "")
+	      (message "No current activity set.")
+	      (when extra-info
+		(with-temp-message "Collecting activity statistics..."
+		  (setq versions
+			(split-string
+			 (cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
+		  (setq files (make-hash-table :test 'equal))
+		  (dolist (v versions)
+		    (when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
+		      (incf checkouts))
+		    (when (string-match "^\\(.*\\)@@" v)
+		      (setf (gethash (match-string 1 v) files) t)))))
+	      (if extra-info
+		  (message "%s; %d files, %d revisions, %d checked-out"
+			   headline (hash-table-count files) (length versions) checkouts)
+		  (message "%s" headline)))))))
 
 (defface ucm-field-name-face
     '((t (:inherit font-lock-keyword-face :weight bold)))

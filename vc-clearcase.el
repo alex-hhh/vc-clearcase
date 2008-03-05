@@ -128,10 +128,7 @@
 ;;
 ;; HISTORY FUNCTIONS
 ;;
-;; * print-log (file &optional buffer) -- implemented, but as a
-;;   separate function (vc-print-log is defadvice'd).  ClearCase logs
-;;   look nothing like CVS logs, especially since revision names are
-;;   so different.
+;; * print-log (file &optional buffer) -- implemented.
 ;;
 ;; - show-log-entry (version) -- implemented, but see `print-log'
 ;;
@@ -848,56 +845,6 @@ otherwise it returns the value of the last form in BODY."
        (progn ,@body)
      (cleartool-error nil)))
 
-;;;; Clearcase Log View mode
-
-;; The existing logview mode in Emacs works only for RCS style logs.
-;; We define our own mode for the ClearCase logs (which are called
-;; lshistory in ClearCase).
-
-(defvar clearcase-lshistory-fmt
-  (concat "----------------------------\n"
-	  "revision %Vn (%e)\n"
-	  "date: %d; author: %u\n"
-	  "%c")
-  "Format string to use when listing file history.")
-
-(defvar clearcase-lshistory-fmt-ucm
-  (concat "----------------------------\n"
-	  "revision %Vn (%e)\n"
-	  "date: %d; author: %u\n"
-	  "activity: %[activity]p\n"
-	  "%c")
-  "Format string so use when listing file history.
-This is used when the file is in a UCM project.")
-
-(defconst clearcase-log-view-file-re
-  "^Working file: \\(.+\\)$"
-  "Regexp to match the filename in a lshistory listing
-The actual filename is the first match subexpression")
-
-(defconst clearcase-log-view-message-re
-  "^revision \\(\\S-+\\) (\\(?:create\\|checkout\\) version)"
-  "Regexp to match the start of a lshistory record
-The revision is the first match subexpression.")
-
-(defconst clearcase-log-view-font-lock-keywords
-  `(("-+" . font-lock-comment-face)
-    (,clearcase-log-view-file-re . log-view-file-face)
-    (,clearcase-log-view-message-re . log-view-message-face)
-    ("(reserved)" . font-lock-variable-name-face)
-    ("<No-tag-in-region>" . font-lock-warning-face)))
-(defconst clearcase-log-view-font-lock-defaults
-  '(clearcase-log-view-font-lock-keywords t nil nil nil))
-
-(define-derived-mode clearcase-log-view-mode log-view-mode
-  "Cc-Log-View"
-  "View clearcase log listings"
-  (set (make-local-variable 'font-lock-defaults)
-       clearcase-log-view-font-lock-defaults)
-  (set (make-local-variable 'log-view-message-re)
-       clearcase-log-view-message-re)
-  (set (make-local-variable 'log-view-file-re)
-       clearcase-log-view-file-re))
 
 ;;;; Clearcase file properties
 
@@ -1424,7 +1371,7 @@ waste of resources."
    nil
    initial))
 
-;;;; Vc interface + some helpers
+;;;; Some helpers functions
 
 (defvar clearcase-dir-state-cache
   (make-hash-table :test 'equal)
@@ -1455,6 +1402,18 @@ ClearCase uses."
       (incf n)
       (setq keep-file (format "%s.keep.%d" file-name n)))
     keep-file))
+
+(defun clearcase-revision-contributors (file revision)
+  "Return the revisions which were merged into FILE's REVISION."
+  (assert (vc-clearcase-registered file))
+  (let ((merge-links (cleartool "desc -short -ahlink Merge \"%s@@%s\"" file revision))
+	result)
+    (dolist (merge-link (split-string merge-links "[\n\r]"))
+      (when (string-match "^<- " merge-link)    ; "Merge From" arrow
+	(when (string-match "@@\\(.*\\)" merge-link)
+	  (let ((merged-revision (match-string 1 merge-link)))
+	    (push merged-revision result)))))
+    (nreverse result)))
 
 (defun clearcase-maybe-set-vc-state (file &optional force)
   "Lazily set the clearcase specific properties of FILE.
@@ -1528,7 +1487,9 @@ If FORCE is not nil, always read the properties."
 		 (read-string "New snapshot name: "))
 	   current-prefix-arg))))
 
-
+;;;; vc.el interface
+;;;;; STATE-QUERYING FUNCTIONS
+;;;;;; registered
 
 ;;;###autoload(defun vc-clearcase-registered (file)
 ;;;###autoload  (let (wdview
@@ -1600,6 +1561,8 @@ version."
        (vc-file-setprop file 'vc-clearcase-fprop fprop)
        (throw 'done t)))))
 
+;;;;;; state
+
 (defun vc-clearcase-state (file)
   "Return the current version control state of FILE.
 
@@ -1654,7 +1617,7 @@ checked it out.
     ;; information we need.
     (vc-clearcase-state-heuristic file)))
 
-
+;;;;;; state-heuristic
 (defun vc-clearcase-state-heuristic (file)
   "Determine the state of FILE.
 Use whatever `clearcase-maybe-set-vc-state' gave us.  See
@@ -1680,6 +1643,7 @@ information."
       ;; branch...
       (t 'needs-patch))))
 
+;;;;;; dir-state
 (defun vc-clearcase-dir-state (dir)
   "Determine the state of all files in DIR.
 This is a slow operation so it will not detect the proper state
@@ -1778,6 +1742,7 @@ have a correct state."
 	(erase-buffer))))
   (message "vc-clearcase-dir-state: %s completed." dir))
 
+;;;;;; workfile-version
 (defun vc-clearcase-workfile-version (file)
   "Return the workfile version of FILE.
 If the file is checked out, In ClearCase, the version is always
@@ -1786,6 +1751,7 @@ separate version, so we return the parent version in that case."
   (clearcase-maybe-set-vc-state file)
   (clearcase-fprop-version (clearcase-file-fprop file)))
 
+;;;;;; latest-on-branch-p
 (defun vc-clearcase-latest-on-branch-p (file)
   "Return true if FILE is the latest version on the branch."
   (clearcase-maybe-set-vc-state file)
@@ -1793,10 +1759,12 @@ separate version, so we return the parent version in that case."
     (string= (clearcase-fprop-version fprop)
 	     (clearcase-fprop-latest fprop))))
 
+;;;;;; checkout-model
 (defun vc-clearcase-checkout-model (file)
   "Checkout model for ClearCase is always locking for every FILE."
   'locking)
 
+;;;;;; workfile-unchanged-p
 (defun vc-clearcase-workfile-unchanged-p (file)
   "Return true if FILE is unchanged.
 We consider it unchanged if it is checked in, or checked out but
@@ -1813,6 +1781,7 @@ modified even if no modifications were made."
 		"Files are identical\n"))
       (t nil))))
 
+;;;;;; mode-line-string
 (defcustom clearcase-wash-mode-line-function nil
   "Function to call to post-process the mode line string.
 This is a function which receives a string representing the
@@ -1852,6 +1821,7 @@ abbreviating these strings based on site-specific information."
       (setq mode-line (funcall clearcase-wash-mode-line-function mode-line)))
     mode-line))
 
+;;;;;; dired-state-info
 (defun vc-clearcase-dired-state-info (file)
   "Return a string corresponding to the status of FILE.
 We use the ClearCase terminology for the 'edited and
@@ -1861,6 +1831,8 @@ We use the ClearCase terminology for the 'edited and
 	  ((eq state 'unlocked-changes) "(hijacked)")
 	  (t (vc-default-dired-state-info "CLEARCASE" file)))))
 
+;;;;; STATE-CHANGING FUNCTIONS
+;;;;;; register
 (defun vc-clearcase-register (file &optional rev comment)
   "Register FILE with clearcase.  REV and COMMENT are ignored.
 ClearCase requires the directory in which file resides to be
@@ -1882,6 +1854,7 @@ it's parents is registered."
       (vc-file-setprop file 'vc-clearcase-fprop fprop)
       (clearcase-maybe-set-vc-state file 'force))))
 
+;;;;;; responsible-p
 (defun vc-clearcase-responsible-p (file)
   "Return t if we responsible for FILE.
 We consider ourselves responsible if FILE is inside a ClearCase
@@ -1901,6 +1874,7 @@ responsible if the transaction id is positive."
 		     "[\n\r]+" "" (cleartool "pwv -short"))
 		    "** NONE **")))))))
 
+;;;;;; checkin
 (defun vc-clearcase-checkin (file rev comment)
   "Checkin FILE.
 REV is ignored, COMMENT is the checkin comment."
@@ -1917,6 +1891,7 @@ REV is ignored, COMMENT is the checkin comment."
   (when (clearcase-file-fprop file)
     (clearcase-maybe-set-vc-state file 'force)))
 
+;;;;;; find-version
 (defun clearcase-find-version-helper (file rev destfile)
   "Get the FILE revision REV into DESTFILE.
 This is a helper function user by both
@@ -1953,6 +1928,7 @@ meaning in ClearCase."
       (when (file-exists-p tmp)
 	(delete-file tmp)))))
 
+;;;;;; checkout
 (defun clearcase-finish-checkout (file rev comment mode)
   "Finish a checkout started by `vc-clearcase-checkout'.
 FILE, REV and COMMENT are the same as the one from
@@ -2130,6 +2106,7 @@ This method does three completely different things:
      (error "Bad param combinations in vc-clearcase-checkout: %S %S %S"
 	    editable rev destfile))))
 
+;;;;;; revert
 (defcustom clearcase-rmbranch-on-revert-flag t
   "Non-nil means remove a branch when a revert leaves no versions on it.
 When a checkout operation creates a new branch, the uncheckout
@@ -2162,7 +2139,7 @@ CONTENTS-DONE is ignored.  The
 		(cleartool "update -overwrite -force \"%s\"" file))))))
     (clearcase-maybe-set-vc-state file 'force)))
 
-
+;;;;;; cancel-version
 (defun vc-clearcase-cancel-version (file editable)
   "Remove the current version of FILE.
 FILE must be checked in and latest on its branch.  We use
@@ -2269,7 +2246,7 @@ is lost."
 
     (clearcase-maybe-set-vc-state file 'force)))
 
-
+;;;;;; merge
 (defun vc-clearcase-merge (file rev1 rev2)
   "Merge into FILE REV1 up to REV2.
 
@@ -2289,6 +2266,7 @@ but how do we detect it?"
 	(shrink-window-if-larger-than-buffer)))
     0))                                 ; return success
 
+;;;;;; merge-news
 (defun vc-clearcase-merge-news (file)
   "Merge the new versions in FILE."
   (setq file (expand-file-name file))
@@ -2309,6 +2287,7 @@ but how do we detect it?"
 	  (shrink-window-if-larger-than-buffer)))
       0)))                              ; return success
 
+;;;;;; steal-lock
 (defun vc-clearcase-steal-lock (file &optional version)
   "Checkout a hijacked FILE and keep its current contents.
 VERSION is not used, and we signal an error if it is not nil.
@@ -2345,12 +2324,8 @@ has a reserved checkout of the file."
 	 (rename-file keep-file file))
        (error (error-message-string err))))))
 
-(defvar clearcase-file-name nil
-  "File name for which this log was generated.")
-
-(make-variable-buffer-local 'clearcase-file-name)
-(put 'clearcase-file-name 'permanent-local t)
-
+;;;;; HISTORY FUNCTIONS
+;;;;;; print-log
 (defcustom clearcase-print-log-show-labels 'some
   "How to display the labels in the log (lshistory) output.
 The value of this variable should be one of the three symbols:
@@ -2369,21 +2344,33 @@ all -- all the labels for each version are displayed.  This
 	  (const :tag "All" all))
   :group 'vc-clearcase)
 
-(defun vc-clearcase-print-log (file)
+(defvar clearcase-lshistory-fmt
+  (concat "----------------------------\n"
+	  "revision %Vn (%e)\n"
+	  "date: %d; author: %u\n"
+	  "%c")
+  "Format string to use when listing file history.")
+
+(defvar clearcase-lshistory-fmt-ucm
+  (concat "----------------------------\n"
+	  "revision %Vn (%e)\n"
+	  "date: %d; author: %u\n"
+	  "activity: %[activity]p\n"
+	  "%c")
+  "Format string so use when listing file history.
+This is used when the file is in a UCM project.")
+
+(defun vc-clearcase-print-log (file &optional buffer)
   "Insert the history of FILE into the *clearcase-lshistory* buffer.
-
 With a prefix argument, all events are listed (-minor option is
-sent to cleartool).
-
-This is not intended to be called directly from the vc.el.
-Instead, `vc-print-log' is advised to call this function directly
-for Clearcase registered files."
+sent to cleartool)."
   (setq file (expand-file-name file))
-  (let ((buf (get-buffer-create "*clearcase-lshistory*"))
+  (let ((inhibit-read-only t)
+	(buf (if buffer
+		 (get-buffer-create buffer)
+		 (get-buffer-create "*vc*")))
 	(label-revisions nil)
 	(max-label-length 0))
-
-    (vc-setup-buffer buf)
 
     (when (memq clearcase-print-log-show-labels '(some all))
       (with-temp-message "Collecting label information..."
@@ -2403,11 +2390,7 @@ for Clearcase registered files."
 		  (push (cons label revision) label-revisions))))))))
 
     (with-current-buffer buf
-      (let ((inhibit-read-only t))
 	(erase-buffer)
-	(switch-to-buffer-other-window buf)
-	(clearcase-log-view-mode)
-
 	(insert (format "Working file: %s\n" file))
 
 	(when (memq clearcase-print-log-show-labels '(some all))
@@ -2417,33 +2400,47 @@ for Clearcase registered files."
 	    (dolist (label label-revisions)
 	      (insert (format fmtstr (car label) (cdr label))))))
 
-	(let* ((args (list "-fmt" (if (clearcase-ucm-view-p
+      (let ((args (list "-fmt" (if (clearcase-ucm-view-p
 				       (clearcase-file-fprop file))
 				      clearcase-lshistory-fmt-ucm
 				      clearcase-lshistory-fmt)
-			   file))
-	       (process (cleartool-do "lshistory"
-				      (if current-prefix-arg
-					  (cons "-minor" args)
-					  args)
-				      (current-buffer))))
-	  (setq clearcase-file-name file)
-	  (setq cleartool-finished-function
-		'(lambda ()
-		  (let ((fprop
-			 (clearcase-file-fprop clearcase-file-name)))
-		    (vc-clearcase-show-log-entry
-		     (clearcase-fprop-version fprop))))))))))
+			file)))
+	(apply 'start-process
+	       "cleartool-lshistory" buffer
+	       cleartool-program "lshistory"
+	       (if current-prefix-arg (cons "-minor" args) args))))))
 
-(defadvice vc-print-log (around clearcase-print-log-advice)
-  "On Clearcase files, call 'vc-clearcase-print-log' directly.
-On all other files call the normal `vc-print-log'."
-  (vc-ensure-vc-buffer)
-  (let ((file buffer-file-name))
-    (if (vc-clearcase-registered file)
-	(vc-clearcase-print-log file)
-	ad-do-it)))
+;;;;;; log-view-mode
+(defconst clearcase-log-view-file-re
+  "^Working file: \\(.+\\)$"
+  "Regexp to match the filename in a lshistory listing
+The actual filename is the first match subexpression")
 
+(defconst clearcase-log-view-message-re
+  "^revision \\(\\S-+\\) (\\(?:create\\|checkout\\) version)"
+  "Regexp to match the start of a lshistory record
+The revision is the first match subexpression.")
+
+(defconst clearcase-log-view-font-lock-keywords
+  `(("-+" . font-lock-comment-face)
+    (,clearcase-log-view-file-re . log-view-file-face)
+    (,clearcase-log-view-message-re . log-view-message-face)
+    ("(reserved)" . font-lock-variable-name-face)
+    ("<No-tag-in-region>" . font-lock-warning-face)))
+(defconst clearcase-log-view-font-lock-defaults
+  '(clearcase-log-view-font-lock-keywords t nil nil nil))
+
+(define-derived-mode vc-clearcase-log-view-mode log-view-mode
+  "Cc-Log-View"
+  "Mode to view clearcase log listings."
+  (set (make-local-variable 'font-lock-defaults)
+       clearcase-log-view-font-lock-defaults)
+  (set (make-local-variable 'log-view-message-re)
+       clearcase-log-view-message-re)
+  (set (make-local-variable 'log-view-file-re)
+       clearcase-log-view-file-re))
+
+;;;;;; show-log-entry
 (defun vc-clearcase-show-log-entry (version)
   "Search for VERSION in the current buffer.
 Only works for the clearcase log format defined in
@@ -2459,7 +2456,7 @@ Only works for the clearcase log format defined in
 	(setq pos (match-beginning 0))))
     (when pos (goto-char pos))))
 
-
+;;;;;; diff
 (defcustom vc-clearcase-diff-switches nil
   "*Extra switches for clearcase diff under VC.
 This is either a string or a list of strings.  Useful options
@@ -2609,6 +2606,7 @@ when REV2 is nil, the current contents of the file are used."
 	  (goto-char diff-start-pos)
 	  identical)))))
 
+;;;;;; annotate-command
 (defun vc-clearcase-annotate-command (file buf rev)
   "Get the annotations for FILE and put them in BUF.
 REV is the revision we want to annotate.  With prefix argument,
@@ -2629,18 +2627,6 @@ will ask if you want to display the deleted sections as well."
 	      '(lambda ()
 		(let ((buffer (current-buffer)))
 		  (clearcase-annotate-post-process buffer))))))))
-
-(defun vc-clearcase-annotate-difference (point)
-  "Return the age in days of POINT."
-  (get-text-property point 'vc-clearcase-age))
-
-(defun vc-clearcase-annotate-time ()
-  "Return the time in days of (point)."
-  (get-text-property (point) 'vc-clearcase-time))
-
-(defun vc-clearcase-annotate-extract-revision-at-line ()
-  "Return the version of (point)."
-  (get-text-property (point) 'vc-clearcase-revision))
 
 (defconst clearcase-annotate-months
   '(("Jan" . 1) ("Feb" . 2) ("Mar" . 3) ("Apr" . 4)
@@ -2725,6 +2711,23 @@ and `vc-clearcase-annotate-revision-atline' work fast."
 	  (put-text-property 0 max 'vc-clearcase-revision revision str)
 	  (replace-match str nil t))))))
 
+;;;;;; annotate-difference
+(defun vc-clearcase-annotate-difference (point)
+  "Return the age in days of POINT."
+  (get-text-property point 'vc-clearcase-age))
+
+;;;;;; annotate-time
+(defun vc-clearcase-annotate-time ()
+  "Return the time in days of (point)."
+  (get-text-property (point) 'vc-clearcase-time))
+
+;;;;;; annotate-exact-revision-at-line
+(defun vc-clearcase-annotate-extract-revision-at-line ()
+  "Return the version of (point)."
+  (get-text-property (point) 'vc-clearcase-revision))
+
+;;;;; SNAPSHOT SYSTEM
+;;;;;; create-snapshot
 (defcustom clearcase-no-label-action 'ask
   "What to do when we are asked to apply a label that does not exist.
 There are three possible values for this variable:
@@ -2813,7 +2816,8 @@ element * NAME -nocheckout"
 	    (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
-
+;;;;; MISCELLANEOUS
+;;;;;; previous-version
 (defun vc-clearcase-previous-version (file rev)
   "Return the FILE revision that precedes the revision REV.
 Return nil if no such revision exists."
@@ -2829,6 +2833,7 @@ Return nil if no such revision exists."
 	    (vc-clearcase-previous-version file prev)
 	    prev))))
 
+;;;;;; next-version
 (defun vc-clearcase-next-version (file rev)
   "Return the FILE revision that follows the revision REV.
 Return nil if no such revision exists."
@@ -2855,6 +2860,7 @@ Return nil if no such revision exists."
 	(message "Building revision list...done.")))
     (car (cdr-safe (member rev revision-list)))))
 
+;;;;;; delete-file
 (defun vc-clearcase-delete-file (file)
   "Remove FILE from ClearCase.
 Previous versions of the directory will still contain FILE."
@@ -2862,9 +2868,7 @@ Previous versions of the directory will still contain FILE."
   (with-clearcase-checkout (file-name-directory file)
     (cleartool "rmname -nc \"%s\"" file)))
 
-;;; NOTE: for some reason, the renamed file does not show up as a
-;;; clearcase registered until after I kill it and re-open it...
-
+;;;;;; rename-file
 (defun vc-clearcase-rename-file (old new)
   "Rename file from OLD to NEW.
 When both OLD and NEW are in the same VOB, a ClearCase rename is
@@ -2889,9 +2893,24 @@ new location and removed from the old."
 		(cleartool "rmname -cfile %s \"%s\"" comment old)
 		(cleartool "checkin -nc \"%s\"" new))))))))
 
+;;;;;; extra-menu
 
-;;;; A library of clearcase utilities
+(defvar vc-clearcase-extra-menu)
 
+(easy-menu-define vc-clearcase-extra-menu vc-clearcase-extra-menu
+  "Menu for the ClearCase specific commands"
+  '("Clearcase"
+    ["Show file version" vc-clearcase-what-version t]
+    ["Show configspec rule" vc-clearcase-what-rule t]
+    ["Show view tag" vc-clearcase-what-view-tag t]
+    ["Browse version tree (GUI)" vc-clearcase-gui-vtree-browser t]))
+
+(defun vc-clearcase-extra-menu ()
+  vc-clearcase-extra-menu)
+
+;;;; CLEARCASE SPECIFIC COMMANDS
+;;;;;
+;;;;;; vc-clearcase-get-label-differences
 (defun vc-clearcase-get-label-differences (dir label-1 label-2)
   "Return the changed files in DIR between LABEL-1 and LABEL-2.
 A list is returned, each element is another list of
@@ -3005,8 +3024,7 @@ The list of files is not returned in any particular order."
 		  (if (equal file "") "." file))
 		(car v) (cdr v)))))
 
-;;;; Additional vc clearcase commands (for files)
-
+;;;;;; what-version
 (defun vc-clearcase-what-version (file)
   "Show the version of FILE and save the version in the kill ring.
 
@@ -3035,6 +3053,7 @@ the whole revision string."
 		     (t "")))))
       (message "Not a clearcase file")))
 
+;;;;;; what-rule
 (defun vc-clearcase-what-rule (file)
   "Show the configspec rule for FILE."
   (interactive (list (buffer-file-name (current-buffer))))
@@ -3048,6 +3067,7 @@ the whole revision string."
 	      (message "No configspec rule"))))
       (message "Not a clearcase file")))
 
+;;;;;; what-view-tag
 (defun vc-clearcase-what-view-tag (file)
   "Show view in which FILE resides.
 For UCM views, show the current activity as well.  If FILE is
@@ -3071,6 +3091,7 @@ null, the file visited in the current buffer is used."
 	;; else
 	(message "View tag: %s" (clearcase-vprop-name vprop)))))
 
+;;;;;; gui-vtree-browser
 (defun vc-clearcase-gui-vtree-browser (ask-for-file)
   "Start the version tree browser GUI on a file or directory.
 When ASK-FOR-FILE is nil, the file in the current buffer is used.
@@ -3090,6 +3111,7 @@ be browsed)"
 	   "Vtree_browser" nil clearcase-vtree-program file))
 	(message "Not a clearcase file"))))
 
+;;;;;; clearcase-file-not-found-handler
 
 ;;; If we don't autoload this function, the functionality will not be
 ;;; available until the first ClearCase file is opened.  If we do autoload it,
@@ -3116,6 +3138,7 @@ will open the specified version in another window, using
 	  t                             ; return t, so no other handler works
 	  )))))
 
+;;;;;; clearcase-hijack-file-handler
 (defun clearcase-hijack-file-handler ()
   "Detect the hijacking of a file and update the FPROP accordingly."
   (let ((file (buffer-file-name)))
@@ -3129,8 +3152,7 @@ will open the specified version in another window, using
 	    (vc-resynch-buffer file t t))))))
   nil)
 
-;;;; Additional vc clearcase commands (for directories)
-
+;;;;;; checkout-directory
 ;;;###autoload
 (defun vc-clearcase-checkout-directory (dir)
   "Checkout directory DIR, or do nothing if already checked out.
@@ -3149,6 +3171,7 @@ directory revision is created instead."
       (with-temp-message (format "Checking out %s" dir)
 	(cleartool "checkout -nc \"%s\"" dir))))
 
+;;;;;; checkin-directory
 ;;;###autoload
 (defun vc-clearcase-checkin-directory (dir)
   "Checkin directory DIR, or do nothing if already checked in.
@@ -3161,6 +3184,7 @@ be usefull."
       (with-temp-message (format "Checking in %s" dir)
 	(cleartool "checkin -nc \"%s\"" dir))))
 
+;;;;;; list-checkouts
 (defconst cleartool-lsco-fmt
   (concat "Working file: %n\n"
 	  "revision %PVn (%Rf)\n"
@@ -3194,13 +3218,14 @@ all the views are listed."
 	(insert "Cleartool command: "
 		(format "%S" (append user-selection other-options))
 		"\n")
-	(clearcase-log-view-mode)
+	(vc-clearcase-log-view-mode)
 	(let ((process
 	       (cleartool-do
 		"lsco"
 		(append user-selection other-options) (current-buffer))))
 	  (switch-to-buffer-other-window (process-buffer process)))))))
 
+;;;;;; update-view
 ;;;###autoload
 (defun vc-clearcase-update-view (dir prefix-arg)
   "Run a cleartool update command in DIR and display the results.
@@ -3224,6 +3249,7 @@ are made to the views)."
 	  ;; from this view?
 	  )))))
 
+;;;;;; label-diff-report
 (when (fboundp 'define-button-type)
   (define-button-type 'vc-clearcase-start-ediff-button
       'face 'default
@@ -3306,6 +3332,7 @@ and LABEL-2'."
       (pop-to-buffer (current-buffer))))
   (message "Fetching label differencess...done."))
 
+;;;;;; list-view-private-files
 ;;;###autoload
 (defun vc-clearcase-list-view-private-files (dir)
   "List the view private files in DIR.
@@ -3322,7 +3349,7 @@ You can edit the files using 'find-file-at-point'"
     (pop-to-buffer buf)))
 
 
-;;;; Editing configspecs
+;;;;;; configspec editor
 
 (defvar clearcase-edcs-view-tag nil
   "The name of the view whose configspec we are editing.")
@@ -3451,6 +3478,7 @@ of the current file's view-tag."
       (pop-to-buffer (current-buffer))
       (message "Edit your configspec.  Type C-c C-c when done."))))
 
+;;;;;; start-view
 ;;;###autoload
 (defun vc-clearcase-start-view (view-tag)
   "Start the dynamic view for VIEW-TAG.
@@ -3476,63 +3504,33 @@ In interactive mode, prompts for a view-tag name."
   (define-key vc-prefix-map "w" 'vc-clearcase-what-rule)
   (define-key vc-prefix-map "y" 'vc-clearcase-what-version))
 
-;;;###autoload
-(progn
-  (define-key-after vc-menu-map [separator-clearcase] '("----") 'separator2)
-  (define-key-after vc-menu-map [vc-clearcase-what-version]
-    '("Show file version" . vc-clearcase-what-version) 'separator2)
-  (define-key-after vc-menu-map [vc-clearcase-what-rule]
-    '("Show configspec rule" . vc-clearcase-what-rule) 'separator2)
-  (define-key-after vc-menu-map [vc-clearcase-what-view-tag]
-    '("Show view tag" . vc-clearcase-what-view-tag) 'separator2)
-  (define-key-after vc-menu-map [vc-clearcase-gui-vtree-browser]
-    '("Browse version tree (GUI)" . vc-clearcase-gui-vtree-browser) 'separator2))
-
 ;; 'borrowed' from pcvs-defs.el, Clearcase commands that are not file
 ;; related will go in a Clearcase menu under Tools.
 ;;;###autoload
-(defvar clearcase-global-menu
-  (let ((m (make-sparse-keymap "Clearcase")))
-    (define-key m [vc-clearcase-report-bug]
-      '(menu-item "Report bug in vc-clearcase..." vc-clearcase-report-bug
-	:help "Report a bug in vc-clearcase.el"))
-    (define-key m [separator-clearcase-1]
-      '("----" 'separator-1))
-    (define-key m [vc-clearcase-label-diff-report]
-      '(menu-item "Label diff report..." vc-clearcase-label-diff-report
-	:help "Report file version differences between two labels"))
-    (define-key m [vc-clearcase-list-view-private-files]
-      '(menu-item "List View Private Files..."
-	vc-clearcase-list-view-private-files
-	:help "List view private files in a directory"))
-    (define-key m [vc-clearcase-list-checkouts]
-      '(menu-item "List Checkouts..." vc-clearcase-list-checkouts
-	:help "List Clearcase checkouts in a directory"))
-    (define-key m [vc-clearcase-update-view]
-      '(menu-item "Update snapshot view..." vc-clearcase-update-view
-	:help "Update a snapshot view"))
-    (define-key m [vc-clearcase-edcs]
-      '(menu-item "Edit Configspec..." vc-clearcase-edcs
-	:help "Edit a view's configspec"))
-    (define-key m [vc-clearcase-start-view]
-      '(menu-item "Start dynamic view..." vc-clearcase-start-view
-	:help "Start a dynamic view"))
-    (define-key m [separator-clearcase-2]
-      '("----" 'separator-2))
-    (define-key m [vc-clearcase-checkin-directory]
-      '(menu-item "Checkin directory..." vc-clearcase-checkin-directory
-	:help "Checkin a directory"))
-    (define-key m [vc-clearcase-checkout-directory]
-      '(menu-item "Checkout directory..." vc-clearcase-checkout-directory
-	:help "Checkout a directory"))
-    (fset 'clearcase-global-menu m)))
+(defvar clearcase-global-menu)
 
 ;;;###autoload
-(progn
-  (define-key-after menu-bar-tools-menu [clearcase]
-    '(menu-item "Clearcase" clearcase-global-menu)
-    'vc))
+(defvar clearcase-global-menu-map (make-sparse-keymap))
 
+;;;###autoload
+(easy-menu-define clearcase-global-menu clearcase-global-menu-map
+  "Menu for the extra (non-file related) ClearCase functionality"
+  '("ClearCase"
+    ["Checkout directory..." vc-clearcase-checkout-directory t]
+    ["Checkin directory..." vc-clearcase-checkin-directory t]
+    "----"
+    ["Start dynamic view..." vc-clearcase-start-view t]
+    ["Edit Configspec..." vc-clearcase-edcs t]
+    ["Update snapshot view..." vc-clearcase-update-view t]
+    ["List Checkouts..." vc-clearcase-list-checkouts t]
+    ["List View Private Files..." vc-clearcase-list-view-private-files t]
+    ["Label diff report..." vc-clearcase-label-diff-report t]
+    "----"
+    ["Report bug in vc-clearcase..." vc-clearcase-report-bug t]))
+
+;;;###autoload
+(easy-menu-add-item
+ menu-bar-tools-menu '() clearcase-global-menu "PCL-CVS")
 
 ;;;; Debugging aids, reporting bugs
 
@@ -3569,6 +3567,7 @@ This is the string returned by the cleartool -version command."
 vc-clearcase package except the ones listed above.  It is much
 easier to keep it up-to-date this way.")
 
+;;;###autoload
 (defun vc-clearcase-report-bug ()
   "Submit via mail a bug report on vc-clearcase.el."
   (interactive)
@@ -3691,7 +3690,6 @@ See `clearcase-trace-cleartool-tq' and
   (ad-activate 'vc-version-backup-file-name)
   (ad-activate 'vc-start-entry)
   (ad-activate 'vc-create-snapshot)
-  (ad-activate 'vc-print-log)
   (cleartool-tq-maybe-start))
 
 (defun vc-clearcase-unload-hook ()
@@ -3708,10 +3706,6 @@ See `clearcase-trace-cleartool-tq' and
   (ad-disable-advice
    'vc-create-snapshot 'before 'clearcase-provide-label-completion)
   (ad-activate 'vc-create-snapshot)
-  (ad-disable-advice
-   'vc-print-log 'around 'clearcase-print-log-advice)
-  (ad-activate 'vc-print-log)
-
   ;; unfortunately, I don't know how to restore the autoload for the
   ;; `vc-clearcase-registered' so we remove ourselves completely
   (setq vc-handled-backends (delq 'CLEARCASE vc-handled-backends)))

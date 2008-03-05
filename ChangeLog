@@ -1,3 +1,16 @@
+2008-03-05  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-revision-contributors): 1.152 new
+	function
+	(vc-clearcase-log-view-mode): 1.152 renamed from
+	`clearcase-log-view-mode'; now activated by vc.el directly.
+	(vc-clearcase-print-log): 1.152 no need for any special handling,
+	vc.el will use the right log view mode now.
+	(vc-print-log): 1.152 defadvice removed
+	(vc-clearcase-extra-menu): 1.152 replaces old clearcase extensions
+	menu.
+	(clearcase-global-menu): 1.152 use `easy-menu-define'
+
 2008-02-13  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* version 1.152 released

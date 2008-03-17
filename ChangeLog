@@ -1,3 +1,9 @@
+2008-03-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-known-vobs): 1.153 new variable
+	(vc-clearcase-responsible-p): 1.153 vc-clearcase is responsible
+	for a file if it has a valid VOB tag.
+
 2008-03-05  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-revision-contributors): 1.152 new

@@ -1855,10 +1855,16 @@ it's parents is registered."
       (clearcase-maybe-set-vc-state file 'force))))
 
 ;;;;;; responsible-p
+
+(defvar clearcase-known-vobs ()
+  "A list of the VOBS we know to exist.
+This is used by `vc-clearcase-responsible-p' to avoid doing a
+lsvob.")
+
 (defun vc-clearcase-responsible-p (file)
   "Return t if we responsible for FILE.
 We consider ourselves responsible if FILE is inside a ClearCase
-view.
+view under a VOB directory.
 
 If there is a transaction id for FILE in
 `clearcase-dir-state-cache', it means `vc-clearcase-dir-state' is
@@ -1869,10 +1875,16 @@ responsible if the transaction id is positive."
 
     (t
      (ignore-cleartool-errors
-      (with-cleartool-directory (file-name-directory file)
-	(not (equal (replace-regexp-in-string
-		     "[\n\r]+" "" (cleartool "pwv -short"))
-		    "** NONE **")))))))
+       (let ((vob (clearcase-vob-tag-for-path file)))
+	 (if (member vob clearcase-known-vobs)
+	     t
+	     ;; else
+	     (progn
+	       ;; lsvob will signal an error if VOB is not valid.
+	       (cleartool "lsvob -short \"%s\"" vob)
+	       (push vob clearcase-known-vobs)
+	       t
+	       )))))))
 
 ;;;;;; checkin
 (defun vc-clearcase-checkin (file rev comment)

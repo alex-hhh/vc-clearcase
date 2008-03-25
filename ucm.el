@@ -442,7 +442,7 @@ checked-in using \\[log-edit-show-files]."
 		   (vc-clearcase-workfile-unchanged-p file))
 	      (progn
 		(message "Undo checkout for unmodified file %s" file)
-		(cleartool "uncheckout -keep \"%s\"" file)
+		(cleartool "uncheckout -rm \"%s\"" file)
 		(push file reverted-files))
 	      (push file modified-files)))
 	(when reverted-files

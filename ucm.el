@@ -40,6 +40,7 @@
   "Support for UCM under ClearCase"
   :group 'vc-clearcase)
 
+;;;; ucm-read-activity
 (defun ucm-read-activity (prompt &optional view-tag include-obsolete initial)
   "Display PROMPT and read a UCM activity with completion.
 
@@ -103,7 +104,7 @@ nil, the current activity in the view is presented to the user."
      'require-match
      initial)))
 
-
+;;;; ucm-set-activity
 ;;;###autoload
 (defun ucm-set-activity (&optional activity)
   "Set the UCM ACTIVITY in the current directory.
@@ -128,6 +129,7 @@ activity headline)."
       (t
        (cleartool "setact \"%s\"" activity)))))
 
+;;;; ucm-show-current-activity
 ;;;###autoload
 (defun ucm-show-current-activity (&optional extra-info)
   "Show the current activity in the view.
@@ -178,8 +180,10 @@ number of checked out files."
 			   headline (hash-table-count files) (length versions) checkouts)
 		  (message "%s" headline)))))))
 
+;;;; ucm-browse-activity
+;;;;; faces
 (defface ucm-field-name-face
-    '((t (:inherit font-lock-keyword-face :weight bold)))
+    '((t (:inherit font-lock-builtin-face)))
   "Face used for field names in UCM browse buffers."
   :group 'ucm)
 
@@ -198,12 +202,25 @@ number of checked out files."
   "Face used for checkedout revisions in UCM browse buffers."
   :group 'ucm)
 
+;;;;; buffer-local variables
 (defvar ucm-activity nil
   "The name of the current activity being browsed.")
 
 (defvar ucm-previous-activities '()
   "A stack of previous activities we visited.
 Used to implement the BACK button.")
+
+(defvar ucm-view-root nil
+  "The view root directory for the activity browser buffer")
+
+(defvar ucm-actb-ewoc nil
+  "The ewoc structure for the activity browser buffer")
+
+(defvar ucm-previous-actb-ewocs '()
+  "A stack ewocs for previous activities we visited.
+Used to implement the BACK button.")
+
+;;;;; buttons
 
 (defun ucm-file-link-handler (button)
   (with-current-buffer (button-get button 'buffer)
@@ -232,7 +249,9 @@ Used to implement the BACK button.")
     (pop-to-buffer (current-buffer))
     (assert ucm-activity)
     (push ucm-activity ucm-previous-activities)
-    (ucm-browse-activity (button-get button 'ucm-activity))))
+    (push ucm-actb-ewoc ucm-previous-actb-ewocs)
+    (setq ucm-activity (button-get button 'ucm-activity))
+    (ucm-actb-refresh-command)))
 
 (define-button-type 'ucm-activity-link
     'face 'default
@@ -245,7 +264,15 @@ Used to implement the BACK button.")
   (with-current-buffer (button-get button 'buffer)
     (pop-to-buffer (current-buffer))
     (when ucm-previous-activities
-      (ucm-browse-activity (pop ucm-previous-activities)))))
+      (setq ucm-activity (pop ucm-previous-activities))
+      (setq ucm-actb-ewoc (pop ucm-previous-actb-ewocs))
+      (erase-buffer)
+      ;; The header and footer will not be redisplayed unless we set them
+      ;; again.
+      (let ((hf (ewoc-get-hf ucm-actb-ewoc)))
+	(ewoc-set-hf ucm-actb-ewoc (car hf) (cdr hf)))
+      (ewoc-refresh ucm-actb-ewoc)
+      (goto-char (point-min)))))
 
 (define-button-type 'ucm-previous-activity-link
     'face 'default
@@ -277,23 +304,360 @@ Used to implement the BACK button.")
     'follow-link t
     'skip t)
 
+;;;;; data structures
+;;;;;; ucm-actb-activity
+
+;; Hold revision and contributor information about an activity.  See
+;; `ucm-actb-fetch-activity' for how an instance of this structure is
+;; constructed.
+;;
+;; An activity is a collection of file revisions, but we represent it as a
+;; hierarch of DIRECTORY -> FILE -> VERSION: Each file revision is represented
+;; by a `ucm-actb-version' instance.  The revisions for a file are grouped
+;; under a `ucm-actb-file' instance.  All files under a directory are grouped
+;; under a `ucm-actb-directory' instance.
+
+(defstruct ucm-actb-activity
+  name
+  ;; a list of `ucm-actb-directory' structures, one for each directory in
+  ;; which this activity has file versions
+  directories
+
+  ;; a list of `ucm-actb-contributor' structures.  The empty list if the
+  ;; activity is not a rebase or deliver activity.
+  contributors)
+
+;;;;;; ucm-actb-directory
+
+;; Hold files which have revisions under the current activity and are in the
+;; same directory.
+
+(defstruct ucm-actb-directory
+  name                                  ; the directory name
+  files)                                ; a list of `ucm-actb-file' structures
+
+(defun ucm-actb-directory-pp (directory)
+  "Pretty print an `ucm-actb-directory' structure."
+  (insert "\nIn directory `")
+  (let ((dir (file-relative-name
+	      (ucm-actb-directory-name directory) ucm-view-root)))
+		(insert-text-button
+     dir
+     'face 'font-lock-function-name-face
+     'type 'ucm-file-link
+     'buffer (current-buffer)
+     'file-name (ucm-actb-directory-name directory)))
+  (insert "':\n"))
+
+(defun ucm-actb-directory-toggle-mark (directory)
+  "Toggle the marks on all versions under this DIRECTORY.
+The toggle works like this: if all revisions are marked, the
+marks are cleared, if any revision is unmarked, the marks are
+set."
+  (let* ((files (ucm-actb-directory-files directory))
+	 (marks (mapcar (lambda (f)
+			  (some 'ucm-actb-version-mark
+				(ucm-actb-file-versions f)))
+		      files)))
+    (cond ((every 'identity marks)
+	   (mapc 'ucm-actb-file-clear-mark files))
+	  (t
+	   (mapc 'ucm-actb-file-set-mark files)))))
+
+;;;;;; ucm-actb-file
+
+;; Hold together the revisions of a file which are part of an activity.
+
+(defstruct ucm-actb-file
+  name                         ; the name of the file, sans directory
+  directory                    ; the `ucm-actb-directory' which we are part of
+  versions)                    ; a list of `ucm-actb-version' structures
+
+(defun ucm-actb-file-full-path (f)
+  "Return the full path of F (an `ucm-actb-file' structure)."
+  (let ((dir (ucm-actb-directory-name (ucm-actb-file-directory f))))
+    (expand-file-name (ucm-actb-file-name f) dir)))
+
+(defun ucm-actb-file-pp (file)
+  "Pretty print FILE, an `ucm-actb-file' structure."
+  (insert "    ")
+	      (insert-text-button
+   (ucm-actb-file-name file)
+	       'face 'ucm-file-name-face
+	       'type 'ucm-file-link
+	       'buffer (current-buffer)
+   'file-name (ucm-actb-file-full-path file)))
+
+(defun ucm-actb-file-set-mark (file)
+  "Set the mark on all revisions of FILE"
+  (mapc 'ucm-actb-version-set-mark (ucm-actb-file-versions file)))
+
+(defun ucm-actb-file-clear-mark (file)
+  "Clear the mark from all revisions of FILE"
+  (mapc 'ucm-actb-version-clear-mark (ucm-actb-file-versions file)))
+
+(defun ucm-actb-file-toggle-mark (file)
+  "Toggle the mark for the revisions of FILE.
+The toggle works like this: if all revisions are marked, the
+marks are cleared, if any revision is unmarked, the marks are
+set."
+  (let ((versions (ucm-actb-file-versions file)))
+    (cond ((notevery 'ucm-actb-version-mark versions)
+	   (mapc 'ucm-actb-version-set-mark versions))
+	  (t
+	   (mapc 'ucm-actb-version-toggle-mark versions)))))
+
+;;;;;; ucm-actb-version
+
+;; The revision of a file under an activity.
+(defstruct ucm-actb-version
+  name
+  file                                  ; The `ucm-actb-file' we belong to
+  mark                                  ; (t nil)
+  ;; Becomes t when the mark has changed.  Used to know when the ewoc node
+  ;; should be refreshed.  It is a bit of a hack.
+  changed)
+
+(defun ucm-actb-version-pp (version)
+  "Pretty print VERSION, a `ucm-actb-version' structure"
+  (if (ucm-actb-version-mark version)
+      (insert "      * ")
+      (insert "        "))
+  (let ((file (ucm-actb-file-full-path (ucm-actb-version-file version)))
+	(rev (ucm-actb-version-name version)))
+		(insert-text-button
+     (concat "@@" rev)
+     'face (if (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'" rev)
+			   'ucm-checkedout-revision-face
+			   'ucm-revision-face)
+		 'type 'ucm-show-diff-link
+		 'buffer (current-buffer)
+		 'file-name file
+     'revision rev)))
+
+(defun ucm-actb-version-set-mark (version)
+  "Set the mark on VERSION."
+  (let ((mark (ucm-actb-version-mark version)))
+    (unless mark
+      (setf (ucm-actb-version-mark version) t)
+      (setf (ucm-actb-version-changed version) t))))
+
+(defun ucm-actb-version-clear-mark (version)
+  "Clear the mark on VERSION."
+  (let ((mark (ucm-actb-version-mark version)))
+    (when mark
+      (setf (ucm-actb-version-mark version) nil)
+      (setf (ucm-actb-version-changed version) t))))
+
+(defun ucm-actb-version-toggle-mark (version)
+  "Toggle the mark on VERSION."
+  (setf (ucm-actb-version-mark version)
+	(not (ucm-actb-version-mark version)))
+  (setf (ucm-actb-version-changed version) t))
+
+
+;;;;;; ucm-actb-contributor
+
+(defstruct ucm-actb-contributor
+  name)                                 ; the contributor activity name
+
+(defun ucm-actb-contributor-pp (contributor)
+  "Pretty print CONTRIBUTOR, an `ucm-actb-contributor' structure."
+		    (insert "    ")
+		    (insert-text-button
+   (ucm-actb-contributor-name contributor)
+		     'type 'ucm-activity-link
+		     'buffer (current-buffer)
+   'ucm-activity (ucm-actb-contributor-name contributor)))
+
+;;;;;; generic operations
+
+(defun ucm-actb-pp (data)
+  "Pretty print DATA, which can be any data structure we attach
+to the activity ewoc."
+  (typecase data
+    (symbol
+     (when (eq data 'back-button)
+	      (insert "\n\n")
+	      (insert-text-button
+	       "[back]"
+	       'type 'ucm-previous-activity-link
+	'buffer (current-buffer))))
+    (string
+     (insert "\n" (propertize data 'face 'ucm-field-name-face) "\n"))
+    (ucm-actb-directory (ucm-actb-directory-pp data))
+    (ucm-actb-file (ucm-actb-file-pp data))
+    (ucm-actb-version (ucm-actb-version-pp data))
+    (ucm-actb-contributor (ucm-actb-contributor-pp data))
+    (t (error "Unknown data type %S" data))))
+
+(defun ucm-actb-toggle-mark (data)
+  "Toggle the mark on DATA, which can be any data structure we
+attach to the activity ewoc."
+  (typecase data
+    (ucm-actb-directory (ucm-actb-directory-toggle-mark data))
+    (ucm-actb-file (ucm-actb-file-toggle-mark data))
+    (ucm-actb-version (ucm-actb-version-toggle-mark data))
+    (t nil)))
+
+;;;;; ucm-actb-fetch-activity
+(defun ucm-actb-fetch-activity (activity)
+  "Retrieve information about ACTIVITY and construct an
+`ucm-actb-activity' instance from it."
+  (let ((dirs '())
+	(contributors '()))
+    (dolist (v (split-string
+		(cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
+		", " 'omit-nulls))
+      (when (string-match "\\(.*\\)@@\\(.*\\)" v)
+
+	(let ((file (match-string 1 v))
+	      (version (match-string 2 v)))
+
+	  (let ((dir (file-name-directory file))
+		(basename (file-name-nondirectory file)))
+
+	    (let ((d (find dir dirs
+			   :key 'ucm-actb-directory-name :test 'string=)))
+	      (unless d
+		(setq d (make-ucm-actb-directory :name dir))
+		(push d dirs))
+
+	      (let ((f (find basename (ucm-actb-directory-files d)
+			     :key 'ucm-actb-file-name :test 'string=)))
+		(unless f
+		  (setq f (make-ucm-actb-file :name basename :directory d))
+		  (push f (ucm-actb-directory-files d)))
+
+		(push (make-ucm-actb-version :name version :file f)
+		      (ucm-actb-file-versions f)))
+	    )))))
+
+    (ignore-cleartool-errors
+      ;; There seems to be a bug in my version of ClearCase: if `activity' is
+      ;; not a rebase or integration activity an error will be reported, but
+      ;; the status of the command will be 0 (meaning success).  We have to
+      ;; test the returned string explicitly ...
+      (let ((ca (cleartool "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
+	(when (and ca (not (string-match "^cleartool: Error: " ca)))
+	  (dolist (c (sort (split-string ca " " 'omit-nulls) 'string<))
+	    (push (make-ucm-actb-contributor :name c) contributors)))))
+
+    (setq contributors (nreverse contributors))
+
+    (dolist (d dirs)
+      (setf (ucm-actb-directory-files d)
+	    (sort (ucm-actb-directory-files d)
+		  (lambda (a b)
+		    (string< (ucm-actb-file-name a)
+			     (ucm-actb-file-name b))))))
+    (setq dirs
+	  (sort dirs (lambda (a b)
+		       (string< (ucm-actb-directory-name a)
+				(ucm-actb-directory-name b)))))
+
+    (make-ucm-actb-activity :name activity
+			    :directories dirs
+			    :contributors contributors)))
+
+;;;;; ucm-actb-create-ewoc
+(defun ucm-actb-create-ewoc (activity)
+  "Create an ewoc structure for ACTIVITY (an `ucm-actb-activity'
+structure)"
+  (let* ((name (ucm-actb-activity-name activity))
+	 (header
+	  (concat (propertize "Activity: " 'face 'ucm-field-name-face)
+		  "\""
+		  (cleartool "lsact -fmt \"%%[headline]p\" %s" name)
+		  "\"\n"
+		  (propertize "Name: " 'face 'ucm-field-name-face)
+		  name
+		  " ("
+		  (cleartool "lsact -fmt \"%%[locked]p\" %s" name)
+		  ", "
+		  (cleartool "lsact -fmt \"%%[owner]p\" %s" name)
+		  ")\n"))
+	 (ewoc (ewoc-create 'ucm-actb-pp header)))
+    (dolist (d (ucm-actb-activity-directories activity))
+      (ewoc-enter-last ewoc d)
+      (dolist (f (ucm-actb-directory-files d))
+	(ewoc-enter-last ewoc f)
+	(dolist (v (ucm-actb-file-versions f))
+	  (ewoc-enter-last ewoc v))))
+    (let ((contributors (ucm-actb-activity-contributors activity)))
+      (when (> (length contributors) 0)
+	(ewoc-enter-last ewoc "Contributors")
+	(dolist (c contributors)
+	  (ewoc-enter-last ewoc c))))
+
+    (when ucm-previous-actb-ewocs
+      (ewoc-enter-last ewoc 'back-button))
+
+    ewoc))
+
+;;;;; ucm-actb-mode
+
+(defvar ucm-actb-mode-map
+  (let ((m (make-sparse-keymap)))
+    (suppress-keymap m)
+    (define-key m "m" 'ucm-actb-toggle-mark-command)
+    (define-key m "g" 'ucm-actb-refresh-command)
+    m))
+
+(define-derived-mode ucm-actb-mode fundamental-mode
+  "UCM Activity Browser"
+  (buffer-disable-undo)
+  (set (make-local-variable 'ucm-activity) nil)
+  (set (make-local-variable 'ucm-view-root) nil)
+  (set (make-local-variable 'ucm-actb-ewoc) nil)
+  (set (make-local-variable 'ucm-previous-actb-ewocs) nil))
+
+;;;;;; ucm-actb-toggle-mark-command
+(defun ucm-actb-toggle-mark-command (pos)
+  "Toggle the mark on the current item.
+If the current item is a version the mark is changed (set if it
+is unset and cleared if it is set).  For files or directories, if
+all revisions under them are marked, the marks are cleared,
+otherwise the marks are set."
+  (interactive "d")
+  (let ((node (ewoc-locate ucm-actb-ewoc pos)))
+    (when node
+      (ucm-actb-toggle-mark (ewoc-data node))
+      (ewoc-map
+       (lambda (data)
+	 (when (and (ucm-actb-version-p data)
+		    (ucm-actb-version-changed data))
+	   (setf (ucm-actb-version-changed data) nil)
+	   t))
+       ucm-actb-ewoc)
+      (ewoc-goto-node ucm-actb-ewoc node)
+      ;; move to the next node of the same type -- we rely on an
+      ;; implementation detail for finding the type of a node data
+      (when (arrayp (ewoc-data node))
+	(loop
+	   with node-type = (aref (ewoc-data node) 0)
+	   for n = (ewoc-next ucm-actb-ewoc node) then (ewoc-next ucm-actb-ewoc n)
+	   while n
+	   until (let ((d (ewoc-data n)))
+		   (and (arrayp d) (eq node-type (aref d 0))))
+	   finally (when n (ewoc-goto-node ucm-actb-ewoc n)))))))
+
+;;;;;; ucm-actb-refresh-command
+(defun ucm-actb-refresh-command ()
+  "Refresh the activity in the current buffer."
+  (interactive)
+  (with-temp-message "Preparing activity report..."
+    (erase-buffer)
+    (with-cleartool-directory (expand-file-name default-directory)
+      (let ((a (ucm-actb-fetch-activity ucm-activity)))
+	(setq ucm-actb-ewoc (ucm-actb-create-ewoc a))
+	(ewoc-refresh ucm-actb-ewoc)
+	(goto-char (point-min))))))
+
+;;;;; ucm-browse-activity
 ;;;###autoload
 (defun ucm-browse-activity (activity)
-  "Pop-up an information buffer about ACTIVITY.
-The buffer will contain a report about the file versions
-checked-in under the activity plus any contributing activities.
-The report contains buttons (hyperlinks) to files, versions and
-other activities.
-
-In interactive mode, the user is prompted for an activity name
-and completion is available.  ACTIVITY must be in the current
-stream (corresponding to the view in `default-directory').  With
-prefix argument, obsolete activities can also be selected.  With
-a negative prefix argument any activity can be selected, but no
-completion is provided.
-
-There are no restriction on ACTIVITY when called from another
-program."
+  "Browse ACTIVITY"
   (interactive
    (list
     (if (or (eq current-prefix-arg '-)
@@ -303,115 +667,20 @@ program."
 	(ucm-read-activity
 	 "Browse activity: " nil
 	 (when current-prefix-arg 'include-obsolete)))))
-  (with-temp-message "Preparing report..."
-    (with-cleartool-directory (expand-file-name default-directory)
-      (let ((changeset (make-hash-table :test 'equal))
-	    (changeset-files nil)
-	    (view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
-
+  (with-cleartool-directory (expand-file-name default-directory)
+    (let ((buf (get-buffer-create "*UCM Activity Browser*")))
+      (switch-to-buffer buf)
+      (ucm-actb-mode)
+      (erase-buffer)
+      (let ((view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
 	(unless (string= view "")
 	  (let ((vprop (clearcase-get-vprop view default-directory)))
-	    (setq view (clearcase-vprop-root-path vprop))))
+	    (setq ucm-view-root (clearcase-vprop-root-path vprop)))))
 
-	(dolist (v (split-string
-		    (cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
-		    ", " 'omit-nulls))
-	  (when (string-match "\\(.*\\)@@\\(.*\\)" v)
-	    (let ((file (match-string 1 v))
-		  (revision (match-string 2 v)))
-	      (push revision (gethash file changeset)))))
+      (setq ucm-activity activity)
+      (ucm-actb-refresh-command))))
 
-	(maphash (lambda (k v) (push k changeset-files)) changeset)
-	(setq changeset-files
-	      (sort changeset-files
-		    (lambda (a b)
-		      (string< (file-name-nondirectory a)
-			       (file-name-nondirectory b)))))
-
-	(with-current-buffer (get-buffer-create "*UCM Activity*")
-	  (setq buffer-read-only t)
-	  (buffer-disable-undo)
-	  (set (make-local-variable 'ucm-activity) activity)
-	  (make-local-variable 'ucm-previous-activities)
-
-	  (let ((inhibit-read-only t)
-		(headline (cleartool "lsact -fmt \"%%[headline]p\" %s" activity)))
-	    (erase-buffer)
-	    (insert (propertize "Name: " 'face 'ucm-field-name-face) activity
-		    "\n"
-		    (propertize "Headline: " 'face 'ucm-field-name-face) headline
-		    "\n"
-		    (propertize "Status: " 'face 'ucm-field-name-face)
-		    (cleartool "lsact -fmt \"%%[locked]p\" %s" activity))
-	    (when (or (string-match "SFT-[0-9]+" activity)
-		      (string-match "SFT-[0-9]+" headline))
-	      (insert "\n" (propertize "JIRA Link: " 'face 'ucm-field-name-face))
-	      (let ((url (format "http://jira/browse/%s" (match-string 0 activity))))
-		(insert-text-button
-		 url
-		 'type 'ucm-url-link
-		 'url url)))
-	    (insert "\n"
-		    (propertize "Created By: " 'face 'ucm-field-name-face)
-		    (cleartool "lsact -fmt \"%%[owner]p\" %s" activity))
-	    (insert "\n\n"
-		    (propertize "File Versions:" 'face 'ucm-field-name-face)
-		    "\n==============\n")
-	    (dolist (file changeset-files)
-	      (insert "\n    ")
-	      (insert-text-button
-	       (file-name-nondirectory file)
-	       'face 'ucm-file-name-face
-	       'type 'ucm-file-link
-	       'buffer (current-buffer)
-	       'file-name file)
-	      (insert " in " (file-relative-name (file-name-directory file) view) "\n")
-	      (dolist (revision (gethash file changeset))
-		(insert "        ")
-		(insert-text-button
-		 (concat "@@" revision)
-		 'face (if (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'" revision)
-			   'ucm-checkedout-revision-face
-			   'ucm-revision-face)
-		 'type 'ucm-show-diff-link
-		 'buffer (current-buffer)
-		 'file-name file
-		 'revision revision)
-		(insert "\n")))
-	    (ignore-cleartool-errors
-	      ;; There seems to be a bug in my version of ClearCase: if
-	      ;; `activity' is not a rebase or integration activity an error
-	      ;; will be reported, but the status of the command will be 0
-	      ;; (meaning success).  We have to test the returned string
-	      ;; explicitly ...
-	      (let ((contrib (cleartool
-			      "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
-		(when (and contrib
-			   (not (string-match "^cleartool: Error: " contrib)))
-		  (insert "\n"
-			  (propertize "Contributing Activities:" 'face 'ucm-field-name-face)
-			  "\n========================\n\n")
-		  (dolist (c (split-string contrib " " 'omit-nulls))
-		    (insert "    ")
-		    (insert-text-button
-		     c
-		     'type 'ucm-activity-link
-		     'buffer (current-buffer)
-		     'ucm-activity c)
-		    (insert "\n")))))
-
-	    (when ucm-previous-activities
-	      (insert "\n\n")
-	      (insert-text-button
-	       "[back]"
-	       'type 'ucm-previous-activity-link
-	       'buffer (current-buffer))
-	      (insert "\n")))
-
-	  (set-buffer-modified-p nil)
-	  (goto-char (point-min))
-	  (pop-to-buffer (current-buffer)))))))
-
+;;;; ucm-checkin-activity
 ;;;###autoload
 (defun ucm-checkin-activity (activity)
   "Check in all files checked-out under ACTIVITY.
@@ -487,6 +756,7 @@ The file names are relative to the `default-directory'"
 	      (cleartool "checkin -cfile \"%s\" %s" comment activity)))
 	(clearcase-refresh-files-in-view)))))
 
+;;;; ucm-lock-activity, ucm-unlock-activity
 ;;;###autoload
 (defun ucm-lock-activity (activity)
   "Lock ACTIVITY.  With prefix arg, mark it as obsolete."
@@ -518,4 +788,12 @@ The file names are relative to the `default-directory'"
 
 
 (provide 'ucm)
+
+
+;;; Local Variables:
+;;; mode: emacs-lisp
+;;; mode: outline-minor
+;;; outline-regexp: ";;;;+"
+;;; End:
+
 ;;; ucm.el ends here

@@ -1,3 +1,28 @@
+2008-04-04  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-field-name-face): 1.22 inherit
+	font-lock-builtin-face
+	(ucm-view-root, ucm-actb-ewoc)
+	(ucm-previous-actb-ewocs): 1.22 new variables
+	(ucm-activity-link-handler)
+	(ucm-previous-activity-link-handler): 1.22 changed to use the ewoc
+	structure
+	(ucm-actb-activity, ucm-actb-directory, ucm-actb-file)
+	(ucm-actb-version, ucm-actb-contributor): 1.22 new structures
+	(ucm-actb-directory-pp, ucm-actb-directory-toggle-mark)
+	(ucm-actb-file-full-path, ucm-actb-file-pp)
+	(ucm-actb-file-set-mark, ucm-actb-file-clear-mark)
+	(ucm-actb-file-toggle-mark, ucm-actb-version-pp)
+	(ucm-actb-version-set-mark, ucm-actb-version-clear-mark)
+	(ucm-actb-version-toggle-mark, ucm-actb-contributor-pp)
+	(ucm-actb-pp, ucm-actb-toggle-mark, ucm-actb-fetch-activity)
+	(ucm-actb-create-ewoc, ucm-actb-mode)
+	(ucm-actb-toggle-mark-command, ucm-actb-refresh-command): 1.22 new
+	functions
+	(ucm-actb-mode-map): 1.22 new variable
+	(ucm-browse-activity): 1.22 rewritten to use an ewoc structure for
+	managing the display
+
 2008-03-25  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-checkin-activity): 1.21 don't generate a keep file

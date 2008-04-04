@@ -657,7 +657,21 @@ otherwise the marks are set."
 ;;;;; ucm-browse-activity
 ;;;###autoload
 (defun ucm-browse-activity (activity)
-  "Browse ACTIVITY"
+  "Pop-up an information buffer about ACTIVITY.
+The buffer will contain a report about the file versions
+checked-in under the activity plus any contributing activities.
+The report contains buttons (hyperlinks) to directories, files,
+versions and other activities.
+
+In interactive mode, the user is prompted for an activity name
+and completion is available.  ACTIVITY must be in the current
+stream (corresponding to the view in `default-directory').  With
+prefix argument, obsolete activities can also be selected.  With
+a negative prefix argument any activity can be selected, but no
+completion is provided.
+
+There are no restriction on ACTIVITY when this function is called
+directly."
   (interactive
    (list
     (if (or (eq current-prefix-arg '-)

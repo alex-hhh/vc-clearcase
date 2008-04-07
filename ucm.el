@@ -35,6 +35,7 @@
 (eval-when-compile (require 'cl))
 (require 'vc-clearcase)
 (require 'button)
+(require 'ewoc)
 
 (defgroup ucm nil
   "Support for UCM under ClearCase"
@@ -127,7 +128,14 @@ activity headline)."
 	   (error "Activity headline cannot be empty"))
 	 (cleartool "mkact -force -headline \"%s\"" headline)))
       (t
-       (cleartool "setact \"%s\"" activity)))))
+       (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))
+	 (when (equal status "locked")
+	   (if (y-or-n-p "Activity is locked.  Would you like to unlock it? ")
+	       (progn
+		 (cleartool "unlock activity:%s@/projects" activity)
+		 (message "Activity %s unlocked" activity))
+	       (error "Cannot set this activity beacuse it is locked.")))
+	 (cleartool "setact \"%s\"" activity))))))
 
 ;;;; ucm-show-current-activity
 ;;;###autoload

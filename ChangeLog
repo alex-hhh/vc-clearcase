@@ -1,3 +1,8 @@
+2008-04-07  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-set-activity): 1.24 ask the user whether to unlock a
+	locked activity
+
 2008-04-04  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-field-name-face): 1.22 inherit

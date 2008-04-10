@@ -1,5 +1,11 @@
 -*- outline -*- 
 
+* Release
+
+** a new activity browser implementation
+
+** updates for Emacs 22.2
+
 * Release 1.152
 
 ** renaming files works when the destination is in a different VOB

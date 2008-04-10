@@ -1,3 +1,20 @@
+2008-04-10  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-actb-version-checkedout-p): new function
+	(ucm-actb-version-pp): use `ucm-actb-version-checkedout-p'
+	(ucm-actb-checkin-command): new function
+	(ucm-checkin-activity): move the finish checkin code as a lambda
+	in the log-edit call.  Uses `clearcase-refresh-files' to refresh
+	only the files affected by the checkin operation (instead of all
+	the visited files in the current view).
+	(ucm-finish-activity-checkin): function removed
+
+	* vc-clearcase.el (clearcase-refresh-files): new function
+	(vc-clearcase-revision-granularity): new function (Emacs 23)
+	(vc-clearcase-checkin): accept a list of files instead of a single
+	file (Emacs 23)
+	(vc-clearcase-checkout, vc-clearcase-merge): doc update.
+
 2008-04-07  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-set-activity): 1.24 ask the user whether to unlock a

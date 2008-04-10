@@ -52,165 +52,6 @@
 ;;   (load "vc-clearcase-auto")
 ;;
 
-;;;;; Implementation status of vc backend functions from vc.el
-;;
-;;
-;; STATE-QUERYING FUNCTIONS (*) is mandatory, (-) is optional
-;;
-;; * registered (file) -- implemented
-;;
-;; * state (file) -- implemented, except that we don't return the
-;;   "USER" state (meaning that another user has a reserved checkout
-;;   on the file).  vc.el will try to steal the lock if we do that and
-;;   that is not always the right thing to do.
-;;
-;; - state-heuristic (file) -- implemented, see `state'
-;;
-;; - dir-state (dir) -- implemented
-;;
-;; * workfile-version (file) -- implemented
-;;
-;; - latest-on-branch-p (file) -- implemented
-;;
-;; * checkout-model (file) -- implemented
-;;
-;; - workfile-unchanged-p (file) -- implemented
-;;
-;; - mode-line-string (file) -- implemented
-;;
-;; - dired-state-info (file) -- implemented
-;;
-;;
-;; STATE-CHANGING FUNCTIONS
-;;
-;; * register (file &optional rev comment) -- implemented
-;;
-;; - init-version (file) -- not implemented, you don't choose the
-;;   initial version in ClearCase
-;;
-;; - responsible-p (file) -- implemented
-;;
-;; - could-register (file) -- not implemented, default implementation
-;;   is fine.  Not really clear what it should do...
-;;
-;; - receive-file (file rev) -- not implemented
-;;
-;; - unregister (file) -- not implemented
-;;
-;; * checkin (file rev comment) -- implemented, but `rev' is ignored;
-;;   vc-checkin-switches is ignored
-;;
-;; * find-version (file rev buffer) -- implemented, but will not
-;;   check-out the head of the trunk: will signal an error when
-;;   (string= rev "".  Head of trunk has no meaning in ClearCase.
-;;
-;; * checkout (file &optional editable rev) -- implemented, but not
-;;   all parameter combinations are allowed.  Furthermore, the
-;;   function is asynchronous (like checkin), it pops up a buffer for
-;;   the checkout comment and finishes the checkout later.
-;;
-;; * revert (file &optional contents-done) -- implemented, but
-;;   `contents-done' is ignored.
-;;
-;; - cancel-version (file editable) -- implemented, see doc string for
-;;   `vc-clearcase-cancel-version'
-;;
-;; - merge (file rev1 rev2) -- implemented, but the operation will
-;;   throw an error if the merge cannot be done automatically.  vc.el
-;;   assumes there are conflict markers in the buffer, but ClearCase
-;;   does not use them.
-;;
-;; - merge-news (file) -- implemented, same restrictions as for
-;;   `merge'
-;;
-;; - steal-lock (file &optional version) -- implemented.
-;;
-;;
-;; HISTORY FUNCTIONS
-;;
-;; * print-log (file &optional buffer) -- implemented.
-;;
-;; - show-log-entry (version) -- implemented, but see `print-log'
-;;
-;; - wash-log (file) -- not implemented
-;;
-;; - logentry-check () -- not implemented
-;;
-;; - comment-history (file) -- not implemented
-;;
-;; - update-changelog (files) -- not implemented
-;;
-;; * diff (file &optional rev1 rev2 buffer) -- implemented.
-;;
-;; - diff-tree (dir &optional rev1 rev2) -- not implemented (new in
-;;   Emacs 22)
-;;
-;; - annotate-command (file buf &optional rev) -- implemented, but
-;;   runs annotate asynchronously
-;;
-;; - annotate-time () -- implemented (new in Emacs 22), we also
-;;   implement annotate-difference which is Emacs 21.
-;;
-;; - annotate-current-time () -- not implemented, default is fine (new
-;;   in Emacs 22)
-;;
-;; - annotate-extract-revision-at-line () -- implemented (new in Emacs
-;;   22)
-;;
-;;
-;; SNAPSHOT SYSTEM
-;;
-;; - create-snapshot (dir name branchp) -- implemented, but `branchp'
-;;   is used to move a label.  You cannot make branches in ClearCase
-;;   in the way vc.el would like
-;;
-;; - assign-name (file name) -- not implemented
-;;
-;; - retrieve-snapshot (dir name update) -- not implemented as it is not
-;;   applicable for ClearCase.  See `vc-clearcase-edcs' for an
-;;   alternative.
-;;
-;;
-;; MISCELLANEOUS
-;;
-;; - make-version-backups-p (file) -- not implemented
-;;
-;; - repository-hostname (dirname) -- not implemented
-;;
-;; - previous-version (file rev) -- implemented
-;;
-;; - next-version (file rev) -- implemented
-;;
-;; - check-headers () -- not implemented, version headers don't seem
-;;   to exist in ClearCase.
-;;
-;; - clear-headers () -- not implemented
-;;
-;; - delete-file (file) -- implemented
-;;
-;; - rename-file (old new) -- implemented
-;;
-;; - find-file-hook () -- not implemented
-;;
-;; - find-file-not-found-hook () -- not implemented
-;;
-;; CLEARCASE SPECIFIC FUNCTIONS
-;; (see their help text for details)
-;;
-;; - vc-clearcase-what-version
-;; - vc-clearcase-what-rule
-;; - vc-clearcase-what-view-tag
-;; - vc-clearcase-gui-vtree-browser
-;; - vc-clearcase-list-checkouts
-;; - vc-clearcase-update-view
-;; - vc-clearcase-label-diff-report
-;; - vc-clearcase-list-view-private-files
-;; - vc-clearcase-edcs
-;; - vc-clearcase-start-view
-
-;;; History:
-;;
-
 
 ;;; Code:
 
@@ -862,10 +703,10 @@ otherwise it returns the value of the last form in BODY."
   file-name                             ; the file name this fprop belongs to
 
   version-tid
-  version                               ; current file revision
-  parent                                ; parent revision
+  version               ; current file revision
+  parent                ; parent revision
   status                ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
-  what-rule                             ; confispec rule for the file
+  what-rule             ; confispec rule for the file
 
   comment-tid
   comment                            ; the checkout comment (when checked out)
@@ -1014,8 +855,18 @@ the parent version, to conform to vc.el semantics."
       (unless (memq (clearcase-fprop-status fprop) '(hijacked broken-view))
 	(setf (clearcase-fprop-status fprop) co-mode)))))
 
-
-
+(defun clearcase-refresh-files (files)
+  "Refresh the status of FILES.
+This is used to update files when ClearCase commands change them
+in bulk."
+  (dolist (file files)
+    (let ((fprop (clearcase-file-fprop file)))
+      (when fprop
+	;; clear any properties vc.el might have cached.
+	(vc-file-clearprops file)
+	(vc-file-setprop file 'vc-clearcase-fprop fprop)
+	(clearcase-maybe-set-vc-state file 'force)
+	(vc-resynch-buffer file t t)))))
 
 ;;;; Clearcase view-tag properties
 
@@ -1409,7 +1260,7 @@ ClearCase uses."
   (let ((merge-links (cleartool "desc -short -ahlink Merge \"%s@@%s\"" file revision))
 	result)
     (dolist (merge-link (split-string merge-links "[\n\r]"))
-      (when (string-match "^<- " merge-link)    ; "Merge From" arrow
+      (when (string-match "^<- " merge-link) ; "Merge From" arrow
 	(when (string-match "@@\\(.*\\)" merge-link)
 	  (let ((merged-revision (match-string 1 merge-link)))
 	    (push merged-revision result)))))
@@ -1480,14 +1331,22 @@ If FORCE is not nil, always read the properties."
    (let* ((d (read-file-name "Directory: "
 			     default-directory default-directory t))
 	  (vob (ignore-cleartool-errors
-		(clearcase-vob-tag-for-path
-		 (if (file-directory-p d) d (file-name-directory d))))))
+		 (clearcase-vob-tag-for-path
+		  (if (file-directory-p d) d (file-name-directory d))))))
      (list d (if vob
 		 (clearcase-read-label "Label: " vob)
 		 (read-string "New snapshot name: "))
 	   current-prefix-arg))))
 
 ;;;; vc.el interface
+;;;;; BACKEND PROPERTIES
+;;;;;; revision granularity
+(defun vc-clearcase-revision-granularity ()
+  "Return the revision granularity of ClearCase.
+This is always 'file -- ClearCase has per-file revision
+numbering."
+  'file)
+
 ;;;;; STATE-QUERYING FUNCTIONS
 ;;;;;; registered
 
@@ -1540,26 +1399,26 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-       (let ((ls-result (cleartool "ls \"%s\"" file)))
-	 (unless (string-match "Rule: \\(.*\\)$" ls-result)
-	   (throw 'done nil))           ; file is not registered
+	(let ((ls-result (cleartool "ls \"%s\"" file)))
+	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	    (throw 'done nil))          ; file is not registered
 
-	 (clearcase-set-fprop-version-stage-1 fprop ls-result)
-	 ;; anticipate that the version will be needed shortly, so ask for
-	 ;; it.  When a file is hijacked, do the desc command on the version
-	 ;; extended name of the file, as cleartool will return nothing for
-	 ;; the hijacked version...
-	 (let ((pname (if (clearcase-fprop-hijacked-p fprop)
-			  (concat file "@@" (clearcase-fprop-version fprop))
-			  file)))
-	   (setf (clearcase-fprop-version-tid fprop)
-		 (cleartool-ask
-		  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-		  'nowait
-		  fprop
-		  'clearcase-set-fprop-version-stage-2))))
-       (vc-file-setprop file 'vc-clearcase-fprop fprop)
-       (throw 'done t)))))
+	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
+	  ;; anticipate that the version will be needed shortly, so ask for
+	  ;; it.  When a file is hijacked, do the desc command on the version
+	  ;; extended name of the file, as cleartool will return nothing for
+	  ;; the hijacked version...
+	  (let ((pname (if (clearcase-fprop-hijacked-p fprop)
+			   (concat file "@@" (clearcase-fprop-version fprop))
+			   file)))
+	    (setf (clearcase-fprop-version-tid fprop)
+		  (cleartool-ask
+		   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		   'nowait
+		   fprop
+		   'clearcase-set-fprop-version-stage-2))))
+	(vc-file-setprop file 'vc-clearcase-fprop fprop)
+	(throw 'done t)))))
 
 ;;;;;; state
 
@@ -1887,21 +1746,34 @@ responsible if the transaction id is positive."
 	       )))))))
 
 ;;;;;; checkin
-(defun vc-clearcase-checkin (file rev comment)
+(defun vc-clearcase-checkin (files rev comment)
   "Checkin FILE.
-REV is ignored, COMMENT is the checkin comment."
-  (setq file (expand-file-name file))
+REV should be nil, COMMENT is the checkin comment.
+`vc-checkin-switches' is ignored."
+
+  ;; Implementation notes: We pass -identical to checkin which means we will
+  ;; create a new version even if some file is unchanged -- this is needed
+  ;; since an "file is identical" error will abort the checkin mid-way.  vc.el
+  ;; is responsible for not calling checkin if the file has not changed, so we
+  ;; should not create identical copies anyway...
+
+  (unless (listp files)                 ; Compatibility with Emacs 22
+    (setq files (list files)))
+
+  (setq files (mapcar 'expand-file-name files))
   (when rev
-    (message "Ignoring revision specification: %s" rev))
-  (if (or (null comment) (equal comment ""))
-      ;; use the checkout comment, note that we can be called from vc-dired,
-      ;; so the checkout comment might not be known to us.
-      (cleartool "checkin -ptime -nwarn -nc \"%s\"" file)
-      (with-clearcase-cfile (cfile comment)
-	(cleartool "checkin -ptime -nwarn -cfile %s \"%s\"" cfile file)))
+    (error "Revision specification not supported: %s" rev))
+  (let ((pnames (mapconcat (lambda (f) (concat "\"" f "\"")) files " ")))
+    (if (or (null comment) (equal comment ""))
+	;; use the checkout comment, note that we can be called from vc-dired,
+	;; so the checkout comment might not be known to us.
+	(cleartool "checkin -ptime -nwarn -identical -nc %s" pnames)
+	(with-clearcase-cfile (cfile comment)
+	  (cleartool "checkin -ptime -nwarn -identical -cfile %s %s" cfile pnames))))
   ;; we might not have a fprop if called from vc-dired
-  (when (clearcase-file-fprop file)
-    (clearcase-maybe-set-vc-state file 'force)))
+  (dolist (file files)
+    (when (clearcase-file-fprop file)
+      (clearcase-maybe-set-vc-state file 'force))))
 
 ;;;;;; find-version
 (defun clearcase-find-version-helper (file rev destfile)
@@ -2038,6 +1910,9 @@ unreserved -- always do an unreserved checkout."
   "Checkout FILE as per the checkout specification in vc.el.
 See the vc.el `vc-checkout' documentation for the meaning of
 EDITABLE, REV and DESTFILE.
+
+The function is asynchronous (like checkin), it pops up a buffer
+for the checkout comment and finishes the checkout later.
 
 This method does three completely different things:
 
@@ -2240,7 +2115,7 @@ is lost."
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
       (ignore-cleartool-errors
-       (cleartool "reserve -ncomment \"%s\"" file))
+	(cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
     (when (and (not editable)
@@ -2261,12 +2136,15 @@ is lost."
 ;;;;;; merge
 (defun vc-clearcase-merge (file rev1 rev2)
   "Merge into FILE REV1 up to REV2.
+The operation will throw an error if the merge cannot be done
+automatically.  vc.el assumes there are conflict markers in the
+buffer, but ClearCase does not use them.
 
 NOTE: when trying to merge revisions (vc-merge) on a file that is
 not checked-out, vc asks for a checkout, but that the comment
 window pops up, and `vc-merge' assumes the file was already
 checked out.  We need to do an automatic checkout in this case,
-but how do we detect it?"
+but we don't do that."
   (setq file (expand-file-name file))
   (let ((merge-status
 	 (cleartool
@@ -2326,7 +2204,7 @@ has a reserved checkout of the file."
 	  (set-file-modes file (logior (file-modes file) #o220))
 	  (delete-file keep-file)
 	  (ignore-cleartool-errors
-	   (cleartool "reserve -ncomment \"%s\"" file))
+	    (cleartool "reserve -ncomment \"%s\"" file))
 	  (clearcase-maybe-set-vc-state file 'force))
 
       (cleartool-error
@@ -2402,20 +2280,20 @@ sent to cleartool)."
 		  (push (cons label revision) label-revisions))))))))
 
     (with-current-buffer buf
-	(erase-buffer)
-	(insert (format "Working file: %s\n" file))
+      (erase-buffer)
+      (insert (format "Working file: %s\n" file))
 
-	(when (memq clearcase-print-log-show-labels '(some all))
-	  (insert "Labels:\n")
+      (when (memq clearcase-print-log-show-labels '(some all))
+	(insert "Labels:\n")
 
-	  (let ((fmtstr (format "\t%%-%ds %%s\n" max-label-length)))
-	    (dolist (label label-revisions)
-	      (insert (format fmtstr (car label) (cdr label))))))
+	(let ((fmtstr (format "\t%%-%ds %%s\n" max-label-length)))
+	  (dolist (label label-revisions)
+	    (insert (format fmtstr (car label) (cdr label))))))
 
       (let ((args (list "-fmt" (if (clearcase-ucm-view-p
-				       (clearcase-file-fprop file))
-				      clearcase-lshistory-fmt-ucm
-				      clearcase-lshistory-fmt)
+				    (clearcase-file-fprop file))
+				   clearcase-lshistory-fmt-ucm
+				   clearcase-lshistory-fmt)
 			file)))
 	(apply 'start-process
 	       "cleartool-lshistory" buffer
@@ -2820,12 +2698,12 @@ element * NAME -nocheckout"
       (when dir?                        ; apply label to parent directories
 	(message "Applying label to parent directories...")
 	(ignore-cleartool-errors
-	 (while t                       ; until cleartool will throw an error
-	   (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-	   (setq dir (file-name-directory dir))
-	   (cleartool
-	    "mklabel -nc %s lbtype:%s \"%s\""
-	    (if branchp "-replace" "") name dir)))))
+	  (while t                      ; until cleartool will throw an error
+	    (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	    (setq dir (file-name-directory dir))
+	    (cleartool
+	     "mklabel -nc %s lbtype:%s \"%s\""
+	     (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
 ;;;;; MISCELLANEOUS

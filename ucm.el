@@ -435,7 +435,7 @@ set."
 	(rev (ucm-actb-version-name version)))
 		(insert-text-button
      (concat "@@" rev)
-     'face (if (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'" rev)
+     'face (if (ucm-actb-version-checkedout-p version)
 			   'ucm-checkedout-revision-face
 			   'ucm-revision-face)
 		 'type 'ucm-show-diff-link
@@ -463,6 +463,10 @@ set."
 	(not (ucm-actb-version-mark version)))
   (setf (ucm-actb-version-changed version) t))
 
+(defun ucm-actb-version-checkedout-p (version)
+  "Return t if VERSION is a checkout."
+  (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'"
+		(ucm-actb-version-name version)))
 
 ;;;;;; ucm-actb-contributor
 
@@ -610,6 +614,7 @@ structure)"
     (suppress-keymap m)
     (define-key m "m" 'ucm-actb-toggle-mark-command)
     (define-key m "g" 'ucm-actb-refresh-command)
+    (define-key m "c" 'ucm-actb-checkin-command)
     m))
 
 (define-derived-mode ucm-actb-mode fundamental-mode
@@ -661,6 +666,75 @@ otherwise the marks are set."
 	(setq ucm-actb-ewoc (ucm-actb-create-ewoc a))
 	(ewoc-refresh ucm-actb-ewoc)
 	(goto-char (point-min))))))
+
+;;;;;; ucm-actb-checkin-command
+(defun ucm-actb-checkin-command ()
+  "Checkin selected versions from the UCM activity buffer.
+If no versions are selected, the current version is checked in."
+  (interactive)
+  (lexical-let ((files nil)
+		(buf (current-buffer))
+		(modified-files nil)
+		(reverted-files nil)
+		(dir default-directory)
+		(window-configuration (current-window-configuration)))
+
+    ;; First, try to get the selected checked out versions
+    (setq files (mapcar
+		 (lambda (data)
+		   (ucm-actb-file-full-path (ucm-actb-version-file data)))
+		 (ewoc-collect ucm-actb-ewoc
+			       '(lambda (data)
+				 (and
+				  (ucm-actb-version-p data)
+				  (ucm-actb-version-checkedout-p data)
+				  (ucm-actb-version-mark data))))))
+    ;; If no checkouts were selected, try to see if the current file has a
+    ;; checkout.
+    (when (null files)
+      (let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
+	(typecase data
+	  (ucm-actb-version
+	   (if (ucm-actb-version-checkedout-p data)
+	       (push (ucm-actb-file-full-path (ucm-actb-version-file data)) files)
+	       (error "Version is not checked out.")))
+	  (ucm-actb-file
+	   (if (some 'ucm-actb-version-checkedout-p (ucm-actb-file-versions data))
+	       (push (ucm-actb-file-full-path data) files)
+	       (error "File has no checkouts.")))
+	  (t
+	   (error "Must select a file or checked out version.")))))
+
+    ;; undo checkouts which contain no modifications.
+    (dolist (file files)
+      (find-file-noselect file)     ; read in file so it has a fprop
+      (if (and (file-regular-p file)
+	       (vc-clearcase-workfile-unchanged-p file))
+	  (progn
+	    (message "Undo checkout for unmodified file %s" file)
+	    (cleartool "uncheckout -rm \"%s\"" file)
+	    (push file reverted-files))
+	  (push file modified-files)))
+    (clearcase-refresh-files reverted-files)
+    (when (null modified-files)
+      (error "No files to checkin."))
+
+    (log-edit (lambda ()
+		(interactive)
+		(with-cleartool-directory dir
+		  (let ((comment-text
+			 (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
+			   (buffer-substring-no-properties (point-min) (point-max)))))
+		    (vc-clearcase-checkin modified-files nil comment-text)))
+		(clearcase-refresh-files files)
+		(with-current-buffer buf
+		  (ucm-actb-refresh-command))
+		(set-window-configuration window-configuration))
+	      'setup
+	      (lambda ()
+		(interactive)
+		(mapcar 'file-relative-name modified-files))
+	      (get-buffer-create "*UCM-Checkin-Log*"))))
 
 ;;;;; ucm-browse-activity
 ;;;###autoload
@@ -722,8 +796,9 @@ checked-in using \\[log-edit-show-files]."
   (when (member activity '("*NONE*" "*NEW-ACTIVITY*"))
     (error "Not a real activity"))
   (with-cleartool-directory default-directory
-    (lexical-let ((checkin-activity (cleartool "lsact -fmt \"%%Xn\" %s" activity))
-		  (dir default-directory))
+    (lexical-let ((activity activity)
+		  (dir default-directory)
+		  (window-configuration (current-window-configuration)))
       (let ((modified-files nil)
 	    (reverted-files nil))
 	;; Checked out files which have no changes are reverted now.
@@ -736,18 +811,34 @@ checked-in using \\[log-edit-show-files]."
 		(cleartool "uncheckout -rm \"%s\"" file)
 		(push file reverted-files))
 	      (push file modified-files)))
-	(when reverted-files
-	  (clearcase-refresh-files-in-view))
+	(clearcase-refresh-files reverted-files)
 	(when (null modified-files)
 	  (error "No files to checkin.")))
 
       (log-edit (lambda ()
 		  (interactive)
-		  (ucm-finish-activity-checkin checkin-activity dir))
+		  (with-cleartool-directory dir
+		    (with-temp-message (format "Checking in %s..." activity)
+		      (let ((comment-text
+			     (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
+			       (buffer-substring-no-properties (point-min) (point-max))))
+			    (default-directory dir)
+			    ;; Need to grab the file list again, in case it
+			    ;; has changed.
+			    (files (ucm-checked-out-files activity dir)))
+
+			(if (string= comment-text "")
+			    (cleartool "checkin -nc activity:%s@/projects" activity)
+			    (with-clearcase-cfile (comment comment-text)
+			      (cleartool "checkin -cfile \"%s\" activity:%s@/projects" comment activity)))
+
+			(clearcase-refresh-files files))))
+		  (set-window-configuration window-configuration))
 		'setup
 		(lambda ()
 		  (interactive)
-		  (ucm-checked-out-files checkin-activity dir))
+		  (let ((default-directory dir))
+		    (mapcar 'file-relative-name (ucm-checked-out-files activity dir))))
 		(get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity dir)
@@ -762,21 +853,8 @@ The file names are relative to the `default-directory'"
 	  (let ((file (match-string 1 v))
 		(revision (match-string 2 v)))
 	    (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
-	      (add-to-list 'files (file-relative-name file))))))
+	      (add-to-list 'files file)))))
       files)))
-
-(defun ucm-finish-activity-checkin (activity dir)
-  "Check-in files under ACTIVITY using the contents of
-*UCM-Checkin-Log* as the comment."
-  (with-cleartool-directory dir
-    (with-temp-message (format "Checking in %s..." activity)
-      (let ((comment-text (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
-			    (buffer-substring-no-properties (point-min) (point-max)))))
-	(if (string= comment-text "")
-	    (cleartool "checkin -nc %s" activity)
-	    (with-clearcase-cfile (comment comment-text)
-	      (cleartool "checkin -cfile \"%s\" %s" comment activity)))
-	(clearcase-refresh-files-in-view)))))
 
 ;;;; ucm-lock-activity, ucm-unlock-activity
 ;;;###autoload

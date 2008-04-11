@@ -1,3 +1,12 @@
+2008-04-11  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-actb-mode): make the buffer to read-only
+	(ucm-actb-refresh-command): account for the buffer being read-only
+	(ucm-actb-checkin-command): bugfix: if there are marked revisions
+	but no checkouts, signal an error instead of attempting to checkin
+	the revision under cursor.
+	(ucm-browse-activity): account for the buffer being read-only
+
 2008-04-10  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-actb-version-checkedout-p): new function

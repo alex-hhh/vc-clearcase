@@ -349,7 +349,7 @@ Used to implement the BACK button.")
   (insert "\nIn directory `")
   (let ((dir (file-relative-name
 	      (ucm-actb-directory-name directory) ucm-view-root)))
-		(insert-text-button
+    (insert-text-button
      dir
      'face 'font-lock-function-name-face
      'type 'ucm-file-link
@@ -366,7 +366,7 @@ set."
 	 (marks (mapcar (lambda (f)
 			  (some 'ucm-actb-version-mark
 				(ucm-actb-file-versions f)))
-		      files)))
+			files)))
     (cond ((every 'identity marks)
 	   (mapc 'ucm-actb-file-clear-mark files))
 	  (t
@@ -389,11 +389,11 @@ set."
 (defun ucm-actb-file-pp (file)
   "Pretty print FILE, an `ucm-actb-file' structure."
   (insert "    ")
-	      (insert-text-button
+  (insert-text-button
    (ucm-actb-file-name file)
-	       'face 'ucm-file-name-face
-	       'type 'ucm-file-link
-	       'buffer (current-buffer)
+   'face 'ucm-file-name-face
+   'type 'ucm-file-link
+   'buffer (current-buffer)
    'file-name (ucm-actb-file-full-path file)))
 
 (defun ucm-actb-file-set-mark (file)
@@ -433,14 +433,14 @@ set."
       (insert "        "))
   (let ((file (ucm-actb-file-full-path (ucm-actb-version-file version)))
 	(rev (ucm-actb-version-name version)))
-		(insert-text-button
+    (insert-text-button
      (concat "@@" rev)
      'face (if (ucm-actb-version-checkedout-p version)
-			   'ucm-checkedout-revision-face
-			   'ucm-revision-face)
-		 'type 'ucm-show-diff-link
-		 'buffer (current-buffer)
-		 'file-name file
+	       'ucm-checkedout-revision-face
+	       'ucm-revision-face)
+     'type 'ucm-show-diff-link
+     'buffer (current-buffer)
+     'file-name file
      'revision rev)))
 
 (defun ucm-actb-version-set-mark (version)
@@ -475,11 +475,11 @@ set."
 
 (defun ucm-actb-contributor-pp (contributor)
   "Pretty print CONTRIBUTOR, an `ucm-actb-contributor' structure."
-		    (insert "    ")
-		    (insert-text-button
+  (insert "    ")
+  (insert-text-button
    (ucm-actb-contributor-name contributor)
-		     'type 'ucm-activity-link
-		     'buffer (current-buffer)
+   'type 'ucm-activity-link
+   'buffer (current-buffer)
    'ucm-activity (ucm-actb-contributor-name contributor)))
 
 ;;;;;; generic operations
@@ -490,10 +490,10 @@ to the activity ewoc."
   (typecase data
     (symbol
      (when (eq data 'back-button)
-	      (insert "\n\n")
-	      (insert-text-button
-	       "[back]"
-	       'type 'ucm-previous-activity-link
+       (insert "\n\n")
+       (insert-text-button
+	"[back]"
+	'type 'ucm-previous-activity-link
 	'buffer (current-buffer))))
     (string
      (insert "\n" (propertize data 'face 'ucm-field-name-face) "\n"))
@@ -543,7 +543,7 @@ attach to the activity ewoc."
 
 		(push (make-ucm-actb-version :name version :file f)
 		      (ucm-actb-file-versions f)))
-	    )))))
+	      )))))
 
     (ignore-cleartool-errors
       ;; There seems to be a bug in my version of ClearCase: if `activity' is
@@ -620,6 +620,7 @@ structure)"
 (define-derived-mode ucm-actb-mode fundamental-mode
   "UCM Activity Browser"
   (buffer-disable-undo)
+  (setq buffer-read-only t)
   (set (make-local-variable 'ucm-activity) nil)
   (set (make-local-variable 'ucm-view-root) nil)
   (set (make-local-variable 'ucm-actb-ewoc) nil)
@@ -660,9 +661,10 @@ otherwise the marks are set."
   "Refresh the activity in the current buffer."
   (interactive)
   (with-temp-message "Preparing activity report..."
-    (erase-buffer)
     (with-cleartool-directory (expand-file-name default-directory)
-      (let ((a (ucm-actb-fetch-activity ucm-activity)))
+      (let ((a (ucm-actb-fetch-activity ucm-activity))
+	    (inhibit-read-only t))
+	(erase-buffer)
 	(setq ucm-actb-ewoc (ucm-actb-create-ewoc a))
 	(ewoc-refresh ucm-actb-ewoc)
 	(goto-char (point-min))))))
@@ -672,7 +674,8 @@ otherwise the marks are set."
   "Checkin selected versions from the UCM activity buffer.
 If no versions are selected, the current version is checked in."
   (interactive)
-  (lexical-let ((files nil)
+  (lexical-let ((marked-versions nil)
+		(files nil)
 		(buf (current-buffer))
 		(modified-files nil)
 		(reverted-files nil)
@@ -680,34 +683,39 @@ If no versions are selected, the current version is checked in."
 		(window-configuration (current-window-configuration)))
 
     ;; First, try to get the selected checked out versions
-    (setq files (mapcar
-		 (lambda (data)
-		   (ucm-actb-file-full-path (ucm-actb-version-file data)))
-		 (ewoc-collect ucm-actb-ewoc
-			       '(lambda (data)
-				 (and
-				  (ucm-actb-version-p data)
-				  (ucm-actb-version-checkedout-p data)
-				  (ucm-actb-version-mark data))))))
-    ;; If no checkouts were selected, try to see if the current file has a
-    ;; checkout.
-    (when (null files)
-      (let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
-	(typecase data
-	  (ucm-actb-version
-	   (if (ucm-actb-version-checkedout-p data)
-	       (push (ucm-actb-file-full-path (ucm-actb-version-file data)) files)
-	       (error "Version is not checked out.")))
-	  (ucm-actb-file
-	   (if (some 'ucm-actb-version-checkedout-p (ucm-actb-file-versions data))
-	       (push (ucm-actb-file-full-path data) files)
-	       (error "File has no checkouts.")))
-	  (t
-	   (error "Must select a file or checked out version.")))))
+    (setq marked-versions
+	  (ewoc-collect ucm-actb-ewoc
+			'(lambda (data)
+			  (and
+			   (ucm-actb-version-p data)
+			   (ucm-actb-version-mark data)))))
+
+    (if marked-versions
+	(progn
+	  (dolist (v marked-versions)
+	    (when (ucm-actb-version-checkedout-p v)
+	      (push (ucm-actb-file-full-path (ucm-actb-version-file v)) files)))
+	  (unless files
+	    (error "No checkouts selected.")))
+
+	;; If no versions were selected, try to see if the current file has a
+	;; checkout.
+	(let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
+	  (typecase data
+	    (ucm-actb-version
+	     (if (ucm-actb-version-checkedout-p data)
+		 (push (ucm-actb-file-full-path (ucm-actb-version-file data)) files)
+		 (error "Version is not checked out.")))
+	    (ucm-actb-file
+	     (if (some 'ucm-actb-version-checkedout-p (ucm-actb-file-versions data))
+		 (push (ucm-actb-file-full-path data) files)
+		 (error "File has no checkouts.")))
+	    (t
+	     (error "Must select a file or checked out version.")))))
 
     ;; undo checkouts which contain no modifications.
     (dolist (file files)
-      (find-file-noselect file)     ; read in file so it has a fprop
+      (find-file-noselect file)         ; read in file so it has a fprop
       (if (and (file-regular-p file)
 	       (vc-clearcase-workfile-unchanged-p file))
 	  (progn
@@ -767,11 +775,12 @@ directly."
     (let ((buf (get-buffer-create "*UCM Activity Browser*")))
       (switch-to-buffer buf)
       (ucm-actb-mode)
-      (erase-buffer)
-      (let ((view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
-	(unless (string= view "")
-	  (let ((vprop (clearcase-get-vprop view default-directory)))
-	    (setq ucm-view-root (clearcase-vprop-root-path vprop)))))
+      (let ((inhibit-read-only t))
+	(erase-buffer)
+	(let ((view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
+	  (unless (string= view "")
+	    (let ((vprop (clearcase-get-vprop view default-directory)))
+	      (setq ucm-view-root (clearcase-vprop-root-path vprop))))))
 
       (setq ucm-activity activity)
       (ucm-actb-refresh-command))))
@@ -830,7 +839,8 @@ checked-in using \\[log-edit-show-files]."
 			(if (string= comment-text "")
 			    (cleartool "checkin -nc activity:%s@/projects" activity)
 			    (with-clearcase-cfile (comment comment-text)
-			      (cleartool "checkin -cfile \"%s\" activity:%s@/projects" comment activity)))
+			      (cleartool "checkin -cfile \"%s\" activity:%s@/projects"
+					 comment activity)))
 
 			(clearcase-refresh-files files))))
 		  (set-window-configuration window-configuration))

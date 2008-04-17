@@ -1,3 +1,10 @@
+2008-04-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-read-activity): 1.27 moved VIEW-TAG arg to the end.
+	All callers updated.
+	(ucm-read-activity): 1.27 when INITIAL is a symbol, don't display
+	a default activity, even when there is one.
+
 2008-04-11  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-actb-mode): make the buffer to read-only

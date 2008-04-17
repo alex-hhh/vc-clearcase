@@ -42,7 +42,7 @@
   :group 'vc-clearcase)
 
 ;;;; ucm-read-activity
-(defun ucm-read-activity (prompt &optional view-tag include-obsolete initial)
+(defun ucm-read-activity (prompt &optional include-obsolete initial view-tag)
   "Display PROMPT and read a UCM activity with completion.
 
 VIEW-TAG is the view from which activities are read -- when nil,
@@ -53,7 +53,9 @@ When INCLUDE-OBSOLETE is not nil, obsolete activities are also
 included in the list.
 
 INITIAL is the initial activity name presented to the user.  When
-nil, the current activity in the view is presented to the user."
+nil, the current activity in the view is presented to the user.
+When it is a symbol, no default activity is presented to the
+user."
 
   (with-cleartool-directory (expand-file-name default-directory)
     (unless view-tag
@@ -103,7 +105,7 @@ nil, the current activity in the view is presented to the user."
 	  fn string (clearcase-vprop-activities vprop) predicate)))
      nil
      'require-match
-     initial)))
+     (when (stringp initial) initial))))
 
 ;;;; ucm-set-activity
 ;;;###autoload
@@ -117,7 +119,7 @@ Two special activity names are also accepted: *NONE* which will
 cause the current activity to be unset and *NEW-ACTIVITY* which
 will create and set a new activity (the user is prompted for the
 activity headline)."
-  (interactive (list (ucm-read-activity "Set activity: ")))
+  (interactive (list (ucm-read-activity "Set activity: " nil 'no-default)))
   (with-cleartool-directory (expand-file-name default-directory)
     (cond
       ((equal activity "*NONE*")
@@ -769,7 +771,7 @@ directly."
 		 (< current-prefix-arg 0)))
 	(read-string "Browse activity: ")
 	(ucm-read-activity
-	 "Browse activity: " nil
+	 "Browse activity: "
 	 (when current-prefix-arg 'include-obsolete)))))
   (with-cleartool-directory (expand-file-name default-directory)
     (let ((buf (get-buffer-create "*UCM Activity Browser*")))
@@ -886,7 +888,7 @@ The file names are relative to the `default-directory'"
   "Unlock ACTIVITY. With prefix arg, allow selecting obsolete activities."
   (interactive
    (list (ucm-read-activity
-	  "Unlock activity: " nil
+	  "Unlock activity: "
 	  (when current-prefix-arg 'include-obsolete))))
   (with-cleartool-directory default-directory
     (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))

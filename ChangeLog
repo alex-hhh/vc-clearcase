@@ -1,3 +1,15 @@
+2008-04-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (cleartool-wait-for): 1.155 wait for 0.5 seconds
+	at a time.
+	(clearcase-dir-state-process-current-line)
+	(clearcase-dir-state-collect)
+	(clearcase-dir-state-sentinel)
+	(clearcase-dir-state-1): 1.155 new functions
+	(clearcase-dir-state-in-progress): 1.155 new variable
+	(vc-clearcase-dir-state): 1.155 start a single cleartool process
+	and recursively list all files.
+
 2008-04-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-read-activity): 1.27 moved VIEW-TAG arg to the end.

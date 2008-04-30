@@ -1,3 +1,12 @@
+2008-04-30  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-actb-version-pname): 1.28 new function
+	(ucm-actb-mode-map): 1.28 add binding for 't'
+	(ucm-actb-transfer-versions-command): 1.28 new function
+	(ucm-before-activity-lock-hook): 1.28 new variable
+	(ucm-lock-activity): 1.28 use run the hooks in
+	`ucm-before-activity-lock-hook'
+
 2008-04-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (cleartool-wait-for): 1.155 wait for 0.5 seconds

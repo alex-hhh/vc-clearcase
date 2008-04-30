@@ -470,6 +470,11 @@ set."
   (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'"
 		(ucm-actb-version-name version)))
 
+(defun ucm-actb-version-pname (version)
+  "Return the version extended path name of VERSION."
+  (let ((file (ucm-actb-file-full-path (ucm-actb-version-file version))))
+    (concat file "@@" (ucm-actb-version-name version))))
+
 ;;;;;; ucm-actb-contributor
 
 (defstruct ucm-actb-contributor
@@ -617,6 +622,7 @@ structure)"
     (define-key m "m" 'ucm-actb-toggle-mark-command)
     (define-key m "g" 'ucm-actb-refresh-command)
     (define-key m "c" 'ucm-actb-checkin-command)
+    (define-key m "t" 'ucm-actb-transfer-versions-command)
     m))
 
 (define-derived-mode ucm-actb-mode fundamental-mode
@@ -746,6 +752,37 @@ If no versions are selected, the current version is checked in."
 		(mapcar 'file-relative-name modified-files))
 	      (get-buffer-create "*UCM-Checkin-Log*"))))
 
+;;;;;; ucm-actb-transfer-versions-command
+(defun ucm-actb-transfer-versions-command ()
+  "Thansfer the selected versions to another activity."
+  (interactive)
+  (let ((revisions (ewoc-collect ucm-actb-ewoc
+				 '(lambda (data)
+				   (and
+				    (ucm-actb-version-p data)
+				    (ucm-actb-version-mark data)))))
+	(target-activity (ucm-read-activity "Transfer to activity: " nil 'no-initial)))
+
+    (when (equal target-activity ucm-activity)
+      (error "Will not transfer to the same activity"))
+
+    (unless revisions                   ; no revisions are marked, use current
+      (let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
+	(if (ucm-actb-version-p data)
+	    (setq revisions (list data))
+	    (error "Must select a version."))))
+
+    (with-temp-message "Transferring revisions..."
+      (with-cleartool-directory default-directory
+	(dolist (revision revisions)
+	  (cleartool "chact -fcset %s -tcset %s \"%s\""
+		     ucm-activity target-activity
+		     (ucm-actb-version-pname revision)))))
+
+    (ucm-actb-refresh-command)))
+
+
+
 ;;;;; ucm-browse-activity
 ;;;###autoload
 (defun ucm-browse-activity (activity)
@@ -869,6 +906,16 @@ The file names are relative to the `default-directory'"
       files)))
 
 ;;;; ucm-lock-activity, ucm-unlock-activity
+
+;;;###autoload
+(defvar ucm-before-activity-lock-hook '()
+  "Hook run before an activity is locked.
+This can be used for example to attach/modifiy attributes on the
+activity.
+
+Each hook function is called with two arguments, the first is
+the activity name, the second is t.")
+
 ;;;###autoload
 (defun ucm-lock-activity (activity)
   "Lock ACTIVITY.  With prefix arg, mark it as obsolete."
@@ -878,6 +925,8 @@ The file names are relative to the `default-directory'"
       (if (member status '("locked" "obsolete"))
 	  (message "%s is already locked" activity)
 	  (progn
+	    (run-hook-with-args
+	     'ucm-before-activity-lock-hook activity current-prefix-arg)
 	    (cleartool "lock %s activity:%s@/projects"
 		       (if current-prefix-arg "-obsolete" "") activity)
 	    (message "%s is now %s" activity

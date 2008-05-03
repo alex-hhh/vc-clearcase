@@ -1,0 +1,31 @@
+-*- outline -*-
+
+* Bug in computing the state
+
+There is a case when the state of the file is computed incorectly: two views
+share the same configspec which sets the file to branch at a label.  In the
+first view, the file is checked out than checked in.  The branch will now be
+created and the file will be at version 1 on that branch.  Since the second
+view is not updated, the file is still at the old label.
+
+vc-clearcase will compute the state of the file incorectly for the file in the
+second view: the file will be considered up-to-date, but the actual state
+should be 'need-update.  This is because vc-clearcase will consider a file
+up-to-date of it is configspec rule has a "-mkbranch" directive.  It does not
+check that there are versions on that branch.
+
+For example:
+
+configspec contains:
+
+     element * .../branch1/LATEST
+     element * LABEL1 -mkbranch branch1
+
+File has the following versions:
+
+     /main/3         -- LABEL1
+     /main/branch1/1 -- branch1 is branched at /main/3
+
+Snapshot view has the file at /main/3, that is the view is not up-to-date.
+The status of the file should be 'needs-merge, but instead vc-clearcase
+considers it 'up-to-date.

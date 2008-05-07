@@ -1326,8 +1326,8 @@ If FORCE is not nil, always read the properties."
    (let* ((d (read-file-name "Directory: "
 			     default-directory default-directory t))
 	  (vob (ignore-cleartool-errors
-		 (clearcase-vob-tag-for-path
-		  (if (file-directory-p d) d (file-name-directory d))))))
+		(clearcase-vob-tag-for-path
+		 (if (file-directory-p d) d (file-name-directory d))))))
      (list d (if vob
 		 (clearcase-read-label "Label: " vob)
 		 (read-string "New snapshot name: "))
@@ -1372,19 +1372,6 @@ version."
     ;; return t
     (let ((fprop (clearcase-file-fprop file)))
 
-      (unless fprop
-	(let ((registered? (vc-file-getprop file 'vc-clearcase-registered)))
-	  ;; `vc-clearcase-dir-state' told us whether it is registered or not.
-	  ;; Note that we rely on `vc-dired' to call this function for each
-	  ;; file it processes and we know that we don't need to create a
-	  ;; FPROP in that case.  We might get into trouble if we don't create
-	  ;; the FPROP when the file is actually visited...
-	  (when registered?
-	    ;; This property is good for one use only, since the user might
-	    ;; register the file outside Emacs and than visit the file.
-	    (vc-file-setprop file 'vc-clearcase-registered nil)
-	    (throw 'done (eq registered? 'yes)))))
-
       (when (clearcase-fprop-initialized-p fprop)
 	(throw 'done t))
 
@@ -1394,26 +1381,26 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-	(let ((ls-result (cleartool "ls \"%s\"" file)))
-	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
-	    (throw 'done nil))          ; file is not registered
+       (let ((ls-result (cleartool "ls \"%s\"" file)))
+	 (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	   (throw 'done nil))           ; file is not registered
 
-	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
-	  ;; anticipate that the version will be needed shortly, so ask for
-	  ;; it.  When a file is hijacked, do the desc command on the version
-	  ;; extended name of the file, as cleartool will return nothing for
-	  ;; the hijacked version...
-	  (let ((pname (if (clearcase-fprop-hijacked-p fprop)
-			   (concat file "@@" (clearcase-fprop-version fprop))
-			   file)))
-	    (setf (clearcase-fprop-version-tid fprop)
-		  (cleartool-ask
-		   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-		   'nowait
-		   fprop
-		   'clearcase-set-fprop-version-stage-2))))
-	(vc-file-setprop file 'vc-clearcase-fprop fprop)
-	(throw 'done t)))))
+	 (clearcase-set-fprop-version-stage-1 fprop ls-result)
+	 ;; anticipate that the version will be needed shortly, so ask for
+	 ;; it.  When a file is hijacked, do the desc command on the version
+	 ;; extended name of the file, as cleartool will return nothing for
+	 ;; the hijacked version...
+	 (let ((pname (if (clearcase-fprop-hijacked-p fprop)
+			  (concat file "@@" (clearcase-fprop-version fprop))
+			  file)))
+	   (setf (clearcase-fprop-version-tid fprop)
+		 (cleartool-ask
+		  (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		  'nowait
+		  fprop
+		  'clearcase-set-fprop-version-stage-2))))
+       (vc-file-setprop file 'vc-clearcase-fprop fprop)
+       (throw 'done t)))))
 
 ;;;;;; state
 
@@ -1509,12 +1496,9 @@ information."
 		    (re-search-forward "\\s-+Rule: " (c-point 'eol))
 		    (point))))
        (if (file-directory-p file)
-	   (when vc-dired-recurse
-	     (puthash (expand-file-name (concat file "/")) 'yes
-		      clearcase-dir-state-cache))
+	   (puthash (directory-file-name file) 'yes clearcase-dir-state-cache)
 
 	   ;; Regular, version controlled file.  Set the state.
-	   (vc-file-setprop file 'vc-clearcase-registered 'yes)
 	   (vc-file-setprop file 'vc-backend 'CLEARCASE)
 	   (vc-file-setprop
 	    file
@@ -1550,11 +1534,9 @@ information."
     ((looking-at "^.+$")                ; not an empty line
      ;; file is not managed by ClearCase
      (let ((file (expand-file-name (match-string 0))))
+       (puthash (directory-file-name file) 'no clearcase-dir-state-cache)
        (vc-file-setprop file 'vc-backend 'CLEARCASE)
-       (if (file-directory-p file)
-	   (puthash (directory-file-name (expand-file-name file))
-		    'no clearcase-dir-state-cache)
-	   (vc-file-setprop file 'vc-clearcase-registered 'no))))))
+       (vc-file-setprop file 'vc-state 'up-to-date)))))
 
 (defun clearcase-dir-state-collect (process string)
   "Collect information from a cleartool ls output."
@@ -1563,9 +1545,12 @@ information."
     (insert string)
     (goto-char (point-min))
     (let ((kill-whole-line t))
-      (while (= (forward-line 1) 1)     ; do we have a full line?
+      (while (and (not (= (point-min) (point-max)))
+		  (progn (re-search-forward "$")
+			 (looking-at "\n"))) ; do we have a full line?
 	(goto-char (point-min))
 	(clearcase-dir-state-process-current-line)
+	(goto-char (point-min))
 	(kill-line)))))
 
 (defun clearcase-dir-state-sentinel (process event)
@@ -1576,22 +1561,18 @@ information."
   "Start a cleartool ls process and collect information from it."
   (let* ((default-directory dir)
 	 (buffer (generate-new-buffer "*cleartool-ls*"))
-	 (process (start-process
-		   "cleartool-ls" buffer
-		   cleartool-program "ls" "-recurse" "-visible")))
+	 (args (list cleartool-program "ls" "-recurse" "-visible"))
+	 (process (apply 'start-process "cleartool-ls" buffer args)))
     (with-current-buffer buffer
       (buffer-disable-undo)
       (setq default-directory dir)
       (set-process-filter process 'clearcase-dir-state-collect)
       (set-process-sentinel process 'clearcase-dir-state-sentinel))))
 
-(defvar clearcase-dir-state-in-progress nil)
-
 (defadvice vc-dired-hook (after clearcase-clear-dir-state-cache)
   "Clear `clearcase-clear-dir-state-cache' so that we start clean
 b-on the next `vc-directory' call"
-  (clrhash clearcase-dir-state-cache)
-  (setq clearcase-dir-state-in-progress nil))
+  (clrhash clearcase-dir-state-cache))
 
 (defun vc-clearcase-dir-state (dir)
   "Determine the state of all files in DIR.
@@ -1599,13 +1580,14 @@ This is a slow operation so it will not detect the proper state
 of the files: only checked out and hijacked files will be
 correctly identified.  Files which are visited in Emacs will also
 have a correct state."
-  (message "vc-clearcase-dir-state: %s" dir)
-  (unless clearcase-dir-state-in-progress
-    (setq clearcase-dir-state-in-progress t)
+  (let ((message-log-max nil))        ; prevent message text from being logged
+    (message "vc-clearcase-dir-state: %s" dir))
+  (unless (gethash (directory-file-name dir) clearcase-dir-state-cache)
     (catch 'finished
       (clearcase-dir-state-1 dir)
       (while t (sit-for 1.0))))
-  (message "vc-clearcase-dir-state: %s completed." dir))
+  (let ((message-log-max nil))        ; prevent message text from being logged
+    (message "vc-clearcase-dir-state: %s completed." dir)))
 
 ;;;;;; workfile-version
 (defun vc-clearcase-workfile-version (file)
@@ -1712,9 +1694,6 @@ it's parents is registered."
   (with-clearcase-checkout (file-name-directory file)
     (let ((cleartool-timeout (* 2 cleartool-timeout)))
       (cleartool "mkelem -nc \"%s\"" file))
-    ;; mark the file as registered, in case it was marked as unregistered.
-    (vc-file-setprop file 'vc-clearcase-registered 'yes)
-
     (let ((fprop (clearcase-make-fprop :file-name file)))
       (vc-file-setprop file 'vc-clearcase-fprop fprop)
       (clearcase-maybe-set-vc-state file 'force))))
@@ -1736,20 +1715,22 @@ If there is a transaction id for FILE in
 processing that FILE.  In that case we consider ourselves
 responsible if the transaction id is positive."
   (cond
-    ((gethash file clearcase-dir-state-cache) t)
+    ((or (gethash file clearcase-dir-state-cache)
+	 (gethash (directory-file-name file) clearcase-dir-state-cache))
+     t)
 
     (t
      (ignore-cleartool-errors
-       (let ((vob (clearcase-vob-tag-for-path file)))
-	 (if (member vob clearcase-known-vobs)
-	     t
-	     ;; else
-	     (progn
-	       ;; lsvob will signal an error if VOB is not valid.
-	       (cleartool "lsvob -short \"%s\"" vob)
-	       (push vob clearcase-known-vobs)
-	       t
-	       )))))))
+      (let ((vob (clearcase-vob-tag-for-path file)))
+	(if (member vob clearcase-known-vobs)
+	    t
+	    ;; else
+	    (progn
+	      ;; lsvob will signal an error if VOB is not valid.
+	      (cleartool "lsvob -short \"%s\"" vob)
+	      (push vob clearcase-known-vobs)
+	      t
+	      )))))))
 
 ;;;;;; checkin
 (defun vc-clearcase-checkin (files rev comment)
@@ -2121,7 +2102,7 @@ is lost."
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
       (ignore-cleartool-errors
-	(cleartool "reserve -ncomment \"%s\"" file))
+       (cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
     (when (and (not editable)
@@ -2210,7 +2191,7 @@ has a reserved checkout of the file."
 	  (set-file-modes file (logior (file-modes file) #o220))
 	  (delete-file keep-file)
 	  (ignore-cleartool-errors
-	    (cleartool "reserve -ncomment \"%s\"" file))
+	   (cleartool "reserve -ncomment \"%s\"" file))
 	  (clearcase-maybe-set-vc-state file 'force))
 
       (cleartool-error
@@ -2704,12 +2685,12 @@ element * NAME -nocheckout"
       (when dir?                        ; apply label to parent directories
 	(message "Applying label to parent directories...")
 	(ignore-cleartool-errors
-	  (while t                      ; until cleartool will throw an error
-	    (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-	    (setq dir (file-name-directory dir))
-	    (cleartool
-	     "mklabel -nc %s lbtype:%s \"%s\""
-	     (if branchp "-replace" "") name dir)))))
+	 (while t                       ; until cleartool will throw an error
+	   (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	   (setq dir (file-name-directory dir))
+	   (cleartool
+	    "mklabel -nc %s lbtype:%s \"%s\""
+	    (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
 ;;;;; MISCELLANEOUS

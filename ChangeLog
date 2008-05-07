@@ -1,3 +1,21 @@
+2008-05-07  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-clearcase-registered): 1.156 don't check the
+	vc-clearcase-registered vc property
+	(clearcase-dir-state-process-current-line): 1.156 always put all
+	directories in `clearcase-dir-state-cache'; don't set the
+	vc-clearcase-registered property for the file; set the vc-state
+	property for unregistered files too.
+	(clearcase-dir-state-collect): 1.156 bugfix: corectly recognizes
+	full lines and removes them after processing
+	(vc-clearcase-dir-state): 1.156 no longer use
+	clearcase-dir-state-in-progress (removed variable), use
+	clearcase-dir-state-cache instead
+	(vc-clearcase-register): 1.156 don't set the
+	vc-clearcase-registered property on the file
+	(vc-clearcase-responsible-p): 1.156 check that a directory is in
+	clearcase-dir-state-cache with or without the traling slash
+
 2008-04-30  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-actb-version-pname): 1.28 new function

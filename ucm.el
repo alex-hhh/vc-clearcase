@@ -595,8 +595,17 @@ structure)"
 		  (cleartool "lsact -fmt \"%%[locked]p\" %s" name)
 		  ", "
 		  (cleartool "lsact -fmt \"%%[owner]p\" %s" name)
-		  ")\n"))
-	 (ewoc (ewoc-create 'ucm-actb-pp header)))
+		  ")\n"
+		  (propertize "Attributes: " 'face 'ucm-field-name-face)
+		  "\n"))
+	 (ewoc nil))
+
+    (loop for (attribute . value)
+       in (clearcase-get-attributes (format "activity:%s@/projects" name))
+       do (setq header (concat header (format "\t%s = %s\n" (symbol-name attribute) value))))
+
+    (setq ewoc (ewoc-create 'ucm-actb-pp header))
+
     (dolist (d (ucm-actb-activity-directories activity))
       (ewoc-enter-last ewoc d)
       (dolist (f (ucm-actb-directory-files d))
@@ -622,6 +631,7 @@ structure)"
     (define-key m "m" 'ucm-actb-toggle-mark-command)
     (define-key m "g" 'ucm-actb-refresh-command)
     (define-key m "c" 'ucm-actb-checkin-command)
+    (define-key m "r" 'ucm-actb-revert-command)
     (define-key m "t" 'ucm-actb-transfer-versions-command)
     m))
 
@@ -633,6 +643,44 @@ structure)"
   (set (make-local-variable 'ucm-view-root) nil)
   (set (make-local-variable 'ucm-actb-ewoc) nil)
   (set (make-local-variable 'ucm-previous-actb-ewocs) nil))
+
+
+;;;;;; ucm-actb-collect-marked-checkouts
+(defun ucm-actb-collect-marked-checkouts ()
+  "Return a list of files which have marked checked out versions.
+If no checked out versions are marked return the file under
+cursor if it is checked out.  Signal an error otherwise."
+  ;; First, try to get the selected checked out versions
+
+  (let ((marked-versions (ewoc-collect ucm-actb-ewoc
+				       '(lambda (data)
+					 (and
+					  (ucm-actb-version-p data)
+					  (ucm-actb-version-mark data)))))
+	(files '()))
+    (if marked-versions
+	(progn
+	  (dolist (v marked-versions)
+	    (when (ucm-actb-version-checkedout-p v)
+	      (push (ucm-actb-file-full-path (ucm-actb-version-file v)) files)))
+	  (unless files
+	    (error "No checkouts selected.")))
+
+	;; If no versions were selected, try to see if the current file has a
+	;; checkout.
+	(let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
+	  (typecase data
+	    (ucm-actb-version
+	     (if (ucm-actb-version-checkedout-p data)
+		 (push (ucm-actb-file-full-path (ucm-actb-version-file data)) files)
+		 (error "Version is not checked out.")))
+	    (ucm-actb-file
+	     (if (some 'ucm-actb-version-checkedout-p (ucm-actb-file-versions data))
+		 (push (ucm-actb-file-full-path data) files)
+		 (error "File has no checkouts.")))
+	    (t
+	     (error "Must select a file or checked out version.")))))
+    files))
 
 ;;;;;; ucm-actb-toggle-mark-command
 (defun ucm-actb-toggle-mark-command (pos)
@@ -682,44 +730,12 @@ otherwise the marks are set."
   "Checkin selected versions from the UCM activity buffer.
 If no versions are selected, the current version is checked in."
   (interactive)
-  (lexical-let ((marked-versions nil)
-		(files nil)
+  (lexical-let ((files (ucm-actb-collect-marked-checkouts))
 		(buf (current-buffer))
 		(modified-files nil)
 		(reverted-files nil)
 		(dir default-directory)
 		(window-configuration (current-window-configuration)))
-
-    ;; First, try to get the selected checked out versions
-    (setq marked-versions
-	  (ewoc-collect ucm-actb-ewoc
-			'(lambda (data)
-			  (and
-			   (ucm-actb-version-p data)
-			   (ucm-actb-version-mark data)))))
-
-    (if marked-versions
-	(progn
-	  (dolist (v marked-versions)
-	    (when (ucm-actb-version-checkedout-p v)
-	      (push (ucm-actb-file-full-path (ucm-actb-version-file v)) files)))
-	  (unless files
-	    (error "No checkouts selected.")))
-
-	;; If no versions were selected, try to see if the current file has a
-	;; checkout.
-	(let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
-	  (typecase data
-	    (ucm-actb-version
-	     (if (ucm-actb-version-checkedout-p data)
-		 (push (ucm-actb-file-full-path (ucm-actb-version-file data)) files)
-		 (error "Version is not checked out.")))
-	    (ucm-actb-file
-	     (if (some 'ucm-actb-version-checkedout-p (ucm-actb-file-versions data))
-		 (push (ucm-actb-file-full-path data) files)
-		 (error "File has no checkouts.")))
-	    (t
-	     (error "Must select a file or checked out version.")))))
 
     ;; undo checkouts which contain no modifications.
     (dolist (file files)
@@ -751,6 +767,17 @@ If no versions are selected, the current version is checked in."
 		(interactive)
 		(mapcar 'file-relative-name modified-files))
 	      (get-buffer-create "*UCM-Checkin-Log*"))))
+
+;;;;;; ucm-actb-revert-command
+(defun ucm-actb-revert-command ()
+  "Revert checkout on selected files"
+  (interactive)
+  (let ((files (ucm-actb-collect-marked-checkouts)))
+    (dolist (file files)
+      (message "Reverting %s" (file-relative-name file))
+      (find-file-noselect file)         ; read in file so it has a fprop
+      (vc-clearcase-revert file)))
+  (ucm-actb-refresh-command))
 
 ;;;;;; ucm-actb-transfer-versions-command
 (defun ucm-actb-transfer-versions-command ()
@@ -810,19 +837,21 @@ directly."
 	(ucm-read-activity
 	 "Browse activity: "
 	 (when current-prefix-arg 'include-obsolete)))))
-  (with-cleartool-directory (expand-file-name default-directory)
-    (let ((buf (get-buffer-create "*UCM Activity Browser*")))
-      (switch-to-buffer buf)
-      (ucm-actb-mode)
-      (let ((inhibit-read-only t))
-	(erase-buffer)
-	(let ((view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
-	  (unless (string= view "")
-	    (let ((vprop (clearcase-get-vprop view default-directory)))
-	      (setq ucm-view-root (clearcase-vprop-root-path vprop))))))
+  (let ((dir (expand-file-name default-directory)))
+    (with-cleartool-directory dir
+      (let ((buf (get-buffer-create "*UCM Activity Browser*")))
+	(switch-to-buffer buf)
+	(ucm-actb-mode)
+	(let ((inhibit-read-only t))
+	  (setq default-directory dir)
+	  (erase-buffer)
+	  (let ((view (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -short"))))
+	    (unless (string= view "")
+	      (let ((vprop (clearcase-get-vprop view default-directory)))
+		(setq ucm-view-root (clearcase-vprop-root-path vprop))))))
 
-      (setq ucm-activity activity)
-      (ucm-actb-refresh-command))))
+	(setq ucm-activity activity)
+	(ucm-actb-refresh-command)))))
 
 ;;;; ucm-checkin-activity
 ;;;###autoload

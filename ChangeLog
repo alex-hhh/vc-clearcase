@@ -1,3 +1,17 @@
+2008-05-21  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-actb-create-ewoc): 1.29 fetch the attributes of the
+	activity too
+	(ucm-actb-mode-map): 1.29 bind "r" to `ucm-actb-revert-command'
+	(ucm-actb-collect-marked-checkouts): 1.29 new function
+	(ucm-actb-checkin-command): 1.29 use
+	`ucm-actb-collect-marked-checkouts'
+	(ucm-actb-revert-command): 1.29 new function.
+	(ucm-browse-activity): 1.29 set the directory of the browse buffer
+	to the current directory when the buffer is reused.
+
+	* vc-clearcase.el (clearcase-get-attributes): 1.157 new function
+
 2008-05-07  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-registered): 1.156 don't check the

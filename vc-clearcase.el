@@ -1261,6 +1261,17 @@ ClearCase uses."
 	    (push merged-revision result)))))
     (nreverse result)))
 
+(defun clearcase-get-attributes (object)
+  "Return the attributes attached to a ClearCase object as an ALIST."
+  (let ((data (cleartool "desc -fmt \"%%a\" %s" object))
+	(pos 0)
+	(case-fold-search t)
+	(attributes '()))
+    (while (string-match "(?\\([a-z0-9_-]+\\)=\\(\"?\\)\\(.*?\\)\\2\\(:?)\\|, \\)" data pos)
+      (push (cons (intern (match-string 1 data)) (match-string 3 data)) attributes)
+      (setq pos (match-end 0)))
+    attributes))
+
 (defun clearcase-maybe-set-vc-state (file &optional force)
   "Lazily set the clearcase specific properties of FILE.
 If FORCE is not nil, always read the properties."

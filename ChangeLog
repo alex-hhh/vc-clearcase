@@ -1,3 +1,26 @@
+2008-06-07  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-locked-activity-face)
+	(ucm-obsolete-activity-face, ucm-set-activity-face): 1.30 new
+	faces.
+	(ucm-read-activity): 1.30 provide only the current users
+	activities for completion.
+	(ucm-read-activity): 1.30 wait for the transaction id of the lsact
+	command.
+	(ucm-lsact-ewoc, ucm-lsact-only-current-user)
+	(ucm-lsact-include-obsolete): 1.30 new variables
+	(ucm-lsact-activity-link-handler): 1.30 new function.
+	(ucm-lsact-activity-link): 1.30 new button
+	(ucm-lsact-activity): 1.30 new struct
+	(ucm-lsact-pp-attributes): 1.30 new variable
+	(ucm-lsact-activity-pp, ucm-lsact-create-ewoc)
+	(ucm-lsact-refresh-command, ucm-lsact-toggle-mark-command)
+	(ucm-lsact-set-activity-command): 1.30 new functions
+	(ucm-lsact-mode-map): 1.30 new variable
+	(ucm-lsact-mode): 1.30 new mode
+	(ucm-list-activities): 1.30 new function
+	(ucm-browse-activity): 1.30 use `switch-to-buffer-other-window'
+
 2008-05-21  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-actb-create-ewoc): 1.29 fetch the attributes of the

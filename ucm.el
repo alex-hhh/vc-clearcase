@@ -41,6 +41,43 @@
   "Support for UCM under ClearCase"
   :group 'vc-clearcase)
 
+;;;; faces
+(defface ucm-field-name-face
+    '((t (:inherit font-lock-builtin-face)))
+  "Face used for field names in UCM browse buffers."
+  :group 'ucm)
+
+(defface ucm-file-name-face
+    '((t (:weight bold)))
+  "Face used for file names in UCM browse buffers."
+  :group 'ucm)
+
+(defface ucm-revision-face
+    '((t (:slant italic)))
+  "Face used for revisions in UCM browse buffers."
+  :group 'ucm)
+
+(defface ucm-checkedout-revision-face
+    '((t (:foreground "IndianRed" :slant italic)))
+  "Face used for checkedout revisions in UCM browse buffers."
+  :group 'ucm)
+
+(defface ucm-locked-activity-face
+    '((t (:inherit font-lock-function-name-face)))
+  "Face used for locked activities in UCM activity list buffers."
+  :group 'ucm)
+
+(defface ucm-obsolete-activity-face
+    '((t (:inherit font-lock-comment-face)))
+  "Face used for obsolete activities in UCM activity list buffers."
+  :group 'ucm)
+
+(defface ucm-set-activity-face
+    '((t (:inherit font-lock-constant-face)))
+  "Face used for the activity that is set in the current view in
+UCM activity list buffers."
+  :group 'ucm)
+
 ;;;; ucm-read-activity
 (defun ucm-read-activity (prompt &optional include-obsolete initial view-tag)
   "Display PROMPT and read a UCM activity with completion.
@@ -65,7 +102,7 @@ user."
     (unless initial
       (setq initial
 	    (ignore-cleartool-errors
-	      (cleartool-ask "lsact -cact -fmt \"%n\"")))))
+	     (cleartool-ask "lsact -cact -fmt \"%n\"")))))
 
   ;; The view might not be known, so we pass in the `default-directory' to
   ;; `clearcase-get-vprop' so it can be properly created.
@@ -81,7 +118,7 @@ user."
     ;; completions form that one.
 
     (let ((tid (cleartool-ask
-		(format "lsact %s -fmt \"%%n\\n\" -view %s"
+		(format "lsact %s -fmt \"%%n\\n\" -me -view %s"
 			(if include-obsolete "-obsolete" "")
 			(clearcase-vprop-name vprop))
 		'nowait
@@ -92,20 +129,22 @@ user."
 				(split-string answer "[\n\r]+" t)))))))
       (setf (clearcase-vprop-activities-tid vprop) tid))
 
-    (completing-read
-     prompt
-     '(lambda (string predicate flag)
-       (let ((fn (cond ((eq flag t) 'all-completions)
-		       ((eq flag 'lambda)
-			;; test-completion does not exist in emacs 21.
-			'(lambda (x l &optional p) (member x l)))
-		       ((null flag) 'try-completion)
-		       (t (error "Unknown value for flag %S" flag)))))
-	 (funcall
-	  fn string (clearcase-vprop-activities vprop) predicate)))
-     nil
-     'require-match
-     (when (stringp initial) initial))))
+    (prog1
+	(completing-read
+	 prompt
+	 '(lambda (string predicate flag)
+	   (let ((fn (cond ((eq flag t) 'all-completions)
+			   ((eq flag 'lambda)
+			    ;; test-completion does not exist in emacs 21.
+			    '(lambda (x l &optional p) (member x l)))
+			   ((null flag) 'try-completion)
+			   (t (error "Unknown value for flag %S" flag)))))
+	     (funcall
+	      fn string (clearcase-vprop-activities vprop) predicate)))
+	 nil
+	 'require-match
+	 (when (stringp initial) initial))
+      (cleartool-wait-for (clearcase-vprop-activities-tid vprop)))))
 
 ;;;; ucm-set-activity
 ;;;###autoload
@@ -190,28 +229,180 @@ number of checked out files."
 			   headline (hash-table-count files) (length versions) checkouts)
 		  (message "%s" headline)))))))
 
+;;;; ucm-list-activities
+
+;; Browse the list of activities in a stream
+
+(defvar ucm-lsact-ewoc nil
+  "The EWOC structure containing activities displayed in the list
+  activity buffer.")
+(defvar ucm-lsact-only-current-user nil
+  "When not nil, only the current users activities are shown in
+  the list activity buffer.")
+(defvar ucm-lsact-include-obsolete nil
+  "When not nil, obsolete activities are shown in the list
+  activity buffer.")
+
+(defun ucm-lsact-activity-link-handler (button)
+  "Browse the activity linked to this BUTTON."
+  (pop-to-buffer (button-get button 'buffer))
+  (ucm-browse-activity (button-get button 'activity)))
+
+(define-button-type 'ucm-lsact-activity-link
+    'face 'default
+    'help-echo "mouse-2, RET: Browse this activity"
+    'action 'ucm-lsact-activity-link-handler
+    'follow-link t
+    'skip t)
+
+(defstruct ucm-lsact-activity
+  name
+  set?                                  ; is this activity set in this view?
+  mark
+  owner
+  lock
+  attributes                            ; an alist (name . value)
+  )
+
+(defvar ucm-lsact-pp-attributes '()
+  "A list of extra attribute names to be displayed for each activity")
+
+(defun ucm-lsact-activity-pp (activity)
+  "Pretty print ACTIVITY (an `ucm-lsact-activity' structure).
+This is used by ewoc to show activities in the list activity
+buffer."
+  (let ((face (cond ((ucm-lsact-activity-set? activity)
+		     'ucm-set-activity-face)
+		    ((equal (ucm-lsact-activity-lock activity) "obsolete")
+		     'ucm-obsolete-activity-face)
+		    ((equal (ucm-lsact-activity-lock activity) "locked")
+		     'ucm-locked-activity-face)
+		    (t 'default)))
+	(label (format " %c%c %-65s %10s %10s"
+		       (if (ucm-lsact-activity-set? activity) ?! ?\  )
+		       (if (ucm-lsact-activity-mark activity) ?* ?\  )
+		       (ucm-lsact-activity-name activity)
+		       (ucm-lsact-activity-owner activity)
+		       (if (equal (ucm-lsact-activity-lock activity) "unlocked")
+			   ""
+			   (ucm-lsact-activity-lock activity))))
+	(attr (mapconcat
+	       (lambda (a)
+		 (let ((v (assq a (ucm-lsact-activity-attributes activity))))
+		   (format "%10s" (or (cdr v) ""))))
+	       ucm-lsact-pp-attributes "")))
+    (insert-text-button
+     (concat label attr)
+     'type 'ucm-lsact-activity-link
+     'face face
+     'buffer (current-buffer)
+     'activity (ucm-lsact-activity-name activity))))
+
+(defun ucm-lsact-create-ewoc (&optional current-user obsolete)
+  "Create an EWOC from the activities in STREAM.
+When CURRENT-USER is not nil, only the current user's activities
+are listed.  When OBSOLETE is not nil, obsolete activities are
+inclued as well."
+  (let* ((stream (cleartool "lsstream -fmt \"%%n\""))
+	 (header (concat (propertize "Stream: " 'face 'ucm-field-name-face)
+			 stream))
+	 (current-activity (cleartool "lsact -cact -fmt \"%%n\""))
+	 (ewoc (ewoc-create 'ucm-lsact-activity-pp header)))
+    (dolist (a (split-string
+		(cleartool
+		 "lsact %s %s -fmt \"%%n %%[owner]p %%[locked]p\\n\""
+		 (if current-user "-me" "")
+		 (if obsolete "-obsolete" ""))
+		"[\n\r]" 'omit-nulls))
+      (destructuring-bind (name owner lock) (split-string a)
+	(ewoc-enter-last ewoc
+			 (make-ucm-lsact-activity
+			  :name name
+			  :set? (equal name current-activity)
+			  :owner owner
+			  :lock lock
+			  :attributes (clearcase-get-attributes
+				       (format "activity:%s@/projects" name))))))
+    ewoc))
+
+(defun ucm-lsact-refresh-command ()
+  "Refresh the activity list in the current buffer."
+  (interactive)
+  (with-temp-message "Preparing activity list..."
+    (with-cleartool-directory (expand-file-name default-directory)
+      (let ((inhibit-read-only t))
+	(erase-buffer)
+	(setq ucm-lsact-ewoc
+	      (ucm-lsact-create-ewoc
+	       ucm-lsact-only-current-user
+	       ucm-lsact-include-obsolete)))
+      (ewoc-refresh ucm-lsact-ewoc)
+      (goto-char (point-min)))))
+
+(defun ucm-lsact-toggle-mark-command (pos)
+  "Toggle the mark on the current activity."
+  (interactive "d")
+  (let ((node (ewoc-locate ucm-lsact-ewoc pos)))
+    (when node
+      (let ((data (ewoc-data node)))
+	(setf (ucm-lsact-activity-mark data)
+	      (not (ucm-lsact-activity-mark data))))
+      (ewoc-invalidate ucm-lsact-ewoc node)
+      (let ((next (ewoc-next ucm-lsact-ewoc node)))
+	(when next
+	  (ewoc-goto-node ucm-lsact-ewoc next))))))
+
+(defun ucm-lsact-set-activity-command (pos)
+  "Set the activity under the cursor."
+  (interactive "d")
+  (let ((node (ewoc-locate ucm-lsact-ewoc pos)))
+    (when node
+      (let ((data (ewoc-data node)))
+	(ewoc-map (lambda (d)
+		    (cond ((eq d data)
+			   (ucm-set-activity (ucm-lsact-activity-name d))
+			   (setf (ucm-lsact-activity-set? d) t)
+			   t)
+			  ;; This is the previously set activity, unset it
+			  ((ucm-lsact-activity-set? d)
+			   (setf (ucm-lsact-activity-set? d) nil)
+			   ;; return t so the display is updated
+			   t)
+			  (t nil)))
+		  ucm-lsact-ewoc)))))
+
+(defvar ucm-lsact-mode-map
+  (let ((m (make-sparse-keymap)))
+    (suppress-keymap m)
+    (define-key m "m" 'ucm-lsact-toggle-mark-command)
+    (define-key m "g" 'ucm-lsact-refresh-command)
+    (define-key m "s" 'ucm-lsact-set-activity-command)
+    m))
+
+(define-derived-mode ucm-lsact-mode fundamental-mode
+  "UCM Activity List"
+  (buffer-disable-undo)
+  (setq buffer-read-only t)
+  (set (make-local-variable 'ucm-lsact-ewoc) nil)
+  (set (make-local-variable 'ucm-lsact-only-current-user) nil)
+  (set (make-local-variable 'ucm-lsact-include-obsolete) nil))
+
+;;;###autoload
+(defun ucm-list-activities (dir)
+  (interactive "DDirectory: ")
+  (with-cleartool-directory dir
+    (let ((buf (get-buffer-create "*UCM Activity List*")))
+      (switch-to-buffer-other-window buf)
+      (ucm-lsact-mode)
+      (setq ucm-lsact-only-current-user (not current-prefix-arg))
+      (setq ucm-lsact-include-obsolete (or (listp current-prefix-arg)
+					   (numberp current-prefix-arg)))
+      (let ((inhibit-read-only t))
+	(setq default-directory dir)
+	(erase-buffer)
+	(ucm-lsact-refresh-command)))))
+
 ;;;; ucm-browse-activity
-;;;;; faces
-(defface ucm-field-name-face
-    '((t (:inherit font-lock-builtin-face)))
-  "Face used for field names in UCM browse buffers."
-  :group 'ucm)
-
-(defface ucm-file-name-face
-    '((t (:weight bold)))
-  "Face used for file names in UCM browse buffers."
-  :group 'ucm)
-
-(defface ucm-revision-face
-    '((t (:slant italic)))
-  "Face used for revisions in UCM browse buffers."
-  :group 'ucm)
-
-(defface ucm-checkedout-revision-face
-    '((t (:foreground "IndianRed" :slant italic)))
-  "Face used for checkedout revisions in UCM browse buffers."
-  :group 'ucm)
-
 ;;;;; buffer-local variables
 (defvar ucm-activity nil
   "The name of the current activity being browsed.")
@@ -553,14 +744,14 @@ attach to the activity ewoc."
 	      )))))
 
     (ignore-cleartool-errors
-      ;; There seems to be a bug in my version of ClearCase: if `activity' is
-      ;; not a rebase or integration activity an error will be reported, but
-      ;; the status of the command will be 0 (meaning success).  We have to
-      ;; test the returned string explicitly ...
-      (let ((ca (cleartool "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
-	(when (and ca (not (string-match "^cleartool: Error: " ca)))
-	  (dolist (c (sort (split-string ca " " 'omit-nulls) 'string<))
-	    (push (make-ucm-actb-contributor :name c) contributors)))))
+     ;; There seems to be a bug in my version of ClearCase: if `activity' is
+     ;; not a rebase or integration activity an error will be reported, but
+     ;; the status of the command will be 0 (meaning success).  We have to
+     ;; test the returned string explicitly ...
+     (let ((ca (cleartool "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
+       (when (and ca (not (string-match "^cleartool: Error: " ca)))
+	 (dolist (c (sort (split-string ca " " 'omit-nulls) 'string<))
+	   (push (make-ucm-actb-contributor :name c) contributors)))))
 
     (setq contributors (nreverse contributors))
 
@@ -840,7 +1031,7 @@ directly."
   (let ((dir (expand-file-name default-directory)))
     (with-cleartool-directory dir
       (let ((buf (get-buffer-create "*UCM Activity Browser*")))
-	(switch-to-buffer buf)
+	(switch-to-buffer-other-window buf)
 	(ucm-actb-mode)
 	(let ((inhibit-read-only t))
 	  (setq default-directory dir)

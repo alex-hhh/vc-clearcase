@@ -147,6 +147,13 @@ user."
       (cleartool-wait-for (clearcase-vprop-activities-tid vprop)))))
 
 ;;;; ucm-set-activity
+
+;;;###autoload
+(defvar ucm-create-activity-function nil
+  "Function to call for creating new activities.
+When nil, `ucm-set-activity' will create a new activity by
+prompting for a headline and using mkact.")
+
 ;;;###autoload
 (defun ucm-set-activity (&optional activity)
   "Set the UCM ACTIVITY in the current directory.
@@ -164,10 +171,12 @@ activity headline)."
       ((equal activity "*NONE*")
        (cleartool "setact -none"))
       ((equal activity "*NEW-ACTIVITY*")
+       (if ucm-create-activity-function
+	   (call-interactively ucm-create-activity-function)
        (let ((headline (read-from-minibuffer "Activity headline: ")))
 	 (when (equal headline "")
 	   (error "Activity headline cannot be empty"))
-	 (cleartool "mkact -force -headline \"%s\"" headline)))
+	     (cleartool "mkact -force -headline \"%s\"" headline))))
       (t
        (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))
 	 (when (equal status "locked")
@@ -371,12 +380,34 @@ inclued as well."
 			  (t nil)))
 		  ucm-lsact-ewoc)))))
 
+(defun ucm-lsact-unlock-activity-command (pos)
+  "Unlock the selected activities, or the current one"
+  (interactive "d")
+  (let ((unlock-count 0))
+    (ewoc-map (lambda (d)
+		(when (ucm-lsact-activity-mark d)
+		  (ucm-unlock-activity (ucm-lsact-activity-name d))
+		  (setf (ucm-lsact-activity-lock d) "")
+		  (incf unlock-count)
+		  t                     ; return t so display is updated
+		  ))
+	      ucm-lsact-ewoc)
+    (when (= unlock-count 0)
+      ;; no activities were marked, try to unlock the current activity
+      (let ((node (ewoc-locate ucm-lsact-ewoc pos)))
+	(when node
+	  (let ((data (ewoc-data node)))
+	    (ucm-unlock-activity (ucm-lsact-activity-name data))
+	    (setf (ucm-lsact-activity-lock data) "")
+	    (ewoc-invalidate ucm-lsact-ewoc node)))))))
+
 (defvar ucm-lsact-mode-map
   (let ((m (make-sparse-keymap)))
     (suppress-keymap m)
     (define-key m "m" 'ucm-lsact-toggle-mark-command)
     (define-key m "g" 'ucm-lsact-refresh-command)
     (define-key m "s" 'ucm-lsact-set-activity-command)
+    (define-key m "u" 'ucm-lsact-unlock-activity-command)
     m))
 
 (define-derived-mode ucm-lsact-mode fundamental-mode

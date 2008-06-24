@@ -266,6 +266,7 @@ number of checked out files."
 
 (defstruct ucm-lsact-activity
   name
+  headline
   set?                                  ; is this activity set in this view?
   mark
   owner
@@ -287,10 +288,11 @@ buffer."
 		    ((equal (ucm-lsact-activity-lock activity) "locked")
 		     'ucm-locked-activity-face)
 		    (t 'default)))
-	(label (format " %c%c %-65s %10s %10s"
+	(label1 (format "%c%c %s"
 		       (if (ucm-lsact-activity-set? activity) ?! ?\  )
 		       (if (ucm-lsact-activity-mark activity) ?* ?\  )
-		       (ucm-lsact-activity-name activity)
+			(ucm-lsact-activity-headline activity)))
+	(label2 (format "        %s %s "
 		       (ucm-lsact-activity-owner activity)
 		       (if (equal (ucm-lsact-activity-lock activity) "unlocked")
 			   ""
@@ -298,14 +300,16 @@ buffer."
 	(attr (mapconcat
 	       (lambda (a)
 		 (let ((v (assq a (ucm-lsact-activity-attributes activity))))
-		   (format "%10s" (or (cdr v) ""))))
-	       ucm-lsact-pp-attributes "")))
+		   (format "%s" (or (cdr v) ""))))
+	       ucm-lsact-pp-attributes " ")))
     (insert-text-button
-     (concat label attr)
+     (concat label1)
      'type 'ucm-lsact-activity-link
      'face face
      'buffer (current-buffer)
-     'activity (ucm-lsact-activity-name activity))))
+     'activity (ucm-lsact-activity-name activity))
+    ;; (insert "\n" label2 attr)
+    ))
 
 (defun ucm-lsact-create-ewoc (&optional current-user obsolete)
   "Create an EWOC from the activities in STREAM.
@@ -327,6 +331,7 @@ inclued as well."
 	(ewoc-enter-last ewoc
 			 (make-ucm-lsact-activity
 			  :name name
+			  :headline (cleartool "lsact -fmt \"%%[headline]p\" %s" name)
 			  :set? (equal name current-activity)
 			  :owner owner
 			  :lock lock
@@ -426,7 +431,7 @@ inclued as well."
       (switch-to-buffer-other-window buf)
       (ucm-lsact-mode)
       (setq ucm-lsact-only-current-user (not current-prefix-arg))
-      (setq ucm-lsact-include-obsolete (or (listp current-prefix-arg)
+      (setq ucm-lsact-include-obsolete (or (consp current-prefix-arg)
 					   (numberp current-prefix-arg)))
       (let ((inhibit-read-only t))
 	(setq default-directory dir)

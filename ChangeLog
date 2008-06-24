@@ -1,3 +1,13 @@
+2008-06-24  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-lsact-activity): new structure slot: HEADLINE
+	(ucm-lsact-activity-pp): only print the headline
+	(ucm-lsact-create-ewoc): fetch the activity headline when creating
+	an ucm-lsact-activity structure instance.
+	(ucm-list-activities): use `consp' instead if `listp' for checking
+	if `current-prefix-arg' is a list (nil is a valid list according
+	to `listp')
+
 2008-06-14  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-create-activity-function): new variable

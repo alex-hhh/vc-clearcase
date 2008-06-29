@@ -3438,6 +3438,12 @@ This is the string returned by the cleartool -version command."
 (defconst clearcase-never-report
   '(clearcase-log-view-mode-abbrev-table
     clearcase-log-view-mode-syntax-table
+    vc-clearcase-log-view-mode-abbrev-table
+    vc-clearcase-log-view-mode-map
+    vc-clearcase-log-view-mode-syntax-table
+    clearcase-global-menu
+    clearcase-global-menu-map
+    vc-clearcase-extra-menu
     clearcase-edcs-mode-syntax-table
     clearcase-log-view-mode-map
     clearcase-edcs-mode-map

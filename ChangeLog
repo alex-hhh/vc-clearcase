@@ -1,3 +1,8 @@
+2008-06-29  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-never-report): 1.158 updated list of
+	variables which are not included in the report
+
 2008-06-24  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-lsact-activity): new structure slot: HEADLINE

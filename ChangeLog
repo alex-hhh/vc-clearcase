@@ -1,3 +1,23 @@
+2008-07-03  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (cleartool-tq-start): 366 use
+	`set-process-query-on-exit-flag' instead of
+	`process-kill-without-query'
+	(vc-start-logentry): 366 used to be called `vc-start-entry'.
+	Parametes also slightly changed.
+	(vc-clearcase-working-revision): 366 renamed from
+	`vc-clearcase-workfile-version', all callers updated.
+	(vc-clearcase-register): 366 first arg is now a fileset, but we
+	only accept one file in it
+	(vc-clearcase-checkin, clearcase-finish-checkout-reserved)
+	(clearcase-finish-checkout-unreserved): 366 first arg is a fileset
+	(vc-clearcase-rollback): 366 new function
+	(vc-clearcase-print-log): 366 first arg is a fileset, but we only
+	accept one file in it.
+	(vc-clearcase-diff): 366 first arg is now a fileset.
+	(vc-clearcase-create-tag): 366 renamed from
+	`vc-clearcase-create-snapshot'
+
 2008-06-29  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-never-report): 1.158 updated list of

@@ -17,6 +17,7 @@
 	(vc-clearcase-diff): 366 first arg is now a fileset.
 	(vc-clearcase-create-tag): 366 renamed from
 	`vc-clearcase-create-snapshot'
+	(vc-clearcase-version): 367 changed version to 3.0
 
 2008-06-29  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

@@ -1,4 +1,5 @@
 ;; vc-clearcase.el --- support for ClearCase version control system
+;; Emacs23 version, search for TODO (Emacs23) for problems
 ;;
 ;; Copyright (C) 2006, 2007, 2008 Alexandru Harsanyi
 ;;
@@ -257,7 +258,7 @@ Cleans up properly if cleartool exits.  EVENT is not used."
 	      (goto-char (point-min)))
 	    (erase-buffer))))
       (set-process-sentinel process 'cleartool-tq-sentinel)
-      (process-kill-without-query process nil)
+      (set-process-query-on-exit-flag process nil)
       (setq cleartool-tq (tq-create process)
 	    cleartool-next-command 1
 	    cleartool-last-command-timestamp (float-time)))))
@@ -496,17 +497,12 @@ transaction is complete as funcall(fn closure answer)."
 (defvar cleartool-last-command nil
   "The last command given to cleartool to create this output buffer.")
 
-(progn
-  ;; make the above variables buffer local and attach permanent-local
-  ;; to them
-  (mapcar (lambda (x)
-	    (make-variable-buffer-local x)
-	    (put x 'permanent-local t))
-	  '(cleartool-mode-line
-	    cleartool-finished-function
-	    cleartool-kill-buffer-when-done
-	    cleartool-last-command))
-  )
+(dolist (var '(cleartool-mode-line
+	       cleartool-finished-function
+	       cleartool-kill-buffer-when-done
+	       cleartool-last-command))
+  (make-variable-buffer-local var)
+  (put var 'permanent-local t))
 
 (defun cleartool-sentinel (process event)
   "Process sentinel for cleartool PROCESS commands.
@@ -1301,12 +1297,12 @@ If FORCE is not nil, always read the properties."
 	    (concat (substring ad-return-value 0 start) data))))
   ad-return-value)
 
-(defadvice vc-start-entry
+(defadvice vc-start-logentry
     (before clearcase-prepare-checkin-comment
-	    (file rev comment initial-contents msg action &optional after-hook))
+	    (files extra comment initial-contents msg logbuf action &optional after-hook))
   "Insert the checkout comment when checking-in FILE."
 
-  ;; When `vc-start-entry' wants to collect a log message from the user and
+  ;; When `vc-start-logentry' wants to collect a log message from the user and
   ;; checkin FILE, we hook in to provide the checkout comment as the default.
   ;;
   ;; We must NOT touch COMMENT in these cases:
@@ -1315,13 +1311,13 @@ If FORCE is not nil, always read the properties."
   ;;   all files)
   ;;
   ;; - When COMMENT is NOT nil (it can be a string or t), this means
-  ;;   `vc-start-entry' does not intend to prompt the user.
+  ;;   `vc-start-logentry' does not intend to prompt the user.
   ;;
   ;; Of course, we also check that the file is a ClearCase file and that it is
   ;; checked out (therefore it will be checked in)
 
-  (when (and file (null comment))
-    (let ((fprop (clearcase-file-fprop file)))
+  (when (and files (= (length files) 1) (null comment))
+    (let ((fprop (clearcase-file-fprop (car files))))
       (when (and fprop (clearcase-fprop-checkedout-p fprop))
 	(cleartool-wait-for (clearcase-fprop-comment-tid fprop))
 	(setf comment (clearcase-fprop-comment fprop))
@@ -1598,8 +1594,8 @@ have a correct state."
   (let ((message-log-max nil))        ; prevent message text from being logged
     (message "vc-clearcase-dir-state: %s completed." dir)))
 
-;;;;;; workfile-version
-(defun vc-clearcase-workfile-version (file)
+;;;;;; working-revision
+(defun vc-clearcase-working-revision (file)
   "Return the workfile version of FILE.
 If the file is checked out, In ClearCase, the version is always
 \"CHECKEDOUT\", but the vc.el assumes that checked out is not a
@@ -1616,8 +1612,8 @@ separate version, so we return the parent version in that case."
 	     (clearcase-fprop-latest fprop))))
 
 ;;;;;; checkout-model
-(defun vc-clearcase-checkout-model (file)
-  "Checkout model for ClearCase is always locking for every FILE."
+(defun vc-clearcase-checkout-model (files)
+  "Checkout model for ClearCase is always locking for every file."
   'locking)
 
 ;;;;;; workfile-unchanged-p
@@ -1699,6 +1695,10 @@ for the file insertion than a checkin.
 NOTE: if dir is not under clearcase, this code will fail.  We
 don't attempt to register a directory in clearcase even if one of
 it's parents is registered."
+
+  (when (consp file)
+    (assert (= (length file) 1) "Only one file is accepted")
+    (setf file (car file)))
   (setq file (expand-file-name file))
   (with-clearcase-checkout (file-name-directory file)
     (let ((cleartool-timeout (* 2 cleartool-timeout)))
@@ -1747,16 +1747,15 @@ responsible if the transaction id is positive."
 REV should be nil, COMMENT is the checkin comment.
 `vc-checkin-switches' is ignored."
 
-  ;; Implementation notes: We pass -identical to checkin which means we will
-  ;; create a new version even if some file is unchanged -- this is needed
-  ;; since an "file is identical" error will abort the checkin mid-way.  vc.el
-  ;; is responsible for not calling checkin if the file has not changed, so we
-  ;; should not create identical copies anyway...
-
-  (unless (listp files)                 ; Compatibility with Emacs 22
-    (setq files (list files)))
+  ;; Implementation note: We pass -identical to checkin which means we
+  ;; will create a new version even if some file is unchanged -- this
+  ;; is needed since an "file is identical" error will abort the
+  ;; checkin mid-way.  vc.el is responsible for not calling checkin if
+  ;; the file has not changed, so we should not create identical
+  ;; copies anyway...
 
   (setq files (mapcar 'expand-file-name files))
+
   (when rev
     (error "Revision specification not supported: %s" rev))
   (let ((pnames (mapconcat (lambda (f) (concat "\"" f "\"")) files " ")))
@@ -1835,16 +1834,22 @@ be 'reserved or 'unreserved."
     (clearcase-maybe-set-vc-state file 'force)
     (vc-resynch-buffer file t t)))
 
-;; This would be so much easier if vc-start-entry would accept a
+;; This would be so much easier if vc-start-logentry would accept a
 ;; closure to pass it to us...
 
-(defun clearcase-finish-checkout-reserved (file rev comment)
-  "Do a reserved checkout on FILE with REV and COMMENT."
-  (clearcase-finish-checkout file rev comment 'reserved))
+(defun clearcase-finish-checkout-reserved (files rev comment)
+  "Do a reserved checkout on FILES with REV and COMMENT.
+NOTE: This function will be called from `vc-start-logentry' which
+works with filesets and it must expect several files."
+  (dolist (file files)
+    (clearcase-finish-checkout file rev comment 'reserved)))
 
-(defun clearcase-finish-checkout-unreserved (file rev comment)
-  "Do an unreserved checkout on FILE with REV and COMMENT."
-  (clearcase-finish-checkout file rev comment 'unreserved))
+(defun clearcase-finish-checkout-unreserved (files rev comment)
+  "Do an unreserved checkout on FILES with REV and COMMENT.
+NOTE: This function will be called from `vc-start-logentry' which
+works with filesets it must expect several files."
+  (dolist (file files)
+    (clearcase-finish-checkout file rev comment 'unreserved)))
 
 (defun clearcase-revision-reserved-p (file)
   "Return t if FILE is checked out reserved.
@@ -1966,8 +1971,9 @@ This method does three completely different things:
 		     (setq checkout 'clearcase-finish-checkout-reserved)))))))
        (if checkout
 	   (ecase clearcase-checkout-comment-type
-	     ('normal (vc-start-entry
-		       file rev nil nil "Enter a checkout comment" checkout))
+	     ('normal (vc-start-logentry
+		       (list file) rev nil nil
+		       "Enter a checkout comment" "*VC-log*" checkout))
 	     ('brief (let ((comment (read-string "Enter a checkout comment: ")))
 		       (funcall checkout file rev comment)))
 	     ('none (funcall checkout file rev "")))
@@ -2023,6 +2029,10 @@ CONTENTS-DONE is ignored.  The
     (clearcase-maybe-set-vc-state file 'force)))
 
 ;;;;;; cancel-version
+
+;; No longer a backend function in Emacs 23, but used by
+;; `vc-clearcase-rollback'
+
 (defun vc-clearcase-cancel-version (file editable)
   "Remove the current version of FILE.
 FILE must be checked in and latest on its branch.  We use
@@ -2128,6 +2138,18 @@ is lost."
       (delete-file keep-file))
 
     (clearcase-maybe-set-vc-state file 'force)))
+
+;;;;;; rollback
+;; New in Emacs 23
+(defun vc-clearcase-rollback (files)
+  "Remove the current version of every file in FILES.
+This function simply calls `vc-clearcase-cancel-version' for
+each file.
+
+NOTE: this function replaces `vc-clearcase-cancel-version' from
+Emacs 22 and it is less functional (EDITABLE cannot be set)"
+  (dolist (file files)
+    (vc-clearcase-cancel-version file nil)))
 
 ;;;;;; merge
 (defun vc-clearcase-merge (file rev1 rev2)
@@ -2250,6 +2272,33 @@ This is used when the file is in a UCM project.")
   "Insert the history of FILE into the *clearcase-lshistory* buffer.
 With a prefix argument, all events are listed (-minor option is
 sent to cleartool)."
+
+  ;; TODO (Emacs23): vc-clearcase-print-log
+  ;;
+  ;; We currently support one file even though vc will pass a fileset
+  ;; (list of files) in FILE.  Problems with filesets containing
+  ;; multiple files:
+  ;;
+  ;; * cleartool supports printing the history of several files at
+  ;;   once.  The evet records will be sorted by date so events for
+  ;;   one file will be mixed with events for the other files
+  ;;
+  ;; * We have a label section at the top of the file, but this only
+  ;;   provides a mapping from the label name to the version which
+  ;;   will be ambiguous when multiple files are involved.
+  ;;
+  ;; * The format records used by lshistory (see
+  ;;  `clearcase-lshistory-fmt' and `clearcase-lshistory-fmt-ucm' will
+  ;;  not print a file name for each record to avoid cluttering the
+  ;;  display (there is a single "Working file: " record at the top of
+  ;;  the log).  However this will make the display ambiguous if more
+  ;;  than one file is involved.
+  ;;
+  ;; For now, we accept only one file in the fileset.
+
+  (when (consp file)
+    (assert (= (length file) 1) "Only one file is accepted")
+    (setf file (car file)))
   (setq file (expand-file-name file))
   (let ((inhibit-read-only t)
 	(buf (if buffer
@@ -2437,12 +2486,12 @@ helper function for `vc-clearcase-diff'"
      ;; serial format prints "Files are identical", so we look for that.
      (looking-at "\\(Files\\|Directories\\) are identical"))))
 
-(defun vc-clearcase-diff (file &optional rev1 rev2 buffer)
-  "Put the FILE's diff between REV1 and REV2 in BUFFER.
+(defun vc-clearcase-diff (files &optional rev1 rev2 buffer)
+  "Put the FILES diff between REV1 and REV2 in BUFFER.
 Return t if the revisions are identical, nil otherwise.
 
-When FILE is a directory, the directory revisions are compared
-and not the directory contents.
+When a file in FILES is a directory, the directory revisions are
+compared and not the directory contents.
 When BUFFER is nil, *vc-diff* is used instead.
 When REV1 is nil, the files latest (checked-in) revision is used,
 when REV2 is nil, the current contents of the file are used."
@@ -2454,8 +2503,6 @@ when REV2 is nil, the current contents of the file are used."
   ;; buffer.  Also, if the files are identical, vc.el expects us not to put
   ;; anything in the buffer.
 
-  (setq file (expand-file-name file))
-
   (unless buffer
     (setq buffer (get-buffer-create "*vc-diff*")))
   (unless (eq buffer (current-buffer))
@@ -2464,33 +2511,33 @@ when REV2 is nil, the current contents of the file are used."
 	(erase-buffer)
 	(diff-mode))))
 
-  (let ((clearcase-use-external-diff clearcase-use-external-diff))
-    (when (file-directory-p file)
-      ;; always use cleartool diff when comparing directory revisions.
-      (setq clearcase-use-external-diff nil))
+  (with-current-buffer buffer
+    (goto-char (point-max))
+    (let ((inhibit-read-only t)
+	  (all-identical? t)
+	  (external-diff? nil))
+      (dolist (file files)
+	(setq file (expand-file-name file))
+	;; always use cleartool diff when comparing directory
+	;; revisions.
+	(setq external-diff? (and clearcase-use-external-diff
+				  (not (file-directory-p file))))
+	(with-cleartool-directory (file-name-directory file)
+	  (let ((diff-start-pos (point))
+		(fprop (clearcase-file-fprop file))
+		(default-directory (file-name-directory file)))
+	    (unless rev1
+	      (setq rev1 (clearcase-fprop-version fprop)))
+	    (setq file (file-name-nondirectory file))
 
-    (with-current-buffer buffer
-      (with-cleartool-directory (file-name-directory file)
-	(goto-char (point-max))
-	(let ((inhibit-read-only t)
-	      (fprop (clearcase-file-fprop file))
-	      (default-directory (file-name-directory file))
-	      (diff-start-pos (point))
-	      (identical nil))
-
-	  (unless rev1
-	    (setq rev1 (clearcase-fprop-version fprop)))
-	  (setq file (file-name-nondirectory file))
-
-	  (setq identical
-		(if clearcase-use-external-diff
-		    (clearcase-diff-with-diff file rev1 rev2)
-		    (clearcase-diff-with-cleartool file rev1 rev2)))
-
-	  (when identical
-	    (kill-region diff-start-pos (point-max)))
-	  (goto-char diff-start-pos)
-	  identical)))))
+	    (let ((identical? (if external-diff?
+				  (clearcase-diff-with-diff file rev1 rev2)
+				  (clearcase-diff-with-cleartool file rev1 rev2))))
+	      (when identical?
+		(kill-region diff-start-pos (point-max)))
+	      (goto-char diff-start-pos)
+	      (setq all-identical? (and all-identical? identical?))))))
+      all-identical?)))
 
 ;;;;;; annotate-command
 (defun vc-clearcase-annotate-command (file buf rev)
@@ -2613,7 +2660,7 @@ and `vc-clearcase-annotate-revision-atline' work fast."
   (get-text-property (point) 'vc-clearcase-revision))
 
 ;;;;; SNAPSHOT SYSTEM
-;;;;;; create-snapshot
+;;;;;; create-tag
 (defcustom clearcase-no-label-action 'ask
   "What to do when we are asked to apply a label that does not exist.
 There are three possible values for this variable:
@@ -2647,7 +2694,7 @@ C-x v s will not create a branch in ClearCase."
   :type 'boolean
   :group 'vc-clearcase)
 
-(defun vc-clearcase-create-snapshot (dir name branchp)
+(defun vc-clearcase-create-tag (dir name branchp)
   "Label all files under DIR using NAME as the label.
 
 BRANCHP is used to move an existing label.  This is not the
@@ -3011,7 +3058,7 @@ This function should be added to `find-file-not-found-functions'
 to handle opening ClearCase files in the format
 file.txt@@/main/0.  The function will visit the file first, than
 will open the specified version in another window, using
-`vc-version-other-window'"
+`vc-revision-other-window'"
   (let ((file-name (buffer-file-name))
 	(b (current-buffer)))
     (when (string-match "\\(.*\\)@@\\(.*\\)" file-name)
@@ -3020,7 +3067,7 @@ will open the specified version in another window, using
 	(when (file-exists-p file)
 	  (find-file file)
 	  (kill-buffer b)
-	  (vc-version-other-window version)
+	  (vc-revision-other-window version)
 	  t                             ; return t, so no other handler works
 	  )))))
 
@@ -3580,7 +3627,7 @@ See `clearcase-trace-cleartool-tq' and
 (when (executable-find cleartool-program)
   (ad-activate 'vc-dired-hook)
   (ad-activate 'vc-version-backup-file-name)
-  (ad-activate 'vc-start-entry)
+  (ad-activate 'vc-start-logentry)
   (ad-activate 'vc-create-snapshot)
   (cleartool-tq-maybe-start))
 
@@ -3593,8 +3640,8 @@ See `clearcase-trace-cleartool-tq' and
    'vc-version-backup-file-name 'after 'clearcase-cleanup-version)
   (ad-activate 'vc-version-backup-file-name)
   (ad-disable-advice
-   'vc-start-entry 'before 'clearcase-prepare-checkin-comment)
-  (ad-activate 'vc-start-entry)
+   'vc-start-logentry 'before 'clearcase-prepare-checkin-comment)
+  (ad-activate 'vc-start-logentry)
   (ad-disable-advice
    'vc-create-snapshot 'before 'clearcase-provide-label-completion)
   (ad-activate 'vc-create-snapshot)
@@ -3603,56 +3650,6 @@ See `clearcase-trace-cleartool-tq' and
   (setq vc-handled-backends (delq 'CLEARCASE vc-handled-backends)))
 
 (add-hook 'vc-clearcase-unload-hook 'vc-clearcase-unload-hook)
-
-;; compatibility with previous version
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-cleartool-program 'cleartool-program)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-vtree-program 'clearcase-vtree-program)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-cleartool-timeout 'cleartool-timeout)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-no-label-action 'clearcase-no-label-action)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
 
 (provide 'vc-clearcase)
 

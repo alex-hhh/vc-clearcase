@@ -21,7 +21,6 @@
 ;; Created: 28 July 2004
 ;; Keywords: version-control, clearcase
 ;; Homepage: http://sourceforge.net/projects/vc-clearcase/
-;; $Id$
 
 ;;; Commentary:
 ;;
@@ -76,8 +75,7 @@
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
 
-(defconst vc-clearcase-cvsid
-  "$Id$")
+(defconst vc-clearcase-version "2.0")
 
 (defconst vc-clearcase-maintainer-address "haral@users.sourceforge.net")
 

@@ -21,7 +21,6 @@
 ;; Created: 25 Nov 2007
 ;; Keywords: version-control, clearcase
 ;; Homepage: http://sourceforge.net/projects/vc-clearcase/
-;; $Id$
 
 ;;; Commentary
 ;; This implements support for ClearCase UCM.  The user functions

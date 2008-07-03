@@ -76,7 +76,7 @@
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
 
-(defconst vc-clearcase-version "2.0")
+(defconst vc-clearcase-version "3.0")
 
 (defconst vc-clearcase-maintainer-address "haral@users.sourceforge.net")
 

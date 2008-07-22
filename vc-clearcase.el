@@ -496,17 +496,12 @@ transaction is complete as funcall(fn closure answer)."
 (defvar cleartool-last-command nil
   "The last command given to cleartool to create this output buffer.")
 
-(progn
-  ;; make the above variables buffer local and attach permanent-local
-  ;; to them
-  (mapcar (lambda (x)
-	    (make-variable-buffer-local x)
-	    (put x 'permanent-local t))
-	  '(cleartool-mode-line
+(dolist (var '(cleartool-mode-line
 	    cleartool-finished-function
 	    cleartool-kill-buffer-when-done
 	    cleartool-last-command))
-  )
+  (make-variable-buffer-local var)
+  (put var 'permanent-local t))
 
 (defun cleartool-sentinel (process event)
   "Process sentinel for cleartool PROCESS commands.
@@ -1051,8 +1046,7 @@ to be read from cleartool."
 		     ((eq flag 'lambda)
 		      ;; test-completion does not exist in emacs 21.
 		      '(lambda (x l &optional p) (intern-soft x l)))
-		     ((null flag) 'try-completion)
-		     (t (error "Unknown value for flag %S" flag)))))
+		     (t 'try-completion))))
        (funcall fn string clearcase-edcs-all-view-tags predicate)))
    nil
    nil
@@ -1213,8 +1207,7 @@ waste of resources."
 		     ((eq flag 'lambda)
 		      ;; test-completion does not exist in emacs 21.
 		      '(lambda (x l &optional p) (intern-soft x l)))
-		     ((null flag) 'try-completion)
-		     (t (error "Unknown value for flag %S" flag)))))
+		     (t 'try-completion))))
        (funcall fn string clearcase-all-labels predicate)))
    nil
    nil
@@ -3543,23 +3536,6 @@ See `clearcase-trace-cleartool-tq' and
 ;; files after we load vc-clearcase
 (add-hook 'after-save-hook 'clearcase-hijack-file-handler)
 
-;;;###autoload
-(cond
-  ((boundp 'find-file-not-found-functions)
-   (add-hook 'find-file-not-found-functions 'clearcase-file-not-found-handler))
-  ((boundp 'find-file-not-found-hooks)
-   (add-hook 'find-file-not-found-hooks 'clearcase-file-not-found-handler)))
-
-;; Bug 1818879: Only add 'CLEARCASE to `vc-handled-backends' and start the
-;; transaction queue when we can find cleartool.
-
-;;;###autoload
-(when (executable-find cleartool-program)
-  (if (boundp 'vc-handled-backends)
-      (unless (memq 'CLEARCASE vc-handled-backends)
-	(setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))
-      (setq vc-handled-backends '(RCS CVS CLEARCASE))))
-
 ;; Version controlled backups for ClearCase files are in the format:
 ;; file.c.~_main_some_branch_3~.  Similarly, ClearCase will also create
 ;; 'backups' by appending a .keep or .contrib to the filename. These are not
@@ -3574,18 +3550,13 @@ See `clearcase-trace-cleartool-tq' and
   (unless (assoc garbage-regexp auto-mode-alist)
     (push (list garbage-regexp nil t) auto-mode-alist)))
 
-;; Activate the advices and start cleartool when we are loaded, we will need
-;; it anyway (but only if we find the cleartool program (meaning ClearCase is
-;; installed on the system)
-(when (executable-find cleartool-program)
-  (ad-activate 'vc-dired-hook)
-  (ad-activate 'vc-version-backup-file-name)
-  (ad-activate 'vc-start-entry)
-  (ad-activate 'vc-create-snapshot)
-  (cleartool-tq-maybe-start))
-
 (defun vc-clearcase-unload-hook ()
   (remove-hook 'after-save-hook 'clearcase-hijack-file-handler)
+  (cond
+    ((boundp 'find-file-not-found-functions)
+     (remove-hook 'find-file-not-found-functions 'clearcase-file-not-found-handler))
+    ((boundp 'find-file-not-found-hooks)
+     (remove-hook 'find-file-not-found-hooks 'clearcase-file-not-found-handler)))
   (ad-disable-advice
    'vc-dired-hook 'after 'clearcase-clear-dir-state-cache)
   (ad-activate 'vc-dired-hook)
@@ -3603,6 +3574,38 @@ See `clearcase-trace-cleartool-tq' and
   (setq vc-handled-backends (delq 'CLEARCASE vc-handled-backends)))
 
 (add-hook 'vc-clearcase-unload-hook 'vc-clearcase-unload-hook)
+
+;; Activate the advices and start cleartool when we are loaded, we will need
+;; it anyway (but only if we find the cleartool program (meaning ClearCase is
+;; installed on the system)
+(cond ((not (executable-find cleartool-program))
+       (message "cleartool executable not found, disabling vc-clearcase"))
+      ((> emacs-major-version 22)
+       (message "this version of vc-clearcase only works with GNU Emacs 22"))
+      (t
+       (ad-activate 'vc-dired-hook)
+       (ad-activate 'vc-version-backup-file-name)
+       (ad-activate 'vc-start-entry)
+       (ad-activate 'vc-create-snapshot)
+       (cleartool-tq-maybe-start)))
+
+;; Bug 1818879: Only add 'CLEARCASE to `vc-handled-backends' and start the
+;; transaction queue when we can find cleartool.
+
+;;;###autoload
+(when (and (executable-find cleartool-program)
+           (<= emacs-major-version 22))
+  (cond
+    ((boundp 'find-file-not-found-functions)
+     (add-hook 'find-file-not-found-functions 
+               'clearcase-file-not-found-handler))
+    ((boundp 'find-file-not-found-hooks)
+     (add-hook 'find-file-not-found-hooks 
+               'clearcase-file-not-found-handler)))
+  (if (boundp 'vc-handled-backends)
+      (unless (memq 'CLEARCASE vc-handled-backends)
+	(setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))
+      (setq vc-handled-backends '(RCS CVS CLEARCASE))))
 
 ;; compatibility with previous version
 

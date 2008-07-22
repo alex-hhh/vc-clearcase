@@ -1,11 +1,31 @@
 2008-07-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
-
-	* ucm.el (ucm-lsact-activity-pp): changed format of the entry
-
+	
 	* vc-clearcase.el only activate the clearcase backend on Emacs22
 	or earlier.
 	(clearcase-read-view-tag, clearcase-read-label): use
 	`try-completion' for any value of FLAG in completing-read.
+
+	* ucm.el (ucm-lsact-activity-pp): changed format of the entry
+
+2008-07-03  Alexandru Harsanyi  <haral@users.sourceforge.net>
+	* vc-clearcase.el (cleartool-tq-start): 366 use
+	`set-process-query-on-exit-flag' instead of
+	`process-kill-without-query'
+	(vc-start-logentry): 366 used to be called `vc-start-entry'.
+	Parametes also slightly changed.
+	(vc-clearcase-working-revision): 366 renamed from
+	`vc-clearcase-workfile-version', all callers updated.
+	(vc-clearcase-register): 366 first arg is now a fileset, but we
+	only accept one file in it
+	(vc-clearcase-checkin, clearcase-finish-checkout-reserved)
+	(clearcase-finish-checkout-unreserved): 366 first arg is a fileset
+	(vc-clearcase-rollback): 366 new function
+	(vc-clearcase-print-log): 366 first arg is a fileset, but we only
+	accept one file in it.
+	(vc-clearcase-diff): 366 first arg is now a fileset.
+	(vc-clearcase-create-tag): 366 renamed from
+	`vc-clearcase-create-snapshot'
+	(vc-clearcase-version): 367 changed version to 3.0
 
 2008-06-29  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

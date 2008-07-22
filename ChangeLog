@@ -1,6 +1,6 @@
 2008-07-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
 	
-	* vc-clearcase.el only activate the clearcase backend on Emacs22
+	* vc-clearcase.el only activate the clearcase backend on Emacs23
 	or earlier.
 	(clearcase-read-view-tag, clearcase-read-label): use
 	`try-completion' for any value of FLAG in completing-read.

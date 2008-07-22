@@ -3632,8 +3632,8 @@ See `clearcase-trace-cleartool-tq' and
 ;; installed on the system)
 (cond ((not (executable-find cleartool-program))
        (message "cleartool executable not found, disabling vc-clearcase"))
-      ((> emacs-major-version 22)
-       (message "this version of vc-clearcase only works with GNU Emacs 22"))
+      ((>= emacs-major-version 23)
+       (message "this version of vc-clearcase only works with GNU Emacs 23"))
       (t
        (ad-activate 'vc-dired-hook)
        (ad-activate 'vc-version-backup-file-name)
@@ -3646,7 +3646,7 @@ See `clearcase-trace-cleartool-tq' and
 
 ;;;###autoload
 (when (and (executable-find cleartool-program)
-           (<= emacs-major-version 22))
+           (>= emacs-major-version 23))
   (cond
     ((boundp 'find-file-not-found-functions)
      (add-hook 'find-file-not-found-functions 
@@ -3658,56 +3658,6 @@ See `clearcase-trace-cleartool-tq' and
       (unless (memq 'CLEARCASE vc-handled-backends)
 	(setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))
       (setq vc-handled-backends '(RCS CVS CLEARCASE))))
-
-;; compatibility with previous version
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-cleartool-program 'cleartool-program)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-vtree-program 'clearcase-vtree-program)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-cleartool-timeout 'cleartool-timeout)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-no-label-action 'clearcase-no-label-action)
-
-;;;###autoload
-(define-obsolete-variable-alias
-    'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
 
 (provide 'vc-clearcase)
 

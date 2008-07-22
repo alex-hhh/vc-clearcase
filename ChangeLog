@@ -1,5 +1,7 @@
 2008-07-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
+	* ucm.el (ucm-lsact-activity-pp): changed format of the entry
+
 	* vc-clearcase.el only activate the clearcase backend on Emacs22
 	or earlier.
 	(clearcase-read-view-tag, clearcase-read-label): use

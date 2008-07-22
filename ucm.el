@@ -29,6 +29,19 @@
 ;; these functions are not bound to keys and menus, so you need to invoke them
 ;; using M-x (`execute-extended-command').
 
+;;; TODO
+;;
+;; - `ucm-actb-fetch-activity' -- the listed versions should be sorted,
+;;   otherwise they might show up in the wrong order (as received from
+;;   clearcase)
+;;
+;; - `ucm-actb-mode' -- allow starting ediff in addition to diff for a
+;;   version.
+;;
+;; - `ucm-actb-transfer-versions-command' -- handle the *NONE* and
+;;   *NEW-ACTIVITY* responses from `ucm-read-activity'
+;;
+
 ;;; Code
 
 (eval-when-compile (require 'cl))
@@ -287,28 +300,27 @@ buffer."
 		    ((equal (ucm-lsact-activity-lock activity) "locked")
 		     'ucm-locked-activity-face)
 		    (t 'default)))
-	(label1 (format "%c%c %s"
+	(label1 (format "%c%c "
 		       (if (ucm-lsact-activity-set? activity) ?! ?\  )
-		       (if (ucm-lsact-activity-mark activity) ?* ?\  )
-			(ucm-lsact-activity-headline activity)))
-	(label2 (format "        %s %s "
+			(if (ucm-lsact-activity-mark activity) ?* ?\  )))
+	(label2 (format "%s%s"
 		       (ucm-lsact-activity-owner activity)
 		       (if (equal (ucm-lsact-activity-lock activity) "unlocked")
 			   ""
-			   (ucm-lsact-activity-lock activity))))
+			   (concat " " (ucm-lsact-activity-lock activity)))))
 	(attr (mapconcat
 	       (lambda (a)
 		 (let ((v (assq a (ucm-lsact-activity-attributes activity))))
 		   (format "%s" (or (cdr v) ""))))
 	       ucm-lsact-pp-attributes " ")))
+    (insert label1)
     (insert-text-button
-     (concat label1)
+     (ucm-lsact-activity-headline activity)
      'type 'ucm-lsact-activity-link
      'face face
      'buffer (current-buffer)
      'activity (ucm-lsact-activity-name activity))
-    ;; (insert "\n" label2 attr)
-    ))
+    (insert " (" label2 " " attr ")")))
 
 (defun ucm-lsact-create-ewoc (&optional current-user obsolete)
   "Create an EWOC from the activities in STREAM.

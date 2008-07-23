@@ -1,10 +1,18 @@
 -*- outline -*- 
 
-* Release
+* Release 2.0
+
+** improved speed of vc-dired (C-x v d)
+
+** new command `ucm-list-activities'
 
 ** a new activity browser implementation
 
 ** updates for Emacs 22.2
+   vc-clearcase.el will not have all the features on previous versions of
+   Emacs
+
+** various minor fixes and enhancements
 
 * Release 1.152
 

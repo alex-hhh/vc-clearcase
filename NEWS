@@ -1,10 +1,13 @@
 -*- outline -*- 
 
-* Release
+* Release 3.0
+  NOTE: this release was not tested properly, as I don't use Emacs 23 yet.
+
+** new command `ucm-list-activities'
 
 ** a new activity browser implementation
 
-** updates for Emacs 22.2
+** updates for Emacs 23
 
 * Release 1.152
 

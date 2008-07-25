@@ -2720,7 +2720,7 @@ element * NAME -nocheckout"
 
 ;;;;; MISCELLANEOUS
 ;;;;;; previous-version
-(defun vc-clearcase-previous-version (file rev)
+(defun vc-clearcase-previous-revision (file rev)
   "Return the FILE revision that precedes the revision REV.
 Return nil if no such revision exists."
   (setq file (expand-file-name file))
@@ -2736,7 +2736,7 @@ Return nil if no such revision exists."
 	    prev))))
 
 ;;;;;; next-version
-(defun vc-clearcase-next-version (file rev)
+(defun vc-clearcase-next-revision (file rev)
   "Return the FILE revision that follows the revision REV.
 Return nil if no such revision exists."
   (setq file (expand-file-name file))

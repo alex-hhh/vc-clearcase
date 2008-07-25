@@ -1,3 +1,10 @@
+2008-07-25  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
+
+	* vc-clearcase.el (vc-clearcase-previous-revision): renamed from
+	`vc-clearcase-previous-version'
+	(vc-clearcase-next-revision): renamed from
+	`vc-clearcase-next-version'
+
 2008-07-25  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el

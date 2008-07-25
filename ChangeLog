@@ -1,5 +1,28 @@
+2008-07-25  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el
+	(vc-dired-hook): advice removed
+	(clearcase-dir-state-process-current-line)
+	(clearcase-dir-state-collect)
+	(vc-clearcase-dir-state)
+	(vc-clearcase-dired-state-info)
+	(clearcase-dir-state-1)
+	(clearcase-dir-state-sentinel)
+	(clearcase-dir-state-cache): removed, they were part of Emacs22 vc
+	interface.
+	(clearcase-dir-status-ignored-files): new variable
+	(clearcase-dir-status-parse-line)
+	(clearcase-dir-status-collect)
+	(clearcase-dir-status-sentinel)
+	(vc-clearcase-dir-status): new functions
+	(vc-clearcase-responsible-p): don't consider
+	`clearcase-dir-state-cache'
+	(clearcase-finish-checkout-reserved)
+	(clearcase-finish-checkout-unreserved): accept a single file
+	argument instead of a fileset.
+
 2008-07-22  Alexandru Harsanyi  <haral@users.sourceforge.net>
-	
+
 	* vc-clearcase.el only activate the clearcase backend on Emacs23
 	or earlier.
 	(clearcase-read-view-tag, clearcase-read-label): use
@@ -8,6 +31,7 @@
 	* ucm.el (ucm-lsact-activity-pp): changed format of the entry
 
 2008-07-03  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
 	* vc-clearcase.el (cleartool-tq-start): 366 use
 	`set-process-query-on-exit-flag' instead of
 	`process-kill-without-query'

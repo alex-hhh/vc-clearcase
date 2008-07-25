@@ -1216,13 +1216,6 @@ waste of resources."
 
 ;;;; Some helpers functions
 
-(defvar clearcase-dir-state-cache
-  (make-hash-table :test 'equal)
-  "Hold information about whether a directory is managed by
-clearcase or not.  If a directory is managed, the name of the
-directory is mapped to 'yes, if it is not, it is mapped to 'no.
-See `vc-clearcase-dir-state' for how this is used.")
-
 (defun clearcase-get-keep-file-name (file-name)
   "Return a file name which can be used as a 'keep' file for FILE-NAME.
 ClearCase creates backup files with the string .keep plus a
@@ -1487,110 +1480,110 @@ information."
       ;; branch...
       (t 'needs-patch))))
 
-;;;;;; dir-state
+;;;;;; dir-status
 
-(defun clearcase-dir-state-process-current-line ()
-  "Process one line from a \"cleartool ls\" output."
+(defcustom clearcase-dir-status-ignored-files nil
+  "A list of regexps mathing files to be ignored by `vc-clearcase-dir-status'.
+ClearCase does not provide a mechanism for ignoring unregistered
+files from status listings and they can clutter the display.  We
+implement a simple mechanism for filtering out unwanted file: if
+the file name maches any regexp in this set (and it is not
+registered with ClearCase), it will not be displayed in the
+*vc-dir* buffer."
+  :type '(repeat string)
+  :group 'vc-clearcase)
+
+(defun clearcase-dir-status-parse-line ()
+  "Process one line from a \"cleartool ls\" output and return a
+list of (FILE VC-STATE nil), we always return nil for the EXTRA
+part.  Return nil if the line has no file information or the file
+is ignored (see `clearcase-dir-status-ignored-files')"
   (beginning-of-line)
   (cond
-    ((looking-at "^\\(.*\\)@@")
-     (let ((file (expand-file-name (match-string 1)))
-	   (limit (save-excursion
-		    (re-search-forward "\\s-+Rule: " (c-point 'eol))
-		    (point))))
-       (if (file-directory-p file)
-	   (puthash (directory-file-name file) 'yes clearcase-dir-state-cache)
-
-	   ;; Regular, version controlled file.  Set the state.
-	   (vc-file-setprop file 'vc-backend 'CLEARCASE)
-	   (vc-file-setprop
-	    file
-	    'vc-state
-	    (let ((state (cond
-			   ((progn
-			      (beginning-of-line)
-			      (re-search-forward "\\[hijacked\\]" limit 'noerror))
-			    'unlocked-changes)
-			   ((progn
-			      (beginning-of-line)
-			      (re-search-forward "CHECKEDOUT" limit 'noerror))
-			    'edited)
-			   (t 'up-to-date)))
-		  (fprop (clearcase-file-fprop file)))
-	      ;; when the file has a FPROP (meaning it is visited in Emacs, we
-	      ;; try to reconcile `state' with `fprop', but we are careful not
-	      ;; to ask for a fprop refresh unless it is necessary.
-	      (when fprop
-		(cond ((and (eq state 'up-to-date)
-			    (clearcase-fprop-checkedout-p fprop))
-		       (clearcase-maybe-set-vc-state file 'force))
-		      ((and (eq state 'edited)
-			    (not (clearcase-fprop-checkedout-p fprop)))
-		       ;; The file is marked as checked-out, but the fprop is
-		       ;; not.  Update the fprop.
-		       (clearcase-maybe-set-vc-state file 'force))
-		      ((eq state 'unlocked-changes)
-		       (setf (clearcase-fprop-status fprop) 'hijacked)))
-		(setq state (vc-clearcase-state-heuristic file)))
-	      state)))))
+    ((looking-at "^\\(.*\\)@@")         ; version controlled item
+     (let* ((file (match-string 1))
+            (limit (save-excursion
+                     (re-search-forward "\\s-+Rule: " (c-point 'eol))
+                     (point)))
+            (state (cond
+                     ((progn
+                        (beginning-of-line)
+                        (re-search-forward "\\[hijacked\\]" limit 'noerror))
+                      'unlocked-changes)
+                     ((progn
+                        (beginning-of-line)
+                        (re-search-forward "CHECKEDOUT" limit 'noerror))
+                      'edited)
+                     (t 'up-to-date))))       
+       (list file state nil)))
 
     ((looking-at "^.+$")                ; not an empty line
      ;; file is not managed by ClearCase
-     (let ((file (expand-file-name (match-string 0))))
-       (puthash (directory-file-name file) 'no clearcase-dir-state-cache)
-       (vc-file-setprop file 'vc-backend 'CLEARCASE)
-       (vc-file-setprop file 'vc-state 'up-to-date)))))
+     (let ((file (match-string 0)))
+       ;; unregistered directories and files matching a regexp in
+       ;; clearcase-dir-status-ignored-files will not be displayed.
+       (unless (or (file-directory-p file)
+                   (some (lambda (rx) (string-match rx file)) 
+                         clearcase-dir-status-ignored-files))
+         (list file 'unregistered nil))))
 
-(defun clearcase-dir-state-collect (process string)
-  "Collect information from a cleartool ls output."
-  (with-current-buffer (process-buffer process)
-    (goto-char (point-max))
-    (insert string)
-    (goto-char (point-min))
-    (let ((kill-whole-line t))
-      (while (and (not (= (point-min) (point-max)))
-		  (progn (re-search-forward "$")
-			 (looking-at "\n"))) ; do we have a full line?
-	(goto-char (point-min))
-	(clearcase-dir-state-process-current-line)
-	(goto-char (point-min))
-	(kill-line)))))
+    (t nil)))
 
-(defun clearcase-dir-state-sentinel (process event)
-  (kill-buffer (process-buffer process))
-  (throw 'finished nil))
+(defun clearcase-dir-status-collect (process string)
+  "Collect information from a cleartool ls output and give it to
+vc-dir via the update function."
+  (let ((data nil))
+    (with-current-buffer (process-get process 'output-buffer)
+      (save-match-data
+        (goto-char (point-max))
+        (insert string)
+        (goto-char (point-min))
+        (let ((kill-whole-line t))
+          (while (and (not (= (point-min) (point-max)))
+                      (progn (re-search-forward "$")
+                             (looking-at "\n"))) ; do we have a full line?
+            (goto-char (point-min))
+            (let ((d (clearcase-dir-status-parse-line)))
+              (when d (push d data)))
+            (goto-char (point-min))
+            (kill-line)))))
+    (funcall (process-get process 'update-function) (nreverse data) t)))
 
-(defun clearcase-dir-state-1 (dir)
-  "Start a cleartool ls process and collect information from it."
+(defun clearcase-dir-status-sentinel (process event)
+  "Kill the output buffer for the cleartool process and signal
+`vc-dir' that we are done."
+  (let ((status  (process-status process))
+	(output-buffer (process-get process 'output-buffer))
+        (update-function (process-get process 'update-function)))
+    (when (memq status '(signal exit))
+      (funcall update-function nil nil) ; signal vc-dir that we are done.
+      (kill-buffer output-buffer))))
+
+(defun vc-clearcase-dir-status (dir update-function)
+  "Backend function for implementing `vc-dir' functionality for ClearCase.
+We run a cleartool ls command in the background and parse its
+output.  Note that we will only be able to detect checked out and
+hijacked files, not files which need to be updated."
   (let* ((default-directory dir)
-	 (buffer (generate-new-buffer "*cleartool-ls*"))
 	 (args (list cleartool-program "ls" "-recurse" "-visible"))
-	 (process (apply 'start-process "cleartool-ls" buffer args)))
-    (with-current-buffer buffer
+	 (process (apply 'start-process "cleartool-ls" (current-buffer) args))
+         (output-buffer (generate-new-buffer "*cleartool-ls*")))
+
+    ;; the DIR-STATUS spec requires to use (current-buffer) as the process
+    ;; buffer, but we also need a buffer to store results received from the
+    ;; cleartool command.
+
+    (set-process-filter process 'clearcase-dir-status-collect)
+    (set-process-sentinel process 'clearcase-dir-status-sentinel)
+    (process-put process 'output-buffer output-buffer)
+    (process-put process 'update-function update-function)
+
+    (with-current-buffer output-buffer
       (buffer-disable-undo)
-      (setq default-directory dir)
-      (set-process-filter process 'clearcase-dir-state-collect)
-      (set-process-sentinel process 'clearcase-dir-state-sentinel))))
-
-(defadvice vc-dired-hook (after clearcase-clear-dir-state-cache)
-  "Clear `clearcase-clear-dir-state-cache' so that we start clean
-b-on the next `vc-directory' call"
-  (clrhash clearcase-dir-state-cache))
-
-(defun vc-clearcase-dir-state (dir)
-  "Determine the state of all files in DIR.
-This is a slow operation so it will not detect the proper state
-of the files: only checked out and hijacked files will be
-correctly identified.  Files which are visited in Emacs will also
-have a correct state."
-  (let ((message-log-max nil))        ; prevent message text from being logged
-    (message "vc-clearcase-dir-state: %s" dir))
-  (unless (gethash (directory-file-name dir) clearcase-dir-state-cache)
-    (catch 'finished
-      (clearcase-dir-state-1 dir)
-      (while t (sit-for 1.0))))
-  (let ((message-log-max nil))        ; prevent message text from being logged
-    (message "vc-clearcase-dir-state: %s completed." dir)))
+      (setq default-directory dir))
+    
+    ;; we will compute results asynchronously
+    nil))
 
 ;;;;;; working-revision
 (defun vc-clearcase-working-revision (file)
@@ -1671,16 +1664,6 @@ abbreviating these strings based on site-specific information."
       (setq mode-line (funcall clearcase-wash-mode-line-function mode-line)))
     mode-line))
 
-;;;;;; dired-state-info
-(defun vc-clearcase-dired-state-info (file)
-  "Return a string corresponding to the status of FILE.
-We use the ClearCase terminology for the 'edited and
-'unlocked-changes states, for all the rest we use the default."
-  (let ((state (vc-state file)))
-    (cond ((eq state 'edited) "(checkout)")
-	  ((eq state 'unlocked-changes) "(hijacked)")
-	  (t (vc-default-dired-state-info "CLEARCASE" file)))))
-
 ;;;;; STATE-CHANGING FUNCTIONS
 ;;;;;; register
 (defun vc-clearcase-register (file &optional rev comment)
@@ -1715,29 +1698,19 @@ lsvob.")
 (defun vc-clearcase-responsible-p (file)
   "Return t if we responsible for FILE.
 We consider ourselves responsible if FILE is inside a ClearCase
-view under a VOB directory.
+view under a VOB directory."
 
-If there is a transaction id for FILE in
-`clearcase-dir-state-cache', it means `vc-clearcase-dir-state' is
-processing that FILE.  In that case we consider ourselves
-responsible if the transaction id is positive."
-  (cond
-    ((or (gethash file clearcase-dir-state-cache)
-	 (gethash (directory-file-name file) clearcase-dir-state-cache))
-     t)
-
-    (t
-     (ignore-cleartool-errors
-      (let ((vob (clearcase-vob-tag-for-path file)))
-	(if (member vob clearcase-known-vobs)
-	    t
-	    ;; else
-	    (progn
-	      ;; lsvob will signal an error if VOB is not valid.
-	      (cleartool "lsvob -short \"%s\"" vob)
-	      (push vob clearcase-known-vobs)
-	      t
-	      )))))))
+  (ignore-cleartool-errors
+    (let ((vob (clearcase-vob-tag-for-path file)))
+      (if (member vob clearcase-known-vobs)
+          t
+          ;; else
+          (progn
+            ;; lsvob will signal an error if VOB is not valid.
+            (cleartool "lsvob -short \"%s\"" vob)
+            (push vob clearcase-known-vobs)
+            t
+            )))))
 
 ;;;;;; checkin
 (defun vc-clearcase-checkin (files rev comment)
@@ -1835,19 +1808,17 @@ be 'reserved or 'unreserved."
 ;; This would be so much easier if vc-start-logentry would accept a
 ;; closure to pass it to us...
 
-(defun clearcase-finish-checkout-reserved (files rev comment)
-  "Do a reserved checkout on FILES with REV and COMMENT.
+(defun clearcase-finish-checkout-reserved (file rev comment)
+  "Do a reserved checkout on FILE with REV and COMMENT.
 NOTE: This function will be called from `vc-start-logentry' which
 works with filesets and it must expect several files."
-  (dolist (file files)
-    (clearcase-finish-checkout file rev comment 'reserved)))
+  (clearcase-finish-checkout file rev comment 'reserved))
 
-(defun clearcase-finish-checkout-unreserved (files rev comment)
-  "Do an unreserved checkout on FILES with REV and COMMENT.
+(defun clearcase-finish-checkout-unreserved (file rev comment)
+  "Do an unreserved checkout on FILE with REV and COMMENT.
 NOTE: This function will be called from `vc-start-logentry' which
 works with filesets it must expect several files."
-  (dolist (file files)
-    (clearcase-finish-checkout file rev comment 'unreserved)))
+  (clearcase-finish-checkout file rev comment 'unreserved))
 
 (defun clearcase-revision-reserved-p (file)
   "Return t if FILE is checked out reserved.
@@ -3494,7 +3465,6 @@ This is the string returned by the cleartool -version command."
     clearcase-annotate-date-rx
     clearcase-annotate-months
     clearcase-log-view-font-lock-keywords
-    clearcase-dir-state-cache
     cleartool-tq
 
     ;; this is handled specially in `vc-clearcase-report-bug'
@@ -3609,8 +3579,6 @@ See `clearcase-trace-cleartool-tq' and
      (remove-hook 'find-file-not-found-functions 'clearcase-file-not-found-handler))
     ((boundp 'find-file-not-found-hooks)
      (remove-hook 'find-file-not-found-hooks 'clearcase-file-not-found-handler)))
-  (ad-disable-advice
-   'vc-dired-hook 'after 'clearcase-clear-dir-state-cache)
   (ad-activate 'vc-dired-hook)
   (ad-disable-advice
    'vc-version-backup-file-name 'after 'clearcase-cleanup-version)
@@ -3632,12 +3600,11 @@ See `clearcase-trace-cleartool-tq' and
 ;; installed on the system)
 (cond ((not (executable-find cleartool-program))
        (message "cleartool executable not found, disabling vc-clearcase"))
-      ((>= emacs-major-version 23)
+      ((< emacs-major-version 23)
        (message "this version of vc-clearcase only works with GNU Emacs 23"))
       (t
-       (ad-activate 'vc-dired-hook)
        (ad-activate 'vc-version-backup-file-name)
-       (ad-activate 'vc-start-entry)
+       (ad-activate 'vc-start-logentry)
        (ad-activate 'vc-create-snapshot)
        (cleartool-tq-maybe-start)))
 

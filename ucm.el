@@ -114,7 +114,7 @@ user."
     (unless initial
       (setq initial
 	    (ignore-cleartool-errors
-	     (cleartool-ask "lsact -cact -fmt \"%n\"")))))
+              (cleartool-ask "lsact -cact -fmt \"%n\"")))))
 
   ;; The view might not be known, so we pass in the `default-directory' to
   ;; `clearcase-get-vprop' so it can be properly created.
@@ -185,9 +185,9 @@ activity headline)."
       ((equal activity "*NEW-ACTIVITY*")
        (if ucm-create-activity-function
 	   (call-interactively ucm-create-activity-function)
-       (let ((headline (read-from-minibuffer "Activity headline: ")))
-	 (when (equal headline "")
-	   (error "Activity headline cannot be empty"))
+           (let ((headline (read-from-minibuffer "Activity headline: ")))
+             (when (equal headline "")
+               (error "Activity headline cannot be empty"))
 	     (cleartool "mkact -force -headline \"%s\"" headline))))
       (t
        (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))
@@ -301,13 +301,13 @@ buffer."
 		     'ucm-locked-activity-face)
 		    (t 'default)))
 	(label1 (format "%c%c "
-		       (if (ucm-lsact-activity-set? activity) ?! ?\  )
+                        (if (ucm-lsact-activity-set? activity) ?! ?\  )
 			(if (ucm-lsact-activity-mark activity) ?* ?\  )))
 	(label2 (format "%s%s"
-		       (ucm-lsact-activity-owner activity)
-		       (if (equal (ucm-lsact-activity-lock activity) "unlocked")
-			   ""
-			   (concat " " (ucm-lsact-activity-lock activity)))))
+                        (ucm-lsact-activity-owner activity)
+                        (if (equal (ucm-lsact-activity-lock activity) "unlocked")
+                            ""
+                            (concat " " (ucm-lsact-activity-lock activity)))))
 	(attr (mapconcat
 	       (lambda (a)
 		 (let ((v (assq a (ucm-lsact-activity-attributes activity))))
@@ -435,11 +435,14 @@ inclued as well."
   (set (make-local-variable 'ucm-lsact-include-obsolete) nil))
 
 ;;;###autoload
-(defun ucm-list-activities (dir)
+(defun ucm-list-activities (&optional dir)
   (interactive "DDirectory: ")
+  (unless dir
+    (setq dir "."))
+  (setq dir (expand-file-name dir))
   (with-cleartool-directory dir
     (let ((buf (get-buffer-create "*UCM Activity List*")))
-      (switch-to-buffer-other-window buf)
+      (pop-to-buffer buf)
       (ucm-lsact-mode)
       (setq ucm-lsact-only-current-user (not current-prefix-arg))
       (setq ucm-lsact-include-obsolete (or (consp current-prefix-arg)
@@ -512,15 +515,16 @@ Used to implement the BACK button.")
   (with-current-buffer (button-get button 'buffer)
     (pop-to-buffer (current-buffer))
     (when ucm-previous-activities
-      (setq ucm-activity (pop ucm-previous-activities))
-      (setq ucm-actb-ewoc (pop ucm-previous-actb-ewocs))
-      (erase-buffer)
-      ;; The header and footer will not be redisplayed unless we set them
-      ;; again.
-      (let ((hf (ewoc-get-hf ucm-actb-ewoc)))
-	(ewoc-set-hf ucm-actb-ewoc (car hf) (cdr hf)))
-      (ewoc-refresh ucm-actb-ewoc)
-      (goto-char (point-min)))))
+      (let ((inhibit-read-only t))
+        (setq ucm-activity (pop ucm-previous-activities))
+        (setq ucm-actb-ewoc (pop ucm-previous-actb-ewocs))
+        (erase-buffer)
+        ;; The header and footer will not be redisplayed unless we set them
+        ;; again.
+        (let ((hf (ewoc-get-hf ucm-actb-ewoc)))
+          (ewoc-set-hf ucm-actb-ewoc (car hf) (cdr hf)))
+        (ewoc-refresh ucm-actb-ewoc)
+        (goto-char (point-min))))))
 
 (define-button-type 'ucm-previous-activity-link
     'face 'default
@@ -791,14 +795,14 @@ attach to the activity ewoc."
 	      )))))
 
     (ignore-cleartool-errors
-     ;; There seems to be a bug in my version of ClearCase: if `activity' is
-     ;; not a rebase or integration activity an error will be reported, but
-     ;; the status of the command will be 0 (meaning success).  We have to
-     ;; test the returned string explicitly ...
-     (let ((ca (cleartool "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
-       (when (and ca (not (string-match "^cleartool: Error: " ca)))
-	 (dolist (c (sort (split-string ca " " 'omit-nulls) 'string<))
-	   (push (make-ucm-actb-contributor :name c) contributors)))))
+      ;; There seems to be a bug in my version of ClearCase: if `activity' is
+      ;; not a rebase or integration activity an error will be reported, but
+      ;; the status of the command will be 0 (meaning success).  We have to
+      ;; test the returned string explicitly ...
+      (let ((ca (cleartool "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
+        (when (and ca (not (string-match "^cleartool: Error: " ca)))
+          (dolist (c (sort (split-string ca " " 'omit-nulls) 'string<))
+            (push (make-ucm-actb-contributor :name c) contributors)))))
 
     (setq contributors (nreverse contributors))
 
@@ -1078,7 +1082,7 @@ directly."
   (let ((dir (expand-file-name default-directory)))
     (with-cleartool-directory dir
       (let ((buf (get-buffer-create "*UCM Activity Browser*")))
-	(switch-to-buffer-other-window buf)
+	(pop-to-buffer buf)
 	(ucm-actb-mode)
 	(let ((inhibit-read-only t))
 	  (setq default-directory dir)

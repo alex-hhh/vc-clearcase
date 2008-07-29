@@ -1,3 +1,13 @@
+2008-07-29  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
+
+	* ucm.el (ucm-list-activities): DIR is now optional and defaults
+	to the current directory.  Use `pop-to-buffer' to display the
+	activtiy list buffer.
+	(ucm-previous-activity-link-handler): set `inhibit-read-only' to t
+	when operating on the buffer.
+	(ucm-browse-activity): Use `pop-to-buffer' to display the activtiy
+	browser buffer.
+
 2008-07-25  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
 	* vc-clearcase.el (vc-clearcase-previous-revision): renamed from

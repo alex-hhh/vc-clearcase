@@ -1,3 +1,8 @@
+2008-07-31  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
+
+	* ucm.el (ucm-actb-visit-item-command): new function
+	(ucm-actb-mode-map): add binding for `ucm-actb-visit-item-command'
+
 2008-07-29  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
 	* ucm.el (ucm-list-activities): DIR is now optional and defaults

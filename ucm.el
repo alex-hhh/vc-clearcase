@@ -302,11 +302,10 @@ buffer."
 	(label1 (format "%c%c "
 			(if (ucm-lsact-activity-set? activity) ?! ?\  )
 			(if (ucm-lsact-activity-mark activity) ?* ?\  )))
-	(label2 (format "%s%s"
-                        (ucm-lsact-activity-owner activity)
+	(label2 (format "%s"
                         (if (equal (ucm-lsact-activity-lock activity) "unlocked")
                             ""
-                            (concat " " (ucm-lsact-activity-lock activity)))))
+			   (ucm-lsact-activity-lock activity))))
 	(attr (mapconcat
 	       (lambda (a)
 		 (let ((v (assq a (ucm-lsact-activity-attributes activity))))
@@ -319,7 +318,11 @@ buffer."
      'face face
      'buffer (current-buffer)
      'activity (ucm-lsact-activity-name activity))
-    (insert " (" label2 " " attr ")")))
+    (when (not (and (equal label2 "") (equal attr "")))
+      (insert " (" label2)
+      (unless (equal label2 "")
+        (insert " "))
+      (insert attr ")"))))
 
 (defun ucm-lsact-create-ewoc (&optional current-user obsolete)
   "Create an EWOC from the activities in STREAM.
@@ -876,6 +879,7 @@ structure)"
     (define-key m "r" 'ucm-actb-revert-command)
     (define-key m "t" 'ucm-actb-transfer-versions-command)
     (define-key m "v" 'ucm-actb-visit-item-command)
+    (define-key m "e" 'ucm-actb-ediff-command)
     m))
 
 (define-derived-mode ucm-actb-mode fundamental-mode
@@ -1071,6 +1075,30 @@ visited."
            ;; `clearcase-file-not-found-handler' will take care of this
            (pop-to-buffer (find-file-noselect (ucm-actb-version-pname data)))))))))
 
+;;;;;; ucm-actb-ediff-command
+(defun ucm-actb-ediff-command (pos)
+  "Start an Ediff session for the current revision of the file."
+  (interactive "d")
+  (let ((node (ewoc-locate ucm-actb-ewoc pos)))
+    (when node
+      (let ((data (ewoc-data node)))
+        (typecase data
+          (ucm-actb-version 
+           (require 'ediff)
+           (require 'ediff-vers)        ; ediff-vc-internal
+           (declare (special ediff-version-control-package))
+           (let* ((file (ucm-actb-file-full-path (ucm-actb-version-file data)))
+                  (current (let ((v (ucm-actb-version-name data)))
+                             (if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" v)
+                                 "" v)))
+                  (previous (if (equal current "")
+                                (cleartool "desc -fmt \"%%PVn\" \"%s\"" file)
+                                (cleartool "desc -fmt \"%%PVn\" \"%s@@%s\"" file current))))
+             (with-current-buffer (find-file-noselect file)
+               (funcall
+                (intern (format "ediff-%S-internal" ediff-version-control-package))
+                previous current nil)))))))))
+  
 ;;;;; ucm-browse-activity
 ;;;###autoload
 (defun ucm-browse-activity (activity)

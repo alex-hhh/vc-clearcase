@@ -1,5 +1,10 @@
 2008-08-22  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
+	* ucm.el (ucm-lsact-activity-pp): don't print the owner of the
+	activity.
+	(ucm-actb-ediff-command): new command
+	(ucm-actb-mode-map): add binding for `ucm-actb-ediff-command'
+
 	* vc-clearcase.el (vc-clearcase-cancel-version): In a snapshot
 	view, don't delete the file before updating it; also use "update
 	-overwrite -force"

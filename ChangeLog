@@ -1,3 +1,9 @@
+2008-08-22  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
+
+	* vc-clearcase.el (vc-clearcase-cancel-version): In a snapshot
+	view, don't delete the file before updating it; also use "update
+	-overwrite -force"
+
 2008-07-31  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
 	* ucm.el (ucm-actb-visit-item-command): new function

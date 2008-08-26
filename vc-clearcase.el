@@ -3303,6 +3303,28 @@ view accessible from this machine."
       (ignore-errors (delete-window window))))
   (kill-buffer buffer))
 
+;;; TODO: the highlighted keyword list is incomplete.
+(defconst clearcase-edcs-font-lock-keywords
+  `(("^\\s-*\\(element\\|load\\|include\\)" 1 font-lock-keyword-face)
+    ("^\\s-*element\\s-+\\(-file\\|-directory\\|-eltype\\s-+\\sw+\\)\\s-" 1 font-lock-type-face)
+    ("\\s-\\(-mkbranch\\)\\s-+\\(\\sw+\\)" (1 font-lock-type-face) (2 font-lock-variable-name-face))
+    ("\\s-\\(-time\\)\\s-+\\(\\sw+\\)" (1 font-lock-type-face) (2 font-lock-variable-name-face))
+    ("\\s-\\(-nocheckout\\b\\)" 1 font-lock-type-face))
+  "Font lock keywords for highlighting config spec files.")
+
+(defvar clearcase-edcs-mode-syntax-table
+  (let ((table (make-syntax-table)))
+    ;; comment starter
+    (modify-syntax-entry ?# "<" table)
+    ;; newline and formfeed end coments
+    (modify-syntax-entry ?\n ">" table)
+    (modify-syntax-entry ?\f ">" table)
+    ;; underscore and minus sign are word constituents
+    (modify-syntax-entry ?_ "w" table)
+    (modify-syntax-entry ?- "w" table)
+    table)
+  "Syntax table used in `clearcase-edcs-mode'.")
+
 (define-derived-mode clearcase-edcs-mode fundamental-mode
   "Configspec"
   "Generic mode to edit clearcase configspecs."
@@ -3312,6 +3334,8 @@ view accessible from this machine."
 	comment-start-skip "\\(\\(^\\|[^\\\\\n]\\)\\(\\\\\\\\\\)*\\)#+ *"
 	comment-end ""
 	comment-end-skip nil)
+  (make-local-variable 'font-lock-defaults)
+  (setq font-lock-defaults '(clearcase-edcs-font-lock-keywords nil t))
   (font-lock-mode t))
 
 ;; Provide a shorter alias for the edcs mode.  This is useful if you
@@ -3323,9 +3347,6 @@ view accessible from this machine."
 		   '(("\C-c\C-s" . clearcase-setcs)
 		     ("\C-c\C-c" . clearcase-setcs-and-kill-buffer))
 		   "Keymap for Clearcase Edit Configspec mode")
-
-(modify-syntax-entry ?\# "<" clearcase-edcs-mode-syntax-table)
-(modify-syntax-entry ?\n ">" clearcase-edcs-mode-syntax-table)
 
 
 ;;;###autoload

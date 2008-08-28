@@ -497,9 +497,9 @@ transaction is complete as funcall(fn closure answer)."
   "The last command given to cleartool to create this output buffer.")
 
 (dolist (var '(cleartool-mode-line
-               cleartool-finished-function
-               cleartool-kill-buffer-when-done
-               cleartool-last-command))
+	       cleartool-finished-function
+	       cleartool-kill-buffer-when-done
+	       cleartool-last-command))
   (make-variable-buffer-local var)
   (put var 'permanent-local t))
 
@@ -1328,8 +1328,8 @@ If FORCE is not nil, always read the properties."
    (let* ((d (read-file-name "Directory: "
 			     default-directory default-directory t))
 	  (vob (ignore-cleartool-errors
-                 (clearcase-vob-tag-for-path
-                  (if (file-directory-p d) d (file-name-directory d))))))
+		 (clearcase-vob-tag-for-path
+		  (if (file-directory-p d) d (file-name-directory d))))))
      (list d (if vob
 		 (clearcase-read-label "Label: " vob)
 		 (read-string "New snapshot name: "))
@@ -1383,26 +1383,26 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-        (let ((ls-result (cleartool "ls \"%s\"" file)))
-          (unless (string-match "Rule: \\(.*\\)$" ls-result)
-            (throw 'done nil))          ; file is not registered
+	(let ((ls-result (cleartool "ls \"%s\"" file)))
+	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	    (throw 'done nil))          ; file is not registered
 
-          (clearcase-set-fprop-version-stage-1 fprop ls-result)
-          ;; anticipate that the version will be needed shortly, so ask for
-          ;; it.  When a file is hijacked, do the desc command on the version
-          ;; extended name of the file, as cleartool will return nothing for
-          ;; the hijacked version...
-          (let ((pname (if (clearcase-fprop-hijacked-p fprop)
-                           (concat file "@@" (clearcase-fprop-version fprop))
-                           file)))
-            (setf (clearcase-fprop-version-tid fprop)
-                  (cleartool-ask
-                   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
-                   'nowait
-                   fprop
-                   'clearcase-set-fprop-version-stage-2))))
-        (vc-file-setprop file 'vc-clearcase-fprop fprop)
-        (throw 'done t)))))
+	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
+	  ;; anticipate that the version will be needed shortly, so ask for
+	  ;; it.  When a file is hijacked, do the desc command on the version
+	  ;; extended name of the file, as cleartool will return nothing for
+	  ;; the hijacked version...
+	  (let ((pname (if (clearcase-fprop-hijacked-p fprop)
+			   (concat file "@@" (clearcase-fprop-version fprop))
+			   file)))
+	    (setf (clearcase-fprop-version-tid fprop)
+		  (cleartool-ask
+		   (format "desc -fmt \"%%Vn %%PVn %%Rf\" \"%s\"" pname)
+		   'nowait
+		   fprop
+		   'clearcase-set-fprop-version-stage-2))))
+	(vc-file-setprop file 'vc-clearcase-fprop fprop)
+	(throw 'done t)))))
 
 ;;;;;; state
 
@@ -1724,15 +1724,15 @@ responsible if the transaction id is positive."
     (t
      (ignore-cleartool-errors
        (let ((vob (clearcase-vob-tag-for-path file)))
-         (if (member vob clearcase-known-vobs)
-             t
-             ;; else
-             (progn
-               ;; lsvob will signal an error if VOB is not valid.
-               (cleartool "lsvob -short \"%s\"" vob)
-               (push vob clearcase-known-vobs)
-               t
-               )))))))
+	 (if (member vob clearcase-known-vobs)
+	     t
+	     ;; else
+	     (progn
+	       ;; lsvob will signal an error if VOB is not valid.
+	       (cleartool "lsvob -short \"%s\"" vob)
+	       (push vob clearcase-known-vobs)
+	       t
+	       )))))))
 
 ;;;;;; checkin
 (defun vc-clearcase-checkin (files rev comment)
@@ -2103,7 +2103,7 @@ is lost."
       (copy-file keep-file file 'overwrite)
       (set-file-modes file (logior (file-modes file) #o220))
       (ignore-cleartool-errors
-        (cleartool "reserve -ncomment \"%s\"" file))
+	(cleartool "reserve -ncomment \"%s\"" file))
       (revert-buffer 'ignore-auto 'noconfirm))
 
     (when (and (not editable)
@@ -2192,7 +2192,7 @@ has a reserved checkout of the file."
 	  (set-file-modes file (logior (file-modes file) #o220))
 	  (delete-file keep-file)
 	  (ignore-cleartool-errors
-            (cleartool "reserve -ncomment \"%s\"" file))
+	    (cleartool "reserve -ncomment \"%s\"" file))
 	  (clearcase-maybe-set-vc-state file 'force))
 
       (cleartool-error
@@ -2240,13 +2240,15 @@ This is used when the file is in a UCM project.")
 
 (defun vc-clearcase-print-log (file &optional buffer)
   "Insert the history of FILE into the *clearcase-lshistory* buffer.
-With a prefix argument, all events are listed (-minor option is
-sent to cleartool)."
+By default only the history of the current branch of the file is
+printed.  With a previx argument (C-u) entire file history is
+printed."
   (setq file (expand-file-name file))
   (let ((inhibit-read-only t)
 	(buf (if buffer
 		 (get-buffer-create buffer)
 		 (get-buffer-create "*vc*")))
+	(fprop (clearcase-file-fprop file))
 	(label-revisions nil)
 	(max-label-length 0))
 
@@ -2278,15 +2280,18 @@ sent to cleartool)."
 	  (dolist (label label-revisions)
 	    (insert (format fmtstr (car label) (cdr label))))))
 
-      (let ((args (list "-fmt" (if (clearcase-ucm-view-p
-				    (clearcase-file-fprop file))
+      (let ((args (list "-fmt" (if (clearcase-ucm-view-p fprop)
 				   clearcase-lshistory-fmt-ucm
 				   clearcase-lshistory-fmt)
 			file)))
+	(unless current-prefix-arg
+	  (setq args (append (list "-branch" (format "brtype:%s"
+						     (clearcase-fprop-branch fprop)))
+			     args)))
 	(apply 'start-process
 	       "cleartool-lshistory" buffer
 	       cleartool-program "lshistory"
-	       (if current-prefix-arg (cons "-minor" args) args))))))
+	       args)))))
 
 ;;;;;; log-view-mode
 (defconst clearcase-log-view-file-re
@@ -2686,12 +2691,12 @@ element * NAME -nocheckout"
       (when dir?                        ; apply label to parent directories
 	(message "Applying label to parent directories...")
 	(ignore-cleartool-errors
-          (while t                      ; until cleartool will throw an error
-            (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
-            (setq dir (file-name-directory dir))
-            (cleartool
-             "mklabel -nc %s lbtype:%s \"%s\""
-             (if branchp "-replace" "") name dir)))))
+	  (while t                      ; until cleartool will throw an error
+	    (setq dir (replace-regexp-in-string "[\\\\/]$" "" dir))
+	    (setq dir (file-name-directory dir))
+	    (cleartool
+	     "mklabel -nc %s lbtype:%s \"%s\""
+	     (if branchp "-replace" "") name dir)))))
     (message "Finished applying label")))
 
 ;;;;; MISCELLANEOUS
@@ -3614,14 +3619,14 @@ See `clearcase-trace-cleartool-tq' and
 
 ;;;###autoload
 (when (and (executable-find cleartool-program)
-           (<= emacs-major-version 22))
+	   (<= emacs-major-version 22))
   (cond
     ((boundp 'find-file-not-found-functions)
-     (add-hook 'find-file-not-found-functions 
-               'clearcase-file-not-found-handler))
+     (add-hook 'find-file-not-found-functions
+	       'clearcase-file-not-found-handler))
     ((boundp 'find-file-not-found-hooks)
-     (add-hook 'find-file-not-found-hooks 
-               'clearcase-file-not-found-handler)))
+     (add-hook 'find-file-not-found-hooks
+	       'clearcase-file-not-found-handler)))
   (if (boundp 'vc-handled-backends)
       (unless (memq 'CLEARCASE vc-handled-backends)
 	(setq vc-handled-backends (nconc vc-handled-backends '(CLEARCASE))))

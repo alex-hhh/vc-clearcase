@@ -1,3 +1,9 @@
+2008-08-29  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
+
+	* vc-clearcase.el (vc-clearcase-print-log): only print the history
+	of the current branch by default.  Print full history when the
+	prefix arg is specified.
+
 2008-08-26  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
 	* vc-clearcase.el (clearcase-edcs-font-lock-keywords): new

@@ -114,14 +114,13 @@ user."
     (unless initial
       (setq initial
 	    (ignore-cleartool-errors
-              (cleartool-ask "lsact -cact -fmt \"%n\"")))))
+	      (cleartool-ask "lsact -cact -fmt \"%n\"")))))
 
   ;; The view might not be known, so we pass in the `default-directory' to
   ;; `clearcase-get-vprop' so it can be properly created.
   (lexical-let ((vprop (clearcase-get-vprop view-tag default-directory)))
 
     ;; wait for a previous activity collection transaction
-
     (cleartool-wait-for (clearcase-vprop-activities-tid vprop))
 
     ;; Start reading the activities asynchronously.  By the time the user
@@ -185,9 +184,9 @@ activity headline)."
       ((equal activity "*NEW-ACTIVITY*")
        (if ucm-create-activity-function
 	   (call-interactively ucm-create-activity-function)
-           (let ((headline (read-from-minibuffer "Activity headline: ")))
-             (when (equal headline "")
-               (error "Activity headline cannot be empty"))
+	   (let ((headline (read-from-minibuffer "Activity headline: ")))
+	     (when (equal headline "")
+	       (error "Activity headline cannot be empty"))
 	     (cleartool "mkact -force -headline \"%s\"" headline))))
       (t
        (let ((status (cleartool "lsact -fmt \"%%[locked]p\" %s" activity)))
@@ -301,13 +300,12 @@ buffer."
 		     'ucm-locked-activity-face)
 		    (t 'default)))
 	(label1 (format "%c%c "
-                        (if (ucm-lsact-activity-set? activity) ?! ?\  )
+			(if (ucm-lsact-activity-set? activity) ?! ?\  )
 			(if (ucm-lsact-activity-mark activity) ?* ?\  )))
-	(label2 (format "%s%s"
-                        (ucm-lsact-activity-owner activity)
+	(label2 (format "%s"
                         (if (equal (ucm-lsact-activity-lock activity) "unlocked")
                             ""
-                            (concat " " (ucm-lsact-activity-lock activity)))))
+			   (ucm-lsact-activity-lock activity))))
 	(attr (mapconcat
 	       (lambda (a)
 		 (let ((v (assq a (ucm-lsact-activity-attributes activity))))
@@ -320,7 +318,11 @@ buffer."
      'face face
      'buffer (current-buffer)
      'activity (ucm-lsact-activity-name activity))
-    (insert " (" label2 " " attr ")")))
+    (when (not (and (equal label2 "") (equal attr "")))
+      (insert " (" label2)
+      (unless (equal label2 "")
+        (insert " "))
+      (insert attr ")"))))
 
 (defun ucm-lsact-create-ewoc (&optional current-user obsolete)
   "Create an EWOC from the activities in STREAM.
@@ -329,7 +331,7 @@ are listed.  When OBSOLETE is not nil, obsolete activities are
 inclued as well."
   (let* ((stream (cleartool "lsstream -fmt \"%%n\""))
 	 (header (concat (propertize "Stream: " 'face 'ucm-field-name-face)
-			 stream))
+                         stream))
 	 (current-activity (cleartool "lsact -cact -fmt \"%%n\""))
 	 (ewoc (ewoc-create 'ucm-lsact-activity-pp header)))
     (dolist (a (split-string
@@ -349,6 +351,7 @@ inclued as well."
 			  :attributes (clearcase-get-attributes
 				       (format "activity:%s@/projects" name))))))
     ewoc))
+
 
 (defun ucm-lsact-refresh-command ()
   "Refresh the activity list in the current buffer."
@@ -800,9 +803,9 @@ attach to the activity ewoc."
       ;; the status of the command will be 0 (meaning success).  We have to
       ;; test the returned string explicitly ...
       (let ((ca (cleartool "lsact -fmt \"%%[contrib_acts]p\" %s" activity)))
-        (when (and ca (not (string-match "^cleartool: Error: " ca)))
-          (dolist (c (sort (split-string ca " " 'omit-nulls) 'string<))
-            (push (make-ucm-actb-contributor :name c) contributors)))))
+	(when (and ca (not (string-match "^cleartool: Error: " ca)))
+	  (dolist (c (sort (split-string ca " " 'omit-nulls) 'string<))
+	    (push (make-ucm-actb-contributor :name c) contributors)))))
 
     (setq contributors (nreverse contributors))
 
@@ -875,6 +878,8 @@ structure)"
     (define-key m "c" 'ucm-actb-checkin-command)
     (define-key m "r" 'ucm-actb-revert-command)
     (define-key m "t" 'ucm-actb-transfer-versions-command)
+    (define-key m "v" 'ucm-actb-visit-item-command)
+    (define-key m "e" 'ucm-actb-ediff-command)
     m))
 
 (define-derived-mode ucm-actb-mode fundamental-mode
@@ -1023,7 +1028,7 @@ If no versions are selected, the current version is checked in."
 
 ;;;;;; ucm-actb-transfer-versions-command
 (defun ucm-actb-transfer-versions-command ()
-  "Thansfer the selected versions to another activity."
+  "Transfer the selected versions to another activity."
   (interactive)
   (let ((revisions (ewoc-collect ucm-actb-ewoc
 				 '(lambda (data)
@@ -1050,8 +1055,50 @@ If no versions are selected, the current version is checked in."
 
     (ucm-actb-refresh-command)))
 
+;;;;;; ucm-actb-transfer-versions-command
+(defun ucm-actb-visit-item-command (pos)
+  "Visit the current item.
+If it is a file, it is visited, if it is a directory a dired
+buffer is opened, if it is a version, that file's version is
+visited."
+  (interactive "d")
+  (let ((node (ewoc-locate ucm-actb-ewoc pos)))
+    (when node
+      (let ((data (ewoc-data node)))
+        (typecase data
+          ;; NOTE: if the node is of another type, we silently ignore it.
+          (ucm-actb-directory 
+           (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
+          (ucm-actb-file 
+           (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
+          (ucm-actb-version 
+           ;; `clearcase-file-not-found-handler' will take care of this
+           (pop-to-buffer (find-file-noselect (ucm-actb-version-pname data)))))))))
 
-
+;;;;;; ucm-actb-ediff-command
+(defun ucm-actb-ediff-command (pos)
+  "Start an Ediff session for the current revision of the file."
+  (interactive "d")
+  (let ((node (ewoc-locate ucm-actb-ewoc pos)))
+    (when node
+      (let ((data (ewoc-data node)))
+        (typecase data
+          (ucm-actb-version 
+           (require 'ediff)
+           (require 'ediff-vers)        ; ediff-vc-internal
+           (declare (special ediff-version-control-package))
+           (let* ((file (ucm-actb-file-full-path (ucm-actb-version-file data)))
+                  (current (let ((v (ucm-actb-version-name data)))
+                             (if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" v)
+                                 "" v)))
+                  (previous (if (equal current "")
+                                (cleartool "desc -fmt \"%%PVn\" \"%s\"" file)
+                                (cleartool "desc -fmt \"%%PVn\" \"%s@@%s\"" file current))))
+             (with-current-buffer (find-file-noselect file)
+               (funcall
+                (intern (format "ediff-%S-internal" ediff-version-control-package))
+                previous current nil)))))))))
+  
 ;;;;; ucm-browse-activity
 ;;;###autoload
 (defun ucm-browse-activity (activity)

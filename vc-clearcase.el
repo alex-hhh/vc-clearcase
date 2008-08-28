@@ -2200,6 +2200,17 @@ has a reserved checkout of the file."
 	 (rename-file keep-file file))
        (error (error-message-string err))))))
 
+;;;;;; modify-change-comment
+
+;; TODO: needs to be tested
+(defun vc-clearcase-modify-change-comment (files rev comment)
+  "Change the comment for the revision REV of FILES to COMMENT.
+We accept any number of files to conform to the vc interface, but
+for clearcase this operation only makes sense for one file."
+  (with-clearcase-cfile (cfile comment)
+    (dolist (file files)
+      (cleartool "chevent -replace -cfile %s \"%s\"@@%s" cfile file))))
+
 ;;;;; HISTORY FUNCTIONS
 ;;;;;; print-log
 (defcustom clearcase-print-log-show-labels 'some

@@ -3,6 +3,7 @@
 	* vc-clearcase.el (vc-clearcase-print-log): only print the history
 	of the current branch by default.  Print full history when the
 	prefix arg is specified.
+	(vc-clearcase-modify-change-comment): 388 new function
 
 2008-08-26  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 

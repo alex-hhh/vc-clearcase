@@ -1,3 +1,18 @@
+2008-09-02  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
+
+	* vc-clearcase.el (cleartool-wait-for): accept a nil `tid' as an
+	argument.
+	(clearcase-fprop): new slots: activity^, activity-tid^, renamed
+	comment^ and comment-tid^ from comment and comment-tid.
+	(clearcase-reset-fprop): clear comment-tid^, comment^,
+	activity-tid^ and activity^ slots
+	(clearcase-fprop-comment, clearcase-fprop-activity): new
+	functions.
+	(vc-start-entry): no need to wait for the comment tid,
+	`clearcase-fprop-comment' does that
+	(vc-clearcase-state): fetch the comment and activity (in an UCM
+	view) if the file is checked out.
+
 2008-08-29  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
 	* vc-clearcase.el (vc-clearcase-print-log): only print the history

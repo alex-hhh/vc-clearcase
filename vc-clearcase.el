@@ -383,7 +383,8 @@ NOTE: a successful transaction might not have a result
 associated, as `cleartool-tq-handler' passes the result to the
 callback function if that is available."
 
-  (assert tid nil "nil `tid' passed to cleartool-wait-for")
+  ;; (assert tid nil "nil `tid' passed to cleartool-wait-for")
+  (unless tid (setq tid -1))
 
   ;; we use an external loop so that if the with-timeout form exits
   ;; but the process has sent some data we can start the wait again.
@@ -701,8 +702,18 @@ otherwise it returns the value of the last form in BODY."
   status                ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
   what-rule             ; confispec rule for the file
 
-  comment-tid
-  comment                            ; the checkout comment (when checked out)
+  ;; the checkout comment (when checked out).  Use `clearcase-fprop-comment'
+  ;; to access it.  NOTE: the comment will only be available right before a
+  ;; checkin when `vc-clearcase-state' is called.
+  comment-tid^
+  comment^
+
+  ;; the activity attached to the file (when checked out, only in UCM views).
+  ;; Use `clearcase-fprop-activity' to access it.  NOTE: the activity will
+  ;; only be available right before a checkin when `vc-clearcase-state' is
+  ;; called.
+  activity-tid^
+  activity^
 
   view-tag                              ; the view for the file
 
@@ -796,7 +807,21 @@ without having to check first that it exists."
   (when fprop
     (setf (clearcase-fprop-version fprop) nil)
     (setf (clearcase-fprop-version-tid fprop) nil)
+    (setf (clearcase-fprop-comment-tid^ fprop) nil)
+    (setf (clearcase-fprop-comment^ fprop) nil)
+    (setf (clearcase-fprop-activity-tid^ fprop) nil)
+    (setf (clearcase-fprop-activity^ fprop) nil)
     (setf (clearcase-fprop-revision-list fprop) nil)))
+
+(defsubst clearcase-fprop-comment (fprop)
+  "Return the checkout comment of this file."
+  (cleartool-wait-for (clearcase-fprop-comment-tid^ fprop))
+  (clearcase-fprop-comment^ fprop))
+
+(defsubst clearcase-fprop-activity (fprop)
+  "Return the activtiy of a checked out file."
+  (cleartool-wait-for (clearcase-fprop-activity-tid^ fprop))
+  (clearcase-fprop-activity^ fprop))
 
 (defun clearcase-set-fprop-version-stage-1 (fprop ls-string)
   "Set version information in FPROP from LS-STRING.
@@ -1316,7 +1341,6 @@ If FORCE is not nil, always read the properties."
   (when (and file (null comment))
     (let ((fprop (clearcase-file-fprop file)))
       (when (and fprop (clearcase-fprop-checkedout-p fprop))
-	(cleartool-wait-for (clearcase-fprop-comment-tid fprop))
 	(setf comment (clearcase-fprop-comment fprop))
 	(setf initial-contents t)))))
 
@@ -1450,11 +1474,24 @@ checked it out.
     ;; We anticipate that the file's checkout comment might be needed shortly
     ;; so ask for it before we return the state
     (when (clearcase-fprop-checkedout-p fprop)
-      (setf (clearcase-fprop-comment-tid fprop)
+      (setf (clearcase-fprop-comment-tid^ fprop)
 	    (cleartool-ask
-	     (format "desc -fmt \"%%c\" \"%s\"" file) 'nowait fprop
-	     '(lambda (fprop comment)
-	       (setf (clearcase-fprop-comment fprop) comment)))))
+	     (format "desc -fmt \"%%c\" \"%s\"" file)
+	     'nowait fprop
+	     (lambda (fprop comment)
+	       (setf (clearcase-fprop-comment^ fprop) comment))))
+
+      ;; In UCM views also ask for the files activity.  This is not used by
+      ;; vc-clearcase.el for now, but it enables some checkin-hooks to be more
+      ;; responsive.
+      (when (clearcase-ucm-view-p fprop)
+	(setf (clearcase-fprop-activity-tid^ fprop)
+	    (cleartool-ask
+	       (format "desc -fmt \"%%[activity]p\" \"%s\""
+		       (clearcase-fprop-file-name fprop))
+	       'nowait fprop
+	       (lambda (fprop activity)
+		 (setf (clearcase-fprop-activity^ fprop) activity))))))
 
     ;; return the state.  The heuristic already gives all the
     ;; information we need.

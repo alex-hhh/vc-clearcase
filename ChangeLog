@@ -1,3 +1,8 @@
+2008-09-04  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
+
+	* ucm.el (ucm-actb-create-ewoc): 375 add the stream to the ewoc
+	header.
+
 2008-09-02  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
 	* vc-clearcase.el (cleartool-wait-for): accept a nil `tid' as an

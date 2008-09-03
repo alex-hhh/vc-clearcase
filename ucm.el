@@ -841,6 +841,9 @@ structure)"
 		  ", "
 		  (cleartool "lsact -fmt \"%%[owner]p\" %s" name)
 		  ")\n"
+                  (propertize "Stream: " 'face 'ucm-field-name-face)
+                  (cleartool "lsact -fmt \"%%[stream]p\" %s" name)
+                  "\n"
 		  (propertize "Attributes: " 'face 'ucm-field-name-face)
 		  "\n"))
 	 (ewoc nil))

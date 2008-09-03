@@ -1,3 +1,8 @@
+2008-09-04  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-refresh-files): 378 use
+	`vc-mode-line' and `vc-resynch-buffer' to refresh the vc state
+ 
 2008-09-04  Alexandru Harsanyi  <aharsanyi@ImmersiveTechnologies.com>
 
 	* ucm.el (ucm-actb-create-ewoc): 375 add the stream to the ewoc

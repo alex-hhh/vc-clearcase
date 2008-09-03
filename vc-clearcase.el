@@ -880,11 +880,14 @@ in bulk."
   (dolist (file files)
     (let ((fprop (clearcase-file-fprop file)))
       (when fprop
+	(with-temp-message (format "Refreshing ClearCase status for %s" file)
+          (with-current-buffer (get-file-buffer file)
 	;; clear any properties vc.el might have cached.
 	(vc-file-clearprops file)
 	(vc-file-setprop file 'vc-clearcase-fprop fprop)
 	(clearcase-maybe-set-vc-state file 'force)
-	(vc-resynch-buffer file t t)))))
+        (vc-mode-line file)
+        (vc-resynch-buffer file t t)))))))
 
 ;;;; Clearcase view-tag properties
 

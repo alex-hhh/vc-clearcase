@@ -882,12 +882,7 @@ in bulk."
       (when fprop
 	(with-temp-message (format "Refreshing ClearCase status for %s" file)
           (with-current-buffer (get-file-buffer file)
-	;; clear any properties vc.el might have cached.
-	(vc-file-clearprops file)
-	(vc-file-setprop file 'vc-clearcase-fprop fprop)
-	(clearcase-maybe-set-vc-state file 'force)
-        (vc-mode-line file)
-        (vc-resynch-buffer file t t)))))))
+            (revert-buffer nil 'noconfirm nil)))))))
 
 ;;;; Clearcase view-tag properties
 
@@ -2448,19 +2443,26 @@ This is a helper function for `vc-clearcase-diff'"
       (and (re-search-forward "(no differences)" (point-max) 'noerror) t))))
 
 (defun clearcase-diff-with-cleartool (file rev1 rev2)
-  "Do a diff on FILE revisions REV1 and REV2 using the cleartool diff.
+  "Compare FILE's revisions REV1 and REV2 using the cleartool diff.
+If REV1 and REV2 are nil, compare the current version of FILE
+against its predecessor.
+
 The diff is stored in the current buffer.  The function returns t
-if the revisions are identical and nil otherwise.  This is a
-helper function for `vc-clearcase-diff'"
+if the revisions are identical and nil otherwise. 
+
+This is a helper function for `vc-clearcase-diff'"
   (let ((diff-start-pos (point))
-	(fver1 (concat file "@@" rev1))
+	(fver1 (if rev1 (concat file "@@" rev1) file))
 	(fver2 (if rev2 (concat file "@@" rev2) file))
 	(opts (mapconcat 'identity
 			 (if (listp vc-clearcase-diff-switches)
 			     vc-clearcase-diff-switches
 			     (list vc-clearcase-diff-switches))
 			 " ")))
-    (insert (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2))
+    (insert
+     (if (and (null rev1) (null rev2))
+         (cleartool "diff %s -pre \"%s\"" opts file)
+         (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
     (goto-char diff-start-pos)
     (when clearcase-diff-cleanup-flag
       (while (re-search-forward "\r$" nil t)
@@ -2515,7 +2517,7 @@ when REV2 is nil, the current contents of the file are used."
 	      (diff-start-pos (point))
 	      (identical nil))
 
-	  (unless rev1
+	  (when (and (null rev1) fprop)
 	    (setq rev1 (clearcase-fprop-version fprop)))
 	  (setq file (file-name-nondirectory file))
 

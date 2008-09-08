@@ -1,3 +1,9 @@
+2008-09-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-refresh-files): use `revert-buffer'
+	(vc-clearcase-diff): 380 allow nil REV1, meaning compare a
+	checkout with its predecessor.
+
 2008-09-04  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-refresh-files): 378 use

@@ -1,3 +1,13 @@
+2008-09-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el: 379 version was renamed to revision in the entire file.
+	(ucm-show-diff-link-handler): call `ucm-actb-show-diff'
+	(ucm-actb-file-optimize-revisions): new function
+	(ucm-actb-revision): new slot: previous^ 
+	(ucm-actb-revision-previous): new function
+	(ucm-actb-show-diff): new function
+	(ucm-actb-optimize-display-command): new function
+
 2008-09-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-refresh-files): use `revert-buffer'

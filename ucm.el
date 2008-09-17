@@ -685,7 +685,7 @@ set."
      'buffer (current-buffer)
      'actb-revision revision))
   (if (> (ucm-actb-revision-count revision) 1)
-      (insert (format " (+%d revisions)" (ucm-actb-revision-count revision)))))
+      (insert (format " (%d revisions)" (ucm-actb-revision-count revision)))))
 
 
 (defun ucm-actb-revision-set-mark (revision)

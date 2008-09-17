@@ -12,6 +12,7 @@
 	than 1.
 	(ucm-actb-file-optimize-revisions): update the COUNT slot of each
 	revision
+	(ucm-actb-revision-pp): don't print a + sign
 
 2008-09-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

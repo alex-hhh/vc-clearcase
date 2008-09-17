@@ -3,10 +3,15 @@
 	* ucm.el: 379 version was renamed to revision in the entire file.
 	(ucm-show-diff-link-handler): call `ucm-actb-show-diff'
 	(ucm-actb-file-optimize-revisions): new function
-	(ucm-actb-revision): new slot: previous^ 
+	(ucm-actb-revision): new slot: previous^
 	(ucm-actb-revision-previous): new function
 	(ucm-actb-show-diff): new function
 	(ucm-actb-optimize-display-command): new function
+	(ucm-actb-revision): new slot: COUNT
+	(ucm-actb-revision-pp): display the number of revisions if more
+	than 1.
+	(ucm-actb-file-optimize-revisions): update the COUNT slot of each
+	revision
 
 2008-09-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

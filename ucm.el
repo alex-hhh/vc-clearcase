@@ -651,30 +651,6 @@ set."
 	  (t
 	   (mapc 'ucm-actb-revision-toggle-mark revisions)))))
 
-(defun ucm-actb-file-optimize-revisions (file)
-  "Reduce the number of revisions of a file by colapsing
- consecutive revisions into one."
-  (let ((revisions (reverse (ucm-actb-file-revisions file)))
-        (optimized '()))
-    (while revisions
-      (let ((first (car revisions))
-            (rest (cdr revisions)))
-        (catch 'next
-          (while t
-            (let ((prev (find (ucm-actb-revision-previous first) 
-                              rest
-                              :test 'equal
-                              :key 'ucm-actb-revision-name)))
-              (if prev
-                  (progn
-                    (setf (ucm-actb-revision-previous^ first)
-                          (ucm-actb-revision-previous prev))
-                    (setf rest (delq prev rest)))
-                  (throw 'next nil)))))
-        (push first optimized)
-        (setf revisions rest)))
-    (setf (ucm-actb-file-revisions file) optimized)))
-
 ;;;;;; ucm-actb-revision
 
 ;; The revision of a file under an activity.
@@ -683,6 +659,10 @@ set."
   ;; the previous revision against which we will diff.  Don't use this slot
   ;; directly.  Use `ucm-actb-revision-previous' instead.
   previous^
+  
+  ;; number of revisions between name and previous^
+  (count 1)
+
   file                                  ; The `ucm-actb-file' we belong to
   mark                                  ; (t nil)
   ;; Becomes t when the mark has changed.  Used to know when the ewoc node
@@ -703,7 +683,9 @@ set."
 	       'ucm-revision-face)
      'type 'ucm-show-diff-link
      'buffer (current-buffer)
-     'actb-revision revision)))
+     'actb-revision revision))
+  (if (> (ucm-actb-revision-count revision) 1)
+      (insert (format " (+%d revisions)" (ucm-actb-revision-count revision)))))
 
 
 (defun ucm-actb-revision-set-mark (revision)
@@ -761,6 +743,31 @@ the previous revision will be an older one"
     (find-file-noselect file)
     (vc-clearcase-diff file previous current)
     (get-buffer "*vc-diff*")))
+
+(defun ucm-actb-file-optimize-revisions (file)
+  "Reduce the number of revisions of a file by colapsing
+ consecutive revisions into one."
+  (let ((revisions (reverse (ucm-actb-file-revisions file)))
+        (optimized '()))
+    (while revisions
+      (let ((first (car revisions))
+            (rest (cdr revisions)))
+        (catch 'next
+          (while t
+            (let ((prev (find (ucm-actb-revision-previous first) 
+                              rest
+                              :test 'equal
+                              :key 'ucm-actb-revision-name)))
+              (if prev
+                  (progn
+                    (setf (ucm-actb-revision-previous^ first)
+                          (ucm-actb-revision-previous prev))
+                    (incf (ucm-actb-revision-count first))
+                    (setf rest (delq prev rest)))
+                  (throw 'next nil)))))
+        (push first optimized)
+        (setf revisions rest)))
+    (setf (ucm-actb-file-revisions file) optimized)))
 
 ;;;;;; ucm-actb-contributor
 
@@ -1154,7 +1161,8 @@ visited."
                    (ucm-actb-revision
                     ;; does this revision still exist for file?
                     (memq data (ucm-actb-file-revisions (ucm-actb-revision-file data))))
-                   (t t)))))
+                   (t t))))
+  (ewoc-refresh ucm-actb-ewoc))
 
 ;;;;; ucm-browse-activity
 ;;;###autoload

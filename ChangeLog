@@ -1,3 +1,11 @@
+2008-11-10  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (clearcase-diff-with-diff): use relative file
+	names and call the `diff-command' directly so we can format its
+	labels
+	(clearcase-diff-with-cleartool): use relative filenames in the
+	diff.
+
 2008-09-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el: 379 version was renamed to revision in the entire file.

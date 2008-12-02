@@ -384,7 +384,8 @@ NOTE: a successful transaction might not have a result
 associated, as `cleartool-tq-handler' passes the result to the
 callback function if that is available."
 
-  (assert tid nil "nil `tid' passed to cleartool-wait-for")
+  ;; (assert tid nil "nil `tid' passed to cleartool-wait-for")
+  (unless tid (setq tid -1))
 
   ;; we use an external loop so that if the with-timeout form exits
   ;; but the process has sent some data we can start the wait again.
@@ -702,8 +703,18 @@ otherwise it returns the value of the last form in BODY."
   status                ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
   what-rule             ; confispec rule for the file
 
-  comment-tid
-  comment                            ; the checkout comment (when checked out)
+  ;; the checkout comment (when checked out).  Use `clearcase-fprop-comment'
+  ;; to access it.  NOTE: the comment will only be available right before a
+  ;; checkin when `vc-clearcase-state' is called.
+  comment-tid^
+  comment^
+
+  ;; the activity attached to the file (when checked out, only in UCM views).
+  ;; Use `clearcase-fprop-activity' to access it.  NOTE: the activity will
+  ;; only be available right before a checkin when `vc-clearcase-state' is
+  ;; called.
+  activity-tid^
+  activity^
 
   view-tag                              ; the view for the file
 
@@ -797,7 +808,21 @@ without having to check first that it exists."
   (when fprop
     (setf (clearcase-fprop-version fprop) nil)
     (setf (clearcase-fprop-version-tid fprop) nil)
+    (setf (clearcase-fprop-comment-tid^ fprop) nil)
+    (setf (clearcase-fprop-comment^ fprop) nil)
+    (setf (clearcase-fprop-activity-tid^ fprop) nil)
+    (setf (clearcase-fprop-activity^ fprop) nil)
     (setf (clearcase-fprop-revision-list fprop) nil)))
+
+(defsubst clearcase-fprop-comment (fprop)
+  "Return the checkout comment of this file."
+  (cleartool-wait-for (clearcase-fprop-comment-tid^ fprop))
+  (clearcase-fprop-comment^ fprop))
+
+(defsubst clearcase-fprop-activity (fprop)
+  "Return the activtiy of a checked out file."
+  (cleartool-wait-for (clearcase-fprop-activity-tid^ fprop))
+  (clearcase-fprop-activity^ fprop))
 
 (defun clearcase-set-fprop-version-stage-1 (fprop ls-string)
   "Set version information in FPROP from LS-STRING.
@@ -856,11 +881,9 @@ in bulk."
   (dolist (file files)
     (let ((fprop (clearcase-file-fprop file)))
       (when fprop
-	;; clear any properties vc.el might have cached.
-	(vc-file-clearprops file)
-	(vc-file-setprop file 'vc-clearcase-fprop fprop)
-	(clearcase-maybe-set-vc-state file 'force)
-	(vc-resynch-buffer file t t)))))
+	(with-temp-message (format "Refreshing ClearCase status for %s" file)
+          (with-current-buffer (get-file-buffer file)
+            (revert-buffer nil 'noconfirm nil)))))))
 
 ;;;; Clearcase view-tag properties
 
@@ -1310,7 +1333,6 @@ If FORCE is not nil, always read the properties."
   (when (and files (= (length files) 1) (null comment))
     (let ((fprop (clearcase-file-fprop (car files))))
       (when (and fprop (clearcase-fprop-checkedout-p fprop))
-	(cleartool-wait-for (clearcase-fprop-comment-tid fprop))
 	(setf comment (clearcase-fprop-comment fprop))
 	(setf initial-contents t)))))
 
@@ -1444,11 +1466,24 @@ checked it out.
     ;; We anticipate that the file's checkout comment might be needed shortly
     ;; so ask for it before we return the state
     (when (clearcase-fprop-checkedout-p fprop)
-      (setf (clearcase-fprop-comment-tid fprop)
+      (setf (clearcase-fprop-comment-tid^ fprop)
 	    (cleartool-ask
-	     (format "desc -fmt \"%%c\" \"%s\"" file) 'nowait fprop
-	     '(lambda (fprop comment)
-	       (setf (clearcase-fprop-comment fprop) comment)))))
+	     (format "desc -fmt \"%%c\" \"%s\"" file)
+	     'nowait fprop
+	     (lambda (fprop comment)
+	       (setf (clearcase-fprop-comment^ fprop) comment))))
+
+      ;; In UCM views also ask for the files activity.  This is not used by
+      ;; vc-clearcase.el for now, but it enables some checkin-hooks to be more
+      ;; responsive.
+      (when (clearcase-ucm-view-p fprop)
+	(setf (clearcase-fprop-activity-tid^ fprop)
+	    (cleartool-ask
+	       (format "desc -fmt \"%%[activity]p\" \"%s\""
+		       (clearcase-fprop-file-name fprop))
+	       'nowait fprop
+	       (lambda (fprop activity)
+		 (setf (clearcase-fprop-activity^ fprop) activity))))))
 
     ;; return the state.  The heuristic already gives all the
     ;; information we need.
@@ -2414,6 +2449,8 @@ The diff is stored in the current buffer.  The function returns t
 if the revisions are identical and nil otherwise.
 This is a helper function for `vc-clearcase-diff'"
 
+  (setq file (file-relative-name file default-directory))
+
   ;; The `diff' function likes to display the diff buffer, but within vc, the
   ;; choice to display it or not is left to `vc-version-diff'.
   (save-window-excursion
@@ -2432,9 +2469,14 @@ This is a helper function for `vc-clearcase-diff'"
 	  (delete-file new))
 	(clearcase-find-version-helper file rev2 new))
 
-      (let ((diff-buffer (diff old new nil 'no-async)))
-	(insert-buffer-substring diff-buffer)
-	(kill-buffer diff-buffer))
+      (let ((resize-mini-windows nil))
+        (shell-command
+         (format "%s %s --label \"%s\" --label \"%s\" \"%s\" \"%s\""
+                 diff-command diff-switches 
+                 (concat file " " (or rev1 "")) 
+                 (concat file " " (or rev2 ""))
+                 old new)
+         (current-buffer)))
 
       ;; delete the temporary files we created
       (delete-file old)
@@ -2444,31 +2486,41 @@ This is a helper function for `vc-clearcase-diff'"
       (and (re-search-forward "(no differences)" (point-max) 'noerror) t))))
 
 (defun clearcase-diff-with-cleartool (file rev1 rev2)
-  "Do a diff on FILE revisions REV1 and REV2 using the cleartool diff.
+  "Compare FILE's revisions REV1 and REV2 using the cleartool diff.
+If REV1 and REV2 are nil, compare the current version of FILE
+against its predecessor.
+
 The diff is stored in the current buffer.  The function returns t
-if the revisions are identical and nil otherwise.  This is a
-helper function for `vc-clearcase-diff'"
+if the revisions are identical and nil otherwise. 
+
+This is a helper function for `vc-clearcase-diff'"
+
+  (setq file (file-relative-name file default-directory))
   (let ((diff-start-pos (point))
-	(fver1 (concat file "@@" rev1))
+	(fver1 (if rev1 (concat file "@@" rev1) file))
 	(fver2 (if rev2 (concat file "@@" rev2) file))
 	(opts (mapconcat 'identity
 			 (if (listp vc-clearcase-diff-switches)
 			     vc-clearcase-diff-switches
 			     (list vc-clearcase-diff-switches))
 			 " ")))
-    (insert (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2))
-    (goto-char diff-start-pos)
-    (when clearcase-diff-cleanup-flag
-      (while (re-search-forward "\r$" nil t)
-	(replace-match "" nil nil))
-      (goto-char diff-start-pos))
-    ;; the way we determine whether the files are identical depends
-    ;; on the diff format we use.
-    (or
-     ;; diff format has an empty buffer
-     (equal diff-start-pos (point-max))
-     ;; serial format prints "Files are identical", so we look for that.
-     (looking-at "\\(Files\\|Directories\\) are identical"))))
+    (with-cleartool-directory default-directory
+      (insert
+       (if (and (null rev1) (null rev2))
+           (cleartool "diff %s -pre \"%s\"" opts file)
+           (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
+      (goto-char diff-start-pos)
+      (when clearcase-diff-cleanup-flag
+        (while (re-search-forward "\r$" nil t)
+          (replace-match "" nil nil))
+        (goto-char diff-start-pos))
+      ;; the way we determine whether the files are identical depends
+      ;; on the diff format we use.
+      (or
+       ;; diff format has an empty buffer
+       (equal diff-start-pos (point-max))
+       ;; serial format prints "Files are identical", so we look for that.
+       (looking-at "\\(Files\\|Directories\\) are identical")))))
 
 (defun vc-clearcase-diff (files &optional rev1 rev2 buffer)
   "Put the FILES diff between REV1 and REV2 in BUFFER.

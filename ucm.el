@@ -31,14 +31,14 @@
 
 ;;; TODO
 ;;
-;; - `ucm-actb-fetch-activity' -- the listed versions should be sorted,
+;; - `ucm-actb-fetch-activity' -- the listed revisions should be sorted,
 ;;   otherwise they might show up in the wrong order (as received from
 ;;   clearcase)
 ;;
 ;; - `ucm-actb-mode' -- allow starting ediff in addition to diff for a
-;;   version.
+;;   revision.
 ;;
-;; - `ucm-actb-transfer-versions-command' -- handle the *NONE* and
+;; - `ucm-actb-transfer-revisions-command' -- handle the *NONE* and
 ;;   *NEW-ACTIVITY* responses from `ucm-read-activity'
 ;;
 
@@ -203,12 +203,12 @@ activity headline)."
 (defun ucm-show-current-activity (&optional extra-info)
   "Show the current activity in the view.
 With prefix argument (EXTRA-INFO), also shows the number of
-files modified under this activity, number of versions and the
+files modified under this activity, number of revisions and the
 number of checked out files."
   (interactive "P")
   (with-cleartool-directory (expand-file-name default-directory)
     (let ((headline (cleartool "lsact -cact -fmt \"%%[headline]p\""))
-	  versions
+	  revisions
 	  (files 0)
 	  (checkouts 0)
 	  file-activity-headline)
@@ -235,18 +235,18 @@ number of checked out files."
 	      (message "No current activity set.")
 	      (when extra-info
 		(with-temp-message "Collecting activity statistics..."
-		  (setq versions
+		  (setq revisions
 			(split-string
 			 (cleartool "lsact -cact -fmt \"%%[versions]Cp\"") ", " t))
 		  (setq files (make-hash-table :test 'equal))
-		  (dolist (v versions)
+		  (dolist (v revisions)
 		    (when (string-match "CHECKEDOUT\\(\.[0-9]+\\)?$" v)
 		      (incf checkouts))
 		    (when (string-match "^\\(.*\\)@@" v)
 		      (setf (gethash (match-string 1 v) files) t)))))
 	      (if extra-info
 		  (message "%s; %d files, %d revisions, %d checked-out"
-			   headline (hash-table-count files) (length versions) checkouts)
+			   headline (hash-table-count files) (length revisions) checkouts)
 		  (message "%s" headline)))))))
 
 ;;;; ucm-list-activities
@@ -303,8 +303,8 @@ buffer."
 			(if (ucm-lsact-activity-set? activity) ?! ?\  )
 			(if (ucm-lsact-activity-mark activity) ?* ?\  )))
 	(label2 (format "%s"
-                        (if (equal (ucm-lsact-activity-lock activity) "unlocked")
-                            ""
+			(if (equal (ucm-lsact-activity-lock activity) "unlocked")
+			    ""
 			   (ucm-lsact-activity-lock activity))))
 	(attr (mapconcat
 	       (lambda (a)
@@ -321,7 +321,7 @@ buffer."
     (when (not (and (equal label2 "") (equal attr "")))
       (insert " (" label2)
       (unless (equal label2 "")
-        (insert " "))
+	(insert " "))
       (insert attr ")"))))
 
 (defun ucm-lsact-create-ewoc (&optional current-user obsolete)
@@ -331,7 +331,7 @@ are listed.  When OBSOLETE is not nil, obsolete activities are
 inclued as well."
   (let* ((stream (cleartool "lsstream -fmt \"%%n\""))
 	 (header (concat (propertize "Stream: " 'face 'ucm-field-name-face)
-                         stream))
+			 stream))
 	 (current-activity (cleartool "lsact -cact -fmt \"%%n\""))
 	 (ewoc (ewoc-create 'ucm-lsact-activity-pp header)))
     (dolist (a (split-string
@@ -519,15 +519,15 @@ Used to implement the BACK button.")
     (pop-to-buffer (current-buffer))
     (when ucm-previous-activities
       (let ((inhibit-read-only t))
-        (setq ucm-activity (pop ucm-previous-activities))
-        (setq ucm-actb-ewoc (pop ucm-previous-actb-ewocs))
-        (erase-buffer)
-        ;; The header and footer will not be redisplayed unless we set them
-        ;; again.
-        (let ((hf (ewoc-get-hf ucm-actb-ewoc)))
-          (ewoc-set-hf ucm-actb-ewoc (car hf) (cdr hf)))
-        (ewoc-refresh ucm-actb-ewoc)
-        (goto-char (point-min))))))
+	(setq ucm-activity (pop ucm-previous-activities))
+	(setq ucm-actb-ewoc (pop ucm-previous-actb-ewocs))
+	(erase-buffer)
+	;; The header and footer will not be redisplayed unless we set them
+	;; again.
+	(let ((hf (ewoc-get-hf ucm-actb-ewoc)))
+	  (ewoc-set-hf ucm-actb-ewoc (car hf) (cdr hf)))
+	(ewoc-refresh ucm-actb-ewoc)
+	(goto-char (point-min))))))
 
 (define-button-type 'ucm-previous-activity-link
     'face 'default
@@ -539,18 +539,7 @@ Used to implement the BACK button.")
 (defun ucm-show-diff-link-handler (button)
   (with-current-buffer (button-get button 'buffer)
     (pop-to-buffer (current-buffer))
-    (let* ((file (expand-file-name (button-get button 'file-name)))
-	   (current (button-get button 'revision)))
-      ;; make sure file is loaded, as we need a proper FPROP to run the diff.
-      (find-file-noselect file)
-      (if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" current)
-	  ;; this is a checked out version, let's hope it is in our view...
-	  (vc-clearcase-diff file)
-	  ;; else
-	  (let ((previous (cleartool
-			   "desc -fmt \"%%PVn\" \"%s@@%s\"" file current)))
-	    (vc-clearcase-diff file previous current)))
-      (pop-to-buffer (get-buffer "*vc-diff*")))))
+    (pop-to-buffer (ucm-actb-show-diff (button-get button 'actb-revision)))))
 
 (define-button-type 'ucm-show-diff-link
     'face 'default
@@ -567,15 +556,15 @@ Used to implement the BACK button.")
 ;; constructed.
 ;;
 ;; An activity is a collection of file revisions, but we represent it as a
-;; hierarch of DIRECTORY -> FILE -> VERSION: Each file revision is represented
-;; by a `ucm-actb-version' instance.  The revisions for a file are grouped
+;; hierarch of DIRECTORY -> FILE -> REVISION: Each file revision is represented
+;; by a `ucm-actb-revision' instance.  The revisions for a file are grouped
 ;; under a `ucm-actb-file' instance.  All files under a directory are grouped
 ;; under a `ucm-actb-directory' instance.
 
 (defstruct ucm-actb-activity
   name
   ;; a list of `ucm-actb-directory' structures, one for each directory in
-  ;; which this activity has file versions
+  ;; which this activity has file revisions
   directories
 
   ;; a list of `ucm-actb-contributor' structures.  The empty list if the
@@ -605,14 +594,14 @@ Used to implement the BACK button.")
   (insert "':\n"))
 
 (defun ucm-actb-directory-toggle-mark (directory)
-  "Toggle the marks on all versions under this DIRECTORY.
+  "Toggle the marks on all revisions under this DIRECTORY.
 The toggle works like this: if all revisions are marked, the
 marks are cleared, if any revision is unmarked, the marks are
 set."
   (let* ((files (ucm-actb-directory-files directory))
 	 (marks (mapcar (lambda (f)
-			  (some 'ucm-actb-version-mark
-				(ucm-actb-file-versions f)))
+			  (some 'ucm-actb-revision-mark
+				(ucm-actb-file-revisions f)))
 			files)))
     (cond ((every 'identity marks)
 	   (mapc 'ucm-actb-file-clear-mark files))
@@ -626,7 +615,7 @@ set."
 (defstruct ucm-actb-file
   name                         ; the name of the file, sans directory
   directory                    ; the `ucm-actb-directory' which we are part of
-  versions)                    ; a list of `ucm-actb-version' structures
+  revisions)                    ; a list of `ucm-actb-revision' structures
 
 (defun ucm-actb-file-full-path (f)
   "Return the full path of F (an `ucm-actb-file' structure)."
@@ -645,80 +634,140 @@ set."
 
 (defun ucm-actb-file-set-mark (file)
   "Set the mark on all revisions of FILE"
-  (mapc 'ucm-actb-version-set-mark (ucm-actb-file-versions file)))
+  (mapc 'ucm-actb-revision-set-mark (ucm-actb-file-revisions file)))
 
 (defun ucm-actb-file-clear-mark (file)
   "Clear the mark from all revisions of FILE"
-  (mapc 'ucm-actb-version-clear-mark (ucm-actb-file-versions file)))
+  (mapc 'ucm-actb-revision-clear-mark (ucm-actb-file-revisions file)))
 
 (defun ucm-actb-file-toggle-mark (file)
   "Toggle the mark for the revisions of FILE.
 The toggle works like this: if all revisions are marked, the
 marks are cleared, if any revision is unmarked, the marks are
 set."
-  (let ((versions (ucm-actb-file-versions file)))
-    (cond ((notevery 'ucm-actb-version-mark versions)
-	   (mapc 'ucm-actb-version-set-mark versions))
+  (let ((revisions (ucm-actb-file-revisions file)))
+    (cond ((notevery 'ucm-actb-revision-mark revisions)
+	   (mapc 'ucm-actb-revision-set-mark revisions))
 	  (t
-	   (mapc 'ucm-actb-version-toggle-mark versions)))))
+	   (mapc 'ucm-actb-revision-toggle-mark revisions)))))
 
-;;;;;; ucm-actb-version
+;;;;;; ucm-actb-revision
 
 ;; The revision of a file under an activity.
-(defstruct ucm-actb-version
+(defstruct ucm-actb-revision
   name
+  ;; the previous revision against which we will diff.  Don't use this slot
+  ;; directly.  Use `ucm-actb-revision-previous' instead.
+  previous^
+  
+  ;; number of revisions between name and previous^
+  (count 1)
+
   file                                  ; The `ucm-actb-file' we belong to
   mark                                  ; (t nil)
   ;; Becomes t when the mark has changed.  Used to know when the ewoc node
   ;; should be refreshed.  It is a bit of a hack.
   changed)
 
-(defun ucm-actb-version-pp (version)
-  "Pretty print VERSION, a `ucm-actb-version' structure"
-  (if (ucm-actb-version-mark version)
+(defun ucm-actb-revision-pp (revision)
+  "Pretty print REVISION, a `ucm-actb-revision' structure"
+  (if (ucm-actb-revision-mark revision)
       (insert "      * ")
       (insert "        "))
-  (let ((file (ucm-actb-file-full-path (ucm-actb-version-file version)))
-	(rev (ucm-actb-version-name version)))
+  (let ((file (ucm-actb-file-full-path (ucm-actb-revision-file revision)))
+	(rev (ucm-actb-revision-name revision)))
     (insert-text-button
      (concat "@@" rev)
-     'face (if (ucm-actb-version-checkedout-p version)
+     'face (if (ucm-actb-revision-checkedout-p revision)
 	       'ucm-checkedout-revision-face
 	       'ucm-revision-face)
      'type 'ucm-show-diff-link
      'buffer (current-buffer)
-     'file-name file
-     'revision rev)))
+     'actb-revision revision))
+  (if (> (ucm-actb-revision-count revision) 1)
+      (insert (format " (%d revisions)" (ucm-actb-revision-count revision)))))
 
-(defun ucm-actb-version-set-mark (version)
-  "Set the mark on VERSION."
-  (let ((mark (ucm-actb-version-mark version)))
+
+(defun ucm-actb-revision-set-mark (revision)
+  "Set the mark on REVISION."
+  (let ((mark (ucm-actb-revision-mark revision)))
     (unless mark
-      (setf (ucm-actb-version-mark version) t)
-      (setf (ucm-actb-version-changed version) t))))
+      (setf (ucm-actb-revision-mark revision) t)
+      (setf (ucm-actb-revision-changed revision) t))))
 
-(defun ucm-actb-version-clear-mark (version)
-  "Clear the mark on VERSION."
-  (let ((mark (ucm-actb-version-mark version)))
+(defun ucm-actb-revision-clear-mark (revision)
+  "Clear the mark on REVISION."
+  (let ((mark (ucm-actb-revision-mark revision)))
     (when mark
-      (setf (ucm-actb-version-mark version) nil)
-      (setf (ucm-actb-version-changed version) t))))
+      (setf (ucm-actb-revision-mark revision) nil)
+      (setf (ucm-actb-revision-changed revision) t))))
 
-(defun ucm-actb-version-toggle-mark (version)
-  "Toggle the mark on VERSION."
-  (setf (ucm-actb-version-mark version)
-	(not (ucm-actb-version-mark version)))
-  (setf (ucm-actb-version-changed version) t))
+(defun ucm-actb-revision-toggle-mark (revision)
+  "Toggle the mark on REVISION."
+  (setf (ucm-actb-revision-mark revision)
+	(not (ucm-actb-revision-mark revision)))
+  (setf (ucm-actb-revision-changed revision) t))
 
-(defun ucm-actb-version-checkedout-p (version)
-  "Return t if VERSION is a checkout."
+(defun ucm-actb-revision-checkedout-p (revision)
+  "Return t if REVISION is a checkout."
   (string-match "[\\/]CHECKEDOUT\\(.[0-9]+\\)\\'"
-		(ucm-actb-version-name version)))
+		(ucm-actb-revision-name revision)))
 
-(defun ucm-actb-version-pname (version)
-  "Return the version extended path name of VERSION."
-  (let ((file (ucm-actb-file-full-path (ucm-actb-version-file version))))
-    (concat file "@@" (ucm-actb-version-name version))))
+(defun ucm-actb-revision-pname (revision)
+  "Return the revision extended path name of REVISION."
+  (let ((file (ucm-actb-file-full-path (ucm-actb-revision-file revision))))
+    (concat file "@@" (ucm-actb-revision-name revision))))
+
+(defun ucm-actb-revision-previous (revision)
+  "Return the previous revision from this one.
+By default we return the immediate predecessor of this revision,
+but we might collapse several revisions into one, in which case
+the previous revision will be an older one"
+  (if (ucm-actb-revision-previous^ revision)
+      (ucm-actb-revision-previous^ revision)
+      (setf (ucm-actb-revision-previous^ revision)
+	    (cleartool "desc -fmt \"%%PVn\" \"%s\""
+		       (if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?"
+					 (ucm-actb-revision-name revision))
+			   (ucm-actb-file-full-path (ucm-actb-revision-file revision))
+			   (ucm-actb-revision-pname revision))))))
+
+(defun ucm-actb-show-diff (revision)
+  "Pop up a buffer containing the diff of this revision"
+  (let ((file (ucm-actb-file-full-path (ucm-actb-revision-file revision)))
+	(current (ucm-actb-revision-name revision))
+	(previous (ucm-actb-revision-previous revision)))
+    (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" current)
+      (setq current nil))
+    ;; make sure file is loaded, as we need a proper FPROP to run the diff.
+    (find-file-noselect file)
+    (vc-clearcase-diff file previous current)
+    (get-buffer "*vc-diff*")))
+
+(defun ucm-actb-file-optimize-revisions (file)
+  "Reduce the number of revisions of a file by colapsing
+ consecutive revisions into one."
+  (let ((revisions (reverse (ucm-actb-file-revisions file)))
+        (optimized '()))
+    (while revisions
+      (let ((first (car revisions))
+            (rest (cdr revisions)))
+        (catch 'next
+          (while t
+            (let ((prev (find (ucm-actb-revision-previous first) 
+                              rest
+                              :test 'equal
+                              :key 'ucm-actb-revision-name)))
+              (if prev
+                  (progn
+                    (setf (ucm-actb-revision-previous^ first)
+                          (ucm-actb-revision-previous prev))
+                    (incf (ucm-actb-revision-count first))
+                    (setf rest (delq prev rest)))
+                  (throw 'next nil)))))
+        (push first optimized)
+        (setf revisions rest)))
+    (setf (ucm-actb-file-revisions file) optimized)))
 
 ;;;;;; ucm-actb-contributor
 
@@ -751,7 +800,7 @@ to the activity ewoc."
      (insert "\n" (propertize data 'face 'ucm-field-name-face) "\n"))
     (ucm-actb-directory (ucm-actb-directory-pp data))
     (ucm-actb-file (ucm-actb-file-pp data))
-    (ucm-actb-version (ucm-actb-version-pp data))
+    (ucm-actb-revision (ucm-actb-revision-pp data))
     (ucm-actb-contributor (ucm-actb-contributor-pp data))
     (t (error "Unknown data type %S" data))))
 
@@ -761,7 +810,7 @@ attach to the activity ewoc."
   (typecase data
     (ucm-actb-directory (ucm-actb-directory-toggle-mark data))
     (ucm-actb-file (ucm-actb-file-toggle-mark data))
-    (ucm-actb-version (ucm-actb-version-toggle-mark data))
+    (ucm-actb-revision (ucm-actb-revision-toggle-mark data))
     (t nil)))
 
 ;;;;; ucm-actb-fetch-activity
@@ -776,7 +825,7 @@ attach to the activity ewoc."
       (when (string-match "\\(.*\\)@@\\(.*\\)" v)
 
 	(let ((file (match-string 1 v))
-	      (version (match-string 2 v)))
+	      (revision (match-string 2 v)))
 
 	  (let ((dir (file-name-directory file))
 		(basename (file-name-nondirectory file)))
@@ -793,12 +842,12 @@ attach to the activity ewoc."
 		  (setq f (make-ucm-actb-file :name basename :directory d))
 		  (push f (ucm-actb-directory-files d)))
 
-		(push (make-ucm-actb-version :name version :file f)
-		      (ucm-actb-file-versions f)))
+		(push (make-ucm-actb-revision :name revision :file f)
+		      (ucm-actb-file-revisions f)))
 	      )))))
 
     (ignore-cleartool-errors
-      ;; There seems to be a bug in my version of ClearCase: if `activity' is
+      ;; There seems to be a bug in my revision of ClearCase: if `activity' is
       ;; not a rebase or integration activity an error will be reported, but
       ;; the status of the command will be 0 (meaning success).  We have to
       ;; test the returned string explicitly ...
@@ -841,6 +890,9 @@ structure)"
 		  ", "
 		  (cleartool "lsact -fmt \"%%[owner]p\" %s" name)
 		  ")\n"
+		  (propertize "Stream: " 'face 'ucm-field-name-face)
+		  (cleartool "lsact -fmt \"%%[stream]p\" %s" name)
+		  "\n"
 		  (propertize "Attributes: " 'face 'ucm-field-name-face)
 		  "\n"))
 	 (ewoc nil))
@@ -855,7 +907,7 @@ structure)"
       (ewoc-enter-last ewoc d)
       (dolist (f (ucm-actb-directory-files d))
 	(ewoc-enter-last ewoc f)
-	(dolist (v (ucm-actb-file-versions f))
+	(dolist (v (ucm-actb-file-revisions f))
 	  (ewoc-enter-last ewoc v))))
     (let ((contributors (ucm-actb-activity-contributors activity)))
       (when (> (length contributors) 0)
@@ -877,9 +929,10 @@ structure)"
     (define-key m "g" 'ucm-actb-refresh-command)
     (define-key m "c" 'ucm-actb-checkin-command)
     (define-key m "r" 'ucm-actb-revert-command)
-    (define-key m "t" 'ucm-actb-transfer-versions-command)
+    (define-key m "t" 'ucm-actb-transfer-revisions-command)
     (define-key m "v" 'ucm-actb-visit-item-command)
     (define-key m "e" 'ucm-actb-ediff-command)
+    (define-key m "O" 'ucm-actb-optimize-display-command)
     m))
 
 (define-derived-mode ucm-actb-mode fundamental-mode
@@ -894,45 +947,45 @@ structure)"
 
 ;;;;;; ucm-actb-collect-marked-checkouts
 (defun ucm-actb-collect-marked-checkouts ()
-  "Return a list of files which have marked checked out versions.
-If no checked out versions are marked return the file under
+  "Return a list of files which have marked checked out revisions.
+If no checked out revisions are marked return the file under
 cursor if it is checked out.  Signal an error otherwise."
-  ;; First, try to get the selected checked out versions
+  ;; First, try to get the selected checked out revisions
 
-  (let ((marked-versions (ewoc-collect ucm-actb-ewoc
+  (let ((marked-revisions (ewoc-collect ucm-actb-ewoc
 				       '(lambda (data)
 					 (and
-					  (ucm-actb-version-p data)
-					  (ucm-actb-version-mark data)))))
+					  (ucm-actb-revision-p data)
+					  (ucm-actb-revision-mark data)))))
 	(files '()))
-    (if marked-versions
+    (if marked-revisions
 	(progn
-	  (dolist (v marked-versions)
-	    (when (ucm-actb-version-checkedout-p v)
-	      (push (ucm-actb-file-full-path (ucm-actb-version-file v)) files)))
+	  (dolist (v marked-revisions)
+	    (when (ucm-actb-revision-checkedout-p v)
+	      (push (ucm-actb-file-full-path (ucm-actb-revision-file v)) files)))
 	  (unless files
 	    (error "No checkouts selected.")))
 
-	;; If no versions were selected, try to see if the current file has a
+	;; If no revisions were selected, try to see if the current file has a
 	;; checkout.
 	(let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
 	  (typecase data
-	    (ucm-actb-version
-	     (if (ucm-actb-version-checkedout-p data)
-		 (push (ucm-actb-file-full-path (ucm-actb-version-file data)) files)
-		 (error "Version is not checked out.")))
+	    (ucm-actb-revision
+	     (if (ucm-actb-revision-checkedout-p data)
+		 (push (ucm-actb-file-full-path (ucm-actb-revision-file data)) files)
+		 (error "Revision is not checked out.")))
 	    (ucm-actb-file
-	     (if (some 'ucm-actb-version-checkedout-p (ucm-actb-file-versions data))
+	     (if (some 'ucm-actb-revision-checkedout-p (ucm-actb-file-revisions data))
 		 (push (ucm-actb-file-full-path data) files)
 		 (error "File has no checkouts.")))
 	    (t
-	     (error "Must select a file or checked out version.")))))
+	     (error "Must select a file or checked out revision.")))))
     files))
 
 ;;;;;; ucm-actb-toggle-mark-command
 (defun ucm-actb-toggle-mark-command (pos)
   "Toggle the mark on the current item.
-If the current item is a version the mark is changed (set if it
+If the current item is a revision the mark is changed (set if it
 is unset and cleared if it is set).  For files or directories, if
 all revisions under them are marked, the marks are cleared,
 otherwise the marks are set."
@@ -942,9 +995,9 @@ otherwise the marks are set."
       (ucm-actb-toggle-mark (ewoc-data node))
       (ewoc-map
        (lambda (data)
-	 (when (and (ucm-actb-version-p data)
-		    (ucm-actb-version-changed data))
-	   (setf (ucm-actb-version-changed data) nil)
+	 (when (and (ucm-actb-revision-p data)
+		    (ucm-actb-revision-changed data))
+	   (setf (ucm-actb-revision-changed data) nil)
 	   t))
        ucm-actb-ewoc)
       (ewoc-goto-node ucm-actb-ewoc node)
@@ -974,8 +1027,8 @@ otherwise the marks are set."
 
 ;;;;;; ucm-actb-checkin-command
 (defun ucm-actb-checkin-command ()
-  "Checkin selected versions from the UCM activity buffer.
-If no versions are selected, the current version is checked in."
+  "Checkin selected revisions from the UCM activity buffer.
+If no revisions are selected, the current revision is checked in."
   (interactive)
   (lexical-let ((files (ucm-actb-collect-marked-checkouts))
 		(buf (current-buffer))
@@ -1026,15 +1079,15 @@ If no versions are selected, the current version is checked in."
       (vc-clearcase-revert file)))
   (ucm-actb-refresh-command))
 
-;;;;;; ucm-actb-transfer-versions-command
-(defun ucm-actb-transfer-versions-command ()
-  "Transfer the selected versions to another activity."
+;;;;;; ucm-actb-transfer-revisions-command
+(defun ucm-actb-transfer-revisions-command ()
+  "Transfer the selected revisions to another activity."
   (interactive)
   (let ((revisions (ewoc-collect ucm-actb-ewoc
 				 '(lambda (data)
 				   (and
-				    (ucm-actb-version-p data)
-				    (ucm-actb-version-mark data)))))
+				    (ucm-actb-revision-p data)
+				    (ucm-actb-revision-mark data)))))
 	(target-activity (ucm-read-activity "Transfer to activity: " nil 'no-initial)))
 
     (when (equal target-activity ucm-activity)
@@ -1042,38 +1095,38 @@ If no versions are selected, the current version is checked in."
 
     (unless revisions                   ; no revisions are marked, use current
       (let ((data (ewoc-data (ewoc-locate ucm-actb-ewoc))))
-	(if (ucm-actb-version-p data)
+	(if (ucm-actb-revision-p data)
 	    (setq revisions (list data))
-	    (error "Must select a version."))))
+	    (error "Must select a revision."))))
 
     (with-temp-message "Transferring revisions..."
       (with-cleartool-directory default-directory
 	(dolist (revision revisions)
 	  (cleartool "chact -fcset %s -tcset %s \"%s\""
 		     ucm-activity target-activity
-		     (ucm-actb-version-pname revision)))))
+		     (ucm-actb-revision-pname revision)))))
 
     (ucm-actb-refresh-command)))
 
-;;;;;; ucm-actb-transfer-versions-command
+;;;;;; ucm-actb-transfer-revisions-command
 (defun ucm-actb-visit-item-command (pos)
   "Visit the current item.
 If it is a file, it is visited, if it is a directory a dired
-buffer is opened, if it is a version, that file's version is
+buffer is opened, if it is a revision, that file's revision is
 visited."
   (interactive "d")
   (let ((node (ewoc-locate ucm-actb-ewoc pos)))
     (when node
       (let ((data (ewoc-data node)))
-        (typecase data
-          ;; NOTE: if the node is of another type, we silently ignore it.
-          (ucm-actb-directory 
-           (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
-          (ucm-actb-file 
-           (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
-          (ucm-actb-version 
-           ;; `clearcase-file-not-found-handler' will take care of this
-           (pop-to-buffer (find-file-noselect (ucm-actb-version-pname data)))))))))
+	(typecase data
+	  ;; NOTE: if the node is of another type, we silently ignore it.
+	  (ucm-actb-directory
+	   (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
+	  (ucm-actb-file
+	   (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
+	  (ucm-actb-revision
+	   ;; `clearcase-file-not-found-handler' will take care of this
+	   (pop-to-buffer (find-file-noselect (ucm-actb-revision-pname data)))))))))
 
 ;;;;;; ucm-actb-ediff-command
 (defun ucm-actb-ediff-command (pos)
@@ -1082,31 +1135,43 @@ visited."
   (let ((node (ewoc-locate ucm-actb-ewoc pos)))
     (when node
       (let ((data (ewoc-data node)))
-        (typecase data
-          (ucm-actb-version 
-           (require 'ediff)
-           (require 'ediff-vers)        ; ediff-vc-internal
-           (declare (special ediff-version-control-package))
-           (let* ((file (ucm-actb-file-full-path (ucm-actb-version-file data)))
-                  (current (let ((v (ucm-actb-version-name data)))
-                             (if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" v)
-                                 "" v)))
-                  (previous (if (equal current "")
-                                (cleartool "desc -fmt \"%%PVn\" \"%s\"" file)
-                                (cleartool "desc -fmt \"%%PVn\" \"%s@@%s\"" file current))))
-             (with-current-buffer (find-file-noselect file)
-               (funcall
-                (intern (format "ediff-%S-internal" ediff-version-control-package))
-                previous current nil)))))))))
-  
+	(typecase data
+	  (ucm-actb-revision
+	   (require 'ediff)
+	   (require 'ediff-vers)        ; ediff-vc-internal
+	   (declare (special ediff-revision-control-package))
+	   (let* ((file (ucm-actb-file-full-path (ucm-actb-revision-file data)))
+		  (current (let ((v (ucm-actb-revision-name data)))
+			     (if (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" v)
+				 "" v)))
+		  (previous (ucm-actb-revision-previous data)))
+	     (with-current-buffer (find-file-noselect file)
+	       (funcall 'ediff-vc-internal previous current nil)))))))))
+
+;;;;;; ucm-actb-optimize-display-command
+(defun ucm-actb-optimize-display-command ()
+  "Compact consecutive file revisions into one single revision."
+  (interactive)
+  (ewoc-filter ucm-actb-ewoc
+               (lambda (data)
+                 (typecase data
+                   (ucm-actb-file 
+                    (message "Optimizing %s" (ucm-actb-file-name data))
+                    (ucm-actb-file-optimize-revisions data) t)
+                   (ucm-actb-revision
+                    ;; does this revision still exist for file?
+                    (memq data (ucm-actb-file-revisions (ucm-actb-revision-file data))))
+                   (t t))))
+  (ewoc-refresh ucm-actb-ewoc))
+
 ;;;;; ucm-browse-activity
 ;;;###autoload
 (defun ucm-browse-activity (activity)
   "Pop-up an information buffer about ACTIVITY.
-The buffer will contain a report about the file versions
+The buffer will contain a report about the file revisions
 checked-in under the activity plus any contributing activities.
 The report contains buttons (hyperlinks) to directories, files,
-versions and other activities.
+revisions and other activities.
 
 In interactive mode, the user is prompted for an activity name
 and completion is available.  ACTIVITY must be in the current

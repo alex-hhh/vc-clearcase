@@ -44,7 +44,7 @@
 
 ;;; Code
 
-(eval-when-compile (require 'cl))
+(require 'cl)
 (require 'vc-clearcase)
 (require 'button)
 (require 'ewoc)
@@ -741,7 +741,7 @@ the previous revision will be an older one"
       (setq current nil))
     ;; make sure file is loaded, as we need a proper FPROP to run the diff.
     (find-file-noselect file)
-    (vc-clearcase-diff file previous current)
+    (vc-clearcase-diff (list file) previous current)
     (get-buffer "*vc-diff*")))
 
 (defun ucm-actb-file-optimize-revisions (file)

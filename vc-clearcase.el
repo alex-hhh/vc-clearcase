@@ -1069,7 +1069,7 @@ to be read from cleartool."
      (let ((fn (cond ((eq flag t) 'all-completions)
 		     ((eq flag 'lambda) 'test-completion
 		     (t 'try-completion))))
-       (funcall fn string clearcase-edcs-all-view-tags predicate)))
+       (funcall fn string clearcase-edcs-all-view-tags predicate))))
    nil
    nil
    initial))
@@ -1791,7 +1791,10 @@ behaviour."
 	     (clearcase-fprop-checkedout-p fprop)
 	     (string= (match-string 1 rev) (clearcase-fprop-version-base fprop)))
 	(copy-file file destfile)
-	(cleartool "get -to \"%s\" \"%s@@%s\"" destfile file rev))))
+        (progn
+          (when (file-exists-p destfile)
+            (delete-file destfile))
+          (cleartool "get -to \"%s\" \"%s@@%s\"" destfile file rev)))))
 
 (defun vc-clearcase-find-version (file rev buffer)
   "Fetch FILE revision REV and place it into BUFFER.

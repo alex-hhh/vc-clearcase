@@ -2,6 +2,7 @@
 
 	* vc-clearcase.el (clearcase-read-view-tag, clearcase-read-label):
 	use `test-completion'
+	(clearcase-find-version-helper): 403 remove dest file if it exists
 
 	* ucm.el (ucm-actb-show-diff): 401 `vc-clearcase-diff' requires a
 	list of files as an argument

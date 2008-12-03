@@ -1067,9 +1067,7 @@ to be read from cleartool."
    prompt
    '(lambda (string predicate flag)
      (let ((fn (cond ((eq flag t) 'all-completions)
-		     ((eq flag 'lambda)
-		      ;; test-completion does not exist in emacs 21.
-		      '(lambda (x l &optional p) (intern-soft x l)))
+		     ((eq flag 'lambda) 'test-completion
 		     (t 'try-completion))))
        (funcall fn string clearcase-edcs-all-view-tags predicate)))
    nil
@@ -1228,9 +1226,7 @@ waste of resources."
    prompt
    '(lambda (string predicate flag)
      (let ((fn (cond ((eq flag t) 'all-completions)
-		     ((eq flag 'lambda)
-		      ;; test-completion does not exist in emacs 21.
-		      '(lambda (x l &optional p) (intern-soft x l)))
+		     ((eq flag 'lambda) 'test-completion)
 		     (t 'try-completion))))
        (funcall fn string clearcase-all-labels predicate)))
    nil

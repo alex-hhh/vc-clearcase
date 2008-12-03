@@ -144,12 +144,9 @@ user."
 	(completing-read
 	 prompt
 	 '(lambda (string predicate flag)
-	   (let ((fn (cond ((eq flag t) 'all-completions)
-			   ((eq flag 'lambda)
-			    ;; test-completion does not exist in emacs 21.
-			    '(lambda (x l &optional p) (member x l)))
-			   ((null flag) 'try-completion)
-			   (t (error "Unknown value for flag %S" flag)))))
+	   (let ((fn (case ((eq flag t) 'all-completions)
+			   ((eq flag 'lambda) 'test-completion)
+			   (t 'try-completion))))
 	     (funcall
 	      fn string (clearcase-vprop-activities vprop) predicate)))
 	 nil

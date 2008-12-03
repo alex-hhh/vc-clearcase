@@ -1,7 +1,11 @@
 2008-12-03  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
+	* vc-clearcase.el (clearcase-read-view-tag, clearcase-read-label):
+	use `test-completion'
+
 	* ucm.el (ucm-actb-show-diff): 401 `vc-clearcase-diff' requires a
 	list of files as an argument
+	(ucm-read-activity): fix completion predicate for Emacs23
 
 2008-11-10  Alexandru Harsanyi  <haral@users.sourceforge.net>
 

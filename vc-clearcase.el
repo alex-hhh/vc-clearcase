@@ -1459,30 +1459,8 @@ checked it out.
 	       (clearcase-fprop-broken-view-p fprop))
       (error "Snapshot view is inconsistent, run an update"))
 
-    ;; We anticipate that the file's checkout comment might be needed shortly
-    ;; so ask for it before we return the state
-    (when (clearcase-fprop-checkedout-p fprop)
-      (setf (clearcase-fprop-comment-tid^ fprop)
-	    (cleartool-ask
-	     (format "desc -fmt \"%%c\" \"%s\"" file)
-	     'nowait fprop
-	     (lambda (fprop comment)
-	       (setf (clearcase-fprop-comment^ fprop) comment))))
-
-      ;; In UCM views also ask for the files activity.  This is not used by
-      ;; vc-clearcase.el for now, but it enables some checkin-hooks to be more
-      ;; responsive.
-      (when (clearcase-ucm-view-p fprop)
-	(setf (clearcase-fprop-activity-tid^ fprop)
-	    (cleartool-ask
-	       (format "desc -fmt \"%%[activity]p\" \"%s\""
-		       (clearcase-fprop-file-name fprop))
-	       'nowait fprop
-	       (lambda (fprop activity)
-		 (setf (clearcase-fprop-activity^ fprop) activity))))))
-
-    ;; return the state.  The heuristic already gives all the
-    ;; information we need.
+    ;; return the state.  The heuristic already gives all the information we
+    ;; need.
     (vc-clearcase-state-heuristic file)))
 
 ;;;;;; state-heuristic
@@ -1498,6 +1476,31 @@ information."
       ((clearcase-fprop-hijacked-p fprop)
        'unlocked-changes)
       ((clearcase-fprop-checkedout-p fprop)
+       
+       ;; We anticipate that the file's checkout comment might be needed
+       ;; shortly so ask for it before we return the state
+       (unless (clearcase-fprop-comment-tid^ fprop)
+         (setf (clearcase-fprop-comment-tid^ fprop)
+               (cleartool-ask
+                (format "desc -fmt \"%%c\" \"%s\"" file)
+                'nowait fprop
+                (lambda (fprop comment)
+                  (setf (clearcase-fprop-comment^ fprop) comment)))))
+
+       ;; In UCM views also ask for the files activity.  This is not used by
+       ;; vc-clearcase.el for now, but it enables some checkin-hooks to be
+       ;; more responsive.
+       (when (and (clearcase-ucm-view-p fprop) 
+                  (null (clearcase-fprop-activity-tid^ fprop)))
+         (setf (clearcase-fprop-activity-tid^ fprop)
+               (cleartool-ask
+                (format "desc -fmt \"%%[activity]p\" \"%s\""
+                        (clearcase-fprop-file-name fprop))
+                'nowait fprop
+                (lambda (fprop activity)
+                  (setf (clearcase-fprop-activity^ fprop) activity)))))
+
+       ;; Finallly, return the state
        (if (string= (clearcase-fprop-latest fprop)
 		    (clearcase-fprop-parent fprop))
 	   'edited

@@ -4,6 +4,8 @@
 	clearcase comment and activity here instead of
 	`vc-cleacase-state'.  It seems `vc-cleacase-state' is never
 	called...
+	(vc-clearcase-state-heuristic): 406 'needs-patch state was renamed
+	to 'needs-update
 
 	* ucm.el (ucm-read-activity): BUGFIX: use `cond' instead of `case'
 	(ucm-actb-checkin-command, ucm-checkin-activity ): update

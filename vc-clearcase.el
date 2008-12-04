@@ -882,8 +882,8 @@ in bulk."
     (let ((fprop (clearcase-file-fprop file)))
       (when fprop
 	(with-temp-message (format "Refreshing ClearCase status for %s" file)
-          (with-current-buffer (get-file-buffer file)
-            (revert-buffer nil 'noconfirm nil)))))))
+	  (with-current-buffer (get-file-buffer file)
+	    (revert-buffer nil 'noconfirm nil)))))))
 
 ;;;; Clearcase view-tag properties
 
@@ -1475,44 +1475,46 @@ information."
     (cond
       ((clearcase-fprop-hijacked-p fprop)
        'unlocked-changes)
+
       ((clearcase-fprop-checkedout-p fprop)
-       
        ;; We anticipate that the file's checkout comment might be needed
        ;; shortly so ask for it before we return the state
        (unless (clearcase-fprop-comment-tid^ fprop)
-         (setf (clearcase-fprop-comment-tid^ fprop)
-               (cleartool-ask
-                (format "desc -fmt \"%%c\" \"%s\"" file)
-                'nowait fprop
-                (lambda (fprop comment)
-                  (setf (clearcase-fprop-comment^ fprop) comment)))))
+	 (setf (clearcase-fprop-comment-tid^ fprop)
+	       (cleartool-ask
+		(format "desc -fmt \"%%c\" \"%s\"" file)
+		'nowait fprop
+		(lambda (fprop comment)
+		  (setf (clearcase-fprop-comment^ fprop) comment)))))
 
        ;; In UCM views also ask for the files activity.  This is not used by
        ;; vc-clearcase.el for now, but it enables some checkin-hooks to be
        ;; more responsive.
-       (when (and (clearcase-ucm-view-p fprop) 
-                  (null (clearcase-fprop-activity-tid^ fprop)))
-         (setf (clearcase-fprop-activity-tid^ fprop)
-               (cleartool-ask
-                (format "desc -fmt \"%%[activity]p\" \"%s\""
-                        (clearcase-fprop-file-name fprop))
-                'nowait fprop
-                (lambda (fprop activity)
-                  (setf (clearcase-fprop-activity^ fprop) activity)))))
+       (when (and (clearcase-ucm-view-p fprop)
+		  (null (clearcase-fprop-activity-tid^ fprop)))
+	 (setf (clearcase-fprop-activity-tid^ fprop)
+	       (cleartool-ask
+		(format "desc -fmt \"%%[activity]p\" \"%s\""
+			(clearcase-fprop-file-name fprop))
+		'nowait fprop
+		(lambda (fprop activity)
+		  (setf (clearcase-fprop-activity^ fprop) activity)))))
 
        ;; Finallly, return the state
        (if (string= (clearcase-fprop-latest fprop)
 		    (clearcase-fprop-parent fprop))
 	   'edited
 	   'needs-merge))
+
       ((or (clearcase-fprop-checkout-denied-p fprop)
 	   (clearcase-fprop-checkout-will-branch-p fprop)
 	   (string= (clearcase-fprop-latest fprop)
 		    (clearcase-fprop-version fprop)))
        'up-to-date)
+
       ;; revision is not latest on its branch and a checkout will not
       ;; branch...
-      (t 'needs-patch))))
+      (t 'needs-update))))
 
 ;;;;;; dir-status
 
@@ -1536,19 +1538,19 @@ is ignored (see `clearcase-dir-status-ignored-files')"
   (cond
     ((looking-at "^\\(.*\\)@@")         ; version controlled item
      (let* ((file (match-string 1))
-            (limit (save-excursion
-                     (re-search-forward "\\s-+Rule: " (c-point 'eol))
-                     (point)))
-            (state (cond
-                     ((progn
-                        (beginning-of-line)
-                        (re-search-forward "\\[hijacked\\]" limit 'noerror))
-                      'unlocked-changes)
-                     ((progn
-                        (beginning-of-line)
-                        (re-search-forward "CHECKEDOUT" limit 'noerror))
-                      'edited)
-                     (t 'up-to-date))))       
+	    (limit (save-excursion
+		     (re-search-forward "\\s-+Rule: " (c-point 'eol))
+		     (point)))
+	    (state (cond
+		     ((progn
+			(beginning-of-line)
+			(re-search-forward "\\[hijacked\\]" limit 'noerror))
+		      'unlocked-changes)
+		     ((progn
+			(beginning-of-line)
+			(re-search-forward "CHECKEDOUT" limit 'noerror))
+		      'edited)
+		     (t 'up-to-date))))
        (list file state nil)))
 
     ((looking-at "^.+$")                ; not an empty line
@@ -1557,9 +1559,9 @@ is ignored (see `clearcase-dir-status-ignored-files')"
        ;; unregistered directories and files matching a regexp in
        ;; clearcase-dir-status-ignored-files will not be displayed.
        (unless (or (file-directory-p file)
-                   (some (lambda (rx) (string-match rx file)) 
-                         clearcase-dir-status-ignored-files))
-         (list file 'unregistered nil))))
+		   (some (lambda (rx) (string-match rx file))
+			 clearcase-dir-status-ignored-files))
+	 (list file 'unregistered nil))))
 
     (t nil)))
 
@@ -1569,18 +1571,18 @@ vc-dir via the update function."
   (let ((data nil))
     (with-current-buffer (process-get process 'output-buffer)
       (save-match-data
-        (goto-char (point-max))
-        (insert string)
-        (goto-char (point-min))
-        (let ((kill-whole-line t))
-          (while (and (not (= (point-min) (point-max)))
-                      (progn (re-search-forward "$")
-                             (looking-at "\n"))) ; do we have a full line?
-            (goto-char (point-min))
-            (let ((d (clearcase-dir-status-parse-line)))
-              (when d (push d data)))
-            (goto-char (point-min))
-            (kill-line)))))
+	(goto-char (point-max))
+	(insert string)
+	(goto-char (point-min))
+	(let ((kill-whole-line t))
+	  (while (and (not (= (point-min) (point-max)))
+		      (progn (re-search-forward "$")
+			     (looking-at "\n"))) ; do we have a full line?
+	    (goto-char (point-min))
+	    (let ((d (clearcase-dir-status-parse-line)))
+	      (when d (push d data)))
+	    (goto-char (point-min))
+	    (kill-line)))))
     (funcall (process-get process 'update-function) (nreverse data) t)))
 
 (defun clearcase-dir-status-sentinel (process event)
@@ -1588,7 +1590,7 @@ vc-dir via the update function."
 `vc-dir' that we are done."
   (let ((status  (process-status process))
 	(output-buffer (process-get process 'output-buffer))
-        (update-function (process-get process 'update-function)))
+	(update-function (process-get process 'update-function)))
     (when (memq status '(signal exit))
       (funcall update-function nil nil) ; signal vc-dir that we are done.
       (kill-buffer output-buffer))))
@@ -1601,7 +1603,7 @@ hijacked files, not files which need to be updated."
   (let* ((default-directory dir)
 	 (args (list cleartool-program "ls" "-recurse" "-visible"))
 	 (process (apply 'start-process "cleartool-ls" (current-buffer) args))
-         (output-buffer (generate-new-buffer "*cleartool-ls*")))
+	 (output-buffer (generate-new-buffer "*cleartool-ls*")))
 
     ;; the DIR-STATUS spec requires to use (current-buffer) as the process
     ;; buffer, but we also need a buffer to store results received from the
@@ -1615,7 +1617,7 @@ hijacked files, not files which need to be updated."
     (with-current-buffer output-buffer
       (buffer-disable-undo)
       (setq default-directory dir))
-    
+
     ;; we will compute results asynchronously
     nil))
 
@@ -1737,14 +1739,14 @@ view under a VOB directory."
   (ignore-cleartool-errors
     (let ((vob (clearcase-vob-tag-for-path file)))
       (if (member vob clearcase-known-vobs)
-          t
-          ;; else
-          (progn
-            ;; lsvob will signal an error if VOB is not valid.
-            (cleartool "lsvob -short \"%s\"" vob)
-            (push vob clearcase-known-vobs)
-            t
-            )))))
+	  t
+	  ;; else
+	  (progn
+	    ;; lsvob will signal an error if VOB is not valid.
+	    (cleartool "lsvob -short \"%s\"" vob)
+	    (push vob clearcase-known-vobs)
+	    t
+	    )))))
 
 ;;;;;; checkin
 (defun vc-clearcase-checkin (files rev comment)
@@ -1794,10 +1796,10 @@ behaviour."
 	     (clearcase-fprop-checkedout-p fprop)
 	     (string= (match-string 1 rev) (clearcase-fprop-version-base fprop)))
 	(copy-file file destfile)
-        (progn
-          (when (file-exists-p destfile)
-            (delete-file destfile))
-          (cleartool "get -to \"%s\" \"%s@@%s\"" destfile file rev)))))
+	(progn
+	  (when (file-exists-p destfile)
+	    (delete-file destfile))
+	  (cleartool "get -to \"%s\" \"%s@@%s\"" destfile file rev)))))
 
 (defun vc-clearcase-find-version (file rev buffer)
   "Fetch FILE revision REV and place it into BUFFER.
@@ -2472,13 +2474,13 @@ This is a helper function for `vc-clearcase-diff'"
 	(clearcase-find-version-helper file rev2 new))
 
       (let ((resize-mini-windows nil))
-        (shell-command
-         (format "%s %s --label \"%s\" --label \"%s\" \"%s\" \"%s\""
-                 diff-command diff-switches 
-                 (concat file " " (or rev1 "")) 
-                 (concat file " " (or rev2 ""))
-                 old new)
-         (current-buffer)))
+	(shell-command
+	 (format "%s %s --label \"%s\" --label \"%s\" \"%s\" \"%s\""
+		 diff-command diff-switches
+		 (concat file " " (or rev1 ""))
+		 (concat file " " (or rev2 ""))
+		 old new)
+	 (current-buffer)))
 
       ;; delete the temporary files we created
       (delete-file old)
@@ -2493,7 +2495,7 @@ If REV1 and REV2 are nil, compare the current version of FILE
 against its predecessor.
 
 The diff is stored in the current buffer.  The function returns t
-if the revisions are identical and nil otherwise. 
+if the revisions are identical and nil otherwise.
 
 This is a helper function for `vc-clearcase-diff'"
 
@@ -2509,13 +2511,13 @@ This is a helper function for `vc-clearcase-diff'"
     (with-cleartool-directory default-directory
       (insert
        (if (and (null rev1) (null rev2))
-           (cleartool "diff %s -pre \"%s\"" opts file)
-           (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
+	   (cleartool "diff %s -pre \"%s\"" opts file)
+	   (cleartool "diff %s \"%s\" \"%s\"" opts fver1 fver2)))
       (goto-char diff-start-pos)
       (when clearcase-diff-cleanup-flag
-        (while (re-search-forward "\r$" nil t)
-          (replace-match "" nil nil))
-        (goto-char diff-start-pos))
+	(while (re-search-forward "\r$" nil t)
+	  (replace-match "" nil nil))
+	(goto-char diff-start-pos))
       ;; the way we determine whether the files are identical depends
       ;; on the diff format we use.
       (or
@@ -3703,7 +3705,7 @@ See `clearcase-trace-cleartool-tq' and
 
 ;;;###autoload
 (when (and (executable-find cleartool-program)
-           (>= emacs-major-version 23))
+	   (>= emacs-major-version 23))
   (cond
     ((boundp 'find-file-not-found-functions)
      (add-hook 'find-file-not-found-functions

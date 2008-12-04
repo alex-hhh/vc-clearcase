@@ -143,10 +143,10 @@ user."
     (prog1
 	(completing-read
 	 prompt
-	 '(lambda (string predicate flag)
-	   (let ((fn (case ((eq flag t) 'all-completions)
-			   ((eq flag 'lambda) 'test-completion)
-			   (t 'try-completion))))
+	 (lambda (string predicate flag)
+	   (let ((fn (cond ((eq flag t) 'all-completions)
+                           ((eq flag 'lambda) 'test-completion)
+                           (t 'try-completion))))
 	     (funcall
 	      fn string (clearcase-vprop-activities vprop) predicate)))
 	 nil
@@ -1060,9 +1060,10 @@ If no revisions are selected, the current revision is checked in."
 		  (ucm-actb-refresh-command))
 		(set-window-configuration window-configuration))
 	      'setup
-	      (lambda ()
-		(interactive)
-		(mapcar 'file-relative-name modified-files))
+	      '((log-edit-listfun .
+                 (lambda ()
+                   (interactive)
+                   (mapcar 'file-relative-name modified-files))))
 	      (get-buffer-create "*UCM-Checkin-Log*"))))
 
 ;;;;;; ucm-actb-revert-command
@@ -1264,11 +1265,12 @@ checked-in using \\[log-edit-show-files]."
 			(clearcase-refresh-files files))))
 		  (set-window-configuration window-configuration))
 		'setup
-		(lambda ()
-		  (interactive)
-		  (let ((default-directory dir))
-		    (mapcar 'file-relative-name (ucm-checked-out-files activity dir))))
-		(get-buffer-create "*UCM-Checkin-Log*")))))
+		'((logedit-listfun . 
+                   (lambda ()
+                     (interactive)
+                     (let ((default-directory dir))
+                       (mapcar 'file-relative-name (ucm-checked-out-files activity dir))))))
+                (get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity dir)
   "Return the list of files checked out under ACTIVITY.

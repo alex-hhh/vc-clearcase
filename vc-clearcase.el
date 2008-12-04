@@ -1285,6 +1285,7 @@ If FORCE is not nil, always read the properties."
 	      (vc-clearcase-registered file))
       (unless fprop (setq fprop (clearcase-file-fprop file)))
       (cleartool-wait-for (clearcase-fprop-version-tid fprop))
+
       ;; get the view tag for this fprop.  Ignore the FORCE option, as
       ;; we don't expect the view tag to ever change.
       (unless (clearcase-fprop-view-tag fprop)
@@ -1294,7 +1295,32 @@ If FORCE is not nil, always read the properties."
 		 "[\n\r]+" "" (cleartool "pwv -short"))))
 	;; this will create the proper vprop structure (unless already
 	;; created).
-	(clearcase-get-vprop fprop (file-name-directory file))))))
+	(clearcase-get-vprop fprop (file-name-directory file)))
+
+      ;; When the file is checked out, we need some additional info
+      (when (clearcase-fprop-checkedout-p fprop)
+        ;; We anticipate that the file's checkout comment might be needed
+        ;; shortly so ask for it before we return the state
+        (unless (clearcase-fprop-comment-tid^ fprop)
+          (setf (clearcase-fprop-comment-tid^ fprop)
+                (cleartool-ask
+                 (format "desc -fmt \"%%c\" \"%s\"" file)
+                 'nowait fprop
+                 (lambda (fprop comment)
+                   (setf (clearcase-fprop-comment^ fprop) comment)))))
+
+        ;; In UCM views also ask for the files activity.  This is not used by
+        ;; vc-clearcase.el for now, but it enables some checkin-hooks to be
+        ;; more responsive.
+        (when (and (clearcase-ucm-view-p fprop)
+                   (null (clearcase-fprop-activity-tid^ fprop)))
+          (setf (clearcase-fprop-activity-tid^ fprop)
+                (cleartool-ask
+                 (format "desc -fmt \"%%[activity]p\" \"%s\""
+                         (clearcase-fprop-file-name fprop))
+                 'nowait fprop
+                 (lambda (fprop activity)
+                   (setf (clearcase-fprop-activity^ fprop) activity)))))))))
 
 (defadvice vc-version-backup-file-name
     (after clearcase-cleanup-version (file &optional rev manual regexp))
@@ -1477,30 +1503,6 @@ information."
        'unlocked-changes)
 
       ((clearcase-fprop-checkedout-p fprop)
-       ;; We anticipate that the file's checkout comment might be needed
-       ;; shortly so ask for it before we return the state
-       (unless (clearcase-fprop-comment-tid^ fprop)
-	 (setf (clearcase-fprop-comment-tid^ fprop)
-	       (cleartool-ask
-		(format "desc -fmt \"%%c\" \"%s\"" file)
-		'nowait fprop
-		(lambda (fprop comment)
-		  (setf (clearcase-fprop-comment^ fprop) comment)))))
-
-       ;; In UCM views also ask for the files activity.  This is not used by
-       ;; vc-clearcase.el for now, but it enables some checkin-hooks to be
-       ;; more responsive.
-       (when (and (clearcase-ucm-view-p fprop)
-		  (null (clearcase-fprop-activity-tid^ fprop)))
-	 (setf (clearcase-fprop-activity-tid^ fprop)
-	       (cleartool-ask
-		(format "desc -fmt \"%%[activity]p\" \"%s\""
-			(clearcase-fprop-file-name fprop))
-		'nowait fprop
-		(lambda (fprop activity)
-		  (setf (clearcase-fprop-activity^ fprop) activity)))))
-
-       ;; Finallly, return the state
        (if (string= (clearcase-fprop-latest fprop)
 		    (clearcase-fprop-parent fprop))
 	   'edited

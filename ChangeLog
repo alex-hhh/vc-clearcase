@@ -2,10 +2,12 @@
 
 	* vc-clearcase.el (vc-clearcase-state-heuristic): fetch the
 	clearcase comment and activity here instead of
-	`vc-cleacase-state'.  It seems `vc-cleacase-state' is never
+	`vc-cleacase-state'.  It seems `vc-clearcase-state' is never
 	called...
 	(vc-clearcase-state-heuristic): 406 'needs-patch state was renamed
 	to 'needs-update
+	(clearcase-maybe-set-vc-state): fetch the clearcase comment and
+	activity here instead of `vc-clearcase-state-heuristic'.
 
 	* ucm.el (ucm-read-activity): BUGFIX: use `cond' instead of `case'
 	(ucm-actb-checkin-command, ucm-checkin-activity ): update

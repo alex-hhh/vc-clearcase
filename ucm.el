@@ -1060,10 +1060,10 @@ If no revisions are selected, the current revision is checked in."
 		  (ucm-actb-refresh-command))
 		(set-window-configuration window-configuration))
 	      'setup
-	      '((log-edit-listfun .
-                 (lambda ()
-                   (interactive)
-                   (mapcar 'file-relative-name modified-files))))
+	      `((log-edit-listfun 
+                 . ,(lambda ()
+                            (interactive)
+                            (mapcar 'file-relative-name modified-files))))
 	      (get-buffer-create "*UCM-Checkin-Log*"))))
 
 ;;;;;; ucm-actb-revert-command
@@ -1265,11 +1265,12 @@ checked-in using \\[log-edit-show-files]."
 			(clearcase-refresh-files files))))
 		  (set-window-configuration window-configuration))
 		'setup
-		'((logedit-listfun . 
-                   (lambda ()
-                     (interactive)
-                     (let ((default-directory dir))
-                       (mapcar 'file-relative-name (ucm-checked-out-files activity dir))))))
+		`((log-edit-listfun 
+                   . ,(lambda ()
+                              (interactive)
+                              (let ((default-directory dir))
+                                (mapcar 'file-relative-name 
+                                        (ucm-checked-out-files activity dir))))))
                 (get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity dir)

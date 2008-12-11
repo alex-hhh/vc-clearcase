@@ -1,5 +1,18 @@
 -*- outline -*- 
 
+* Release 2.1
+
+** when using an external diff, the diff program is called directly
+   instead of using the diff library.  This allows specifying the header
+   labels for the diff.  This probably works only with GNU diff.
+
+** vc-clearcase-print-log (C-x v l) now only prints the history on the default branch
+   full file history is printed with prefix arg (C-u C-x v l)
+
+** added syntax highlighting for configspec files
+
+** various fixes and enhancements (see ChangeLog for more details)
+
 * Release 2.0
 
 ** improved speed of vc-dired (C-x v d)

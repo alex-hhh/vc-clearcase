@@ -1,3 +1,8 @@
+2008-12-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-actb-checkin-command, ucm-checkin-activity): fix
+	log-edit call
+
 2008-12-05  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-clearcase-state-heuristic): fetch the

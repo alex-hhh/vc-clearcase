@@ -2557,28 +2557,22 @@ when REV2 is nil, the current contents of the file are used."
     (goto-char (point-max))
     (let ((inhibit-read-only t)
 	  (all-identical? t)
-	  (external-diff? nil))
+          (diff-start-pos (point)))
       (dolist (file files)
-	(setq file (expand-file-name file))
 	;; always use cleartool diff when comparing directory
 	;; revisions.
-	(setq external-diff? (and clearcase-use-external-diff
-				  (not (file-directory-p file))))
-	(with-cleartool-directory (file-name-directory file)
-	  (let ((diff-start-pos (point))
-		(fprop (clearcase-file-fprop file))
-		(default-directory (file-name-directory file)))
-	    (unless rev1
-	      (setq rev1 (clearcase-fprop-version fprop)))
-	    (setq file (file-name-nondirectory file))
-
-	    (let ((identical? (if external-diff?
-				  (clearcase-diff-with-diff file rev1 rev2)
-				  (clearcase-diff-with-cleartool file rev1 rev2))))
-	      (when identical?
-		(kill-region diff-start-pos (point-max)))
-	      (goto-char diff-start-pos)
-	      (setq all-identical? (and all-identical? identical?))))))
+        (let ((fprop (clearcase-file-fprop file))
+              (external-diff? (and clearcase-use-external-diff
+                                   (not (file-directory-p file)))))
+          (unless rev1
+            (setq rev1 (clearcase-fprop-version fprop)))
+          (let ((identical? (if external-diff?
+                                (clearcase-diff-with-diff file rev1 rev2)
+                                (clearcase-diff-with-cleartool file rev1 rev2))))
+            (when identical?
+              (kill-region diff-start-pos (point-max)))
+            (setq all-identical? (and all-identical? identical?)))))
+      (goto-char diff-start-pos)
       all-identical?)))
 
 ;;;;;; annotate-command

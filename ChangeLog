@@ -1,3 +1,8 @@
+2008-12-16  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-clearcase-diff): don't strip the files from
+	their directory names or change `default-directory'.
+
 2008-12-08  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-actb-checkin-command, ucm-checkin-activity): fix

@@ -1826,6 +1826,12 @@ FILE, REV and COMMENT are the same as the one from
 `vc-clearcase-checkout', MODE selects the checkout mode and can
 be 'reserved or 'unreserved."
 
+  ;; When we are called from `vc-start-logentry' FILE is really a fileset (a
+  ;; list of files).  We only support checking out one file.
+  (when (listp file)
+    (assert (= 1 (length file)))
+    (setq file (car file)))
+
   ;; NOTE: we pass the -ptime to checkout to preserve the modification
   ;; time of the file in a dynamic view (cleartool preserves it
   ;; automatically in a static view).  If we don't do that, vc.el will

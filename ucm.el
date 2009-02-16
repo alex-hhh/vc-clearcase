@@ -749,19 +749,22 @@ the previous revision will be an older one"
     (while revisions
       (let ((first (car revisions))
             (rest (cdr revisions)))
-        (catch 'next
-          (while t
-            (let ((prev (find (ucm-actb-revision-previous first) 
-                              rest
-                              :test 'equal
-                              :key 'ucm-actb-revision-name)))
-              (if prev
-                  (progn
-                    (setf (ucm-actb-revision-previous^ first)
-                          (ucm-actb-revision-previous prev))
-                    (incf (ucm-actb-revision-count first))
-                    (setf rest (delq prev rest)))
-                  (throw 'next nil)))))
+        ;; Never merge checked out versions with predecessors.
+        (unless (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" 
+                              (ucm-actb-revision-name first))
+          (catch 'next
+            (while t
+              (let ((prev (find (ucm-actb-revision-previous first) 
+                                rest
+                                :test 'equal
+                                :key 'ucm-actb-revision-name)))
+                (if prev
+                    (progn
+                      (setf (ucm-actb-revision-previous^ first)
+                            (ucm-actb-revision-previous prev))
+                      (incf (ucm-actb-revision-count first))
+                      (setf rest (delq prev rest)))
+                    (throw 'next nil))))))
         (push first optimized)
         (setf revisions rest)))
     (setf (ucm-actb-file-revisions file) optimized)))
@@ -855,12 +858,36 @@ attach to the activity ewoc."
 
     (setq contributors (nreverse contributors))
 
+    ;; Sort the revisions of each file.  Most of the time, revisions come out
+    ;; sorted, but they don't if revisions were transferred from one activity
+    ;; to another.
+    (dolist (d dirs)
+      (dolist (f (ucm-actb-directory-files d))
+        (setf (ucm-actb-file-revisions f)
+              (sort (ucm-actb-file-revisions f)
+                    (lambda (a b)
+                      (let ((a-rev (ucm-actb-revision-name a))
+                            (b-rev (ucm-actb-revision-name b))
+                            a-branch a-revision b-branch b-revision)
+                        (when (string-match "^\\(.*\\)[\\\/]\\([0-9]+\\)$" a-rev)
+                          (setq a-branch (match-string 1 a-rev)
+                                a-revision (string-to-number (match-string 2 a-rev))))
+                        (when (string-match "^\\(.*\\)[\\\/]\\([0-9]+\\)$" b-rev)
+                          (setq b-branch (match-string 1 b-rev)
+                                b-revision (string-to-number (match-string 2 b-rev))))
+                        (or (string< a-branch b-branch)
+                            (and (string= a-branch b-branch) 
+                                 (< a-revision b-revision)))))))))
+
+    ;; Sort the files inside each directory
     (dolist (d dirs)
       (setf (ucm-actb-directory-files d)
 	    (sort (ucm-actb-directory-files d)
 		  (lambda (a b)
 		    (string< (ucm-actb-file-name a)
 			     (ucm-actb-file-name b))))))
+
+    ;; Sort the directories
     (setq dirs
 	  (sort dirs (lambda (a b)
 		       (string< (ucm-actb-directory-name a)

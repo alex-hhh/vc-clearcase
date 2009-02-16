@@ -1,3 +1,9 @@
+2009-02-16  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* ucm.el (ucm-actb-file-optimize-revisions): don't merge
+	checked out versions with previous versions
+	(ucm-actb-fetch-activity): sort the versions of a file.
+
 2009-01-09  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-finish-checkout): 410 Fix Bug

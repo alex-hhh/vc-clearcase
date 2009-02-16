@@ -1,3 +1,10 @@
+2009-02-17  Alexandru Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (vc-clearcase-modify-change-comment): fix format
+	string.
+	(vc-clearcase-print-log): use `vc-setup-buffer' to prepare the log
+	buffer.
+
 2009-02-16  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* ucm.el (ucm-actb-file-optimize-revisions): don't merge

@@ -2256,7 +2256,7 @@ We accept any number of files to conform to the vc interface, but
 for clearcase this operation only makes sense for one file."
   (with-clearcase-cfile (cfile comment)
     (dolist (file files)
-      (cleartool "chevent -replace -cfile %s \"%s\"@@%s" cfile file))))
+      (cleartool "chevent -replace -cfile %s \"%s\"@@%s" cfile file rev))))
 
 ;;;;; HISTORY FUNCTIONS
 ;;;;;; print-log
@@ -2328,9 +2328,6 @@ printed."
     (setf file (car file)))
   (setq file (expand-file-name file))
   (let ((inhibit-read-only t)
-	(buf (if buffer
-		 (get-buffer-create buffer)
-		 (get-buffer-create "*vc*")))
 	(fprop (clearcase-file-fprop file))
 	(label-revisions nil)
 	(max-label-length 0))
@@ -2352,29 +2349,26 @@ printed."
 		  (setq max-label-length (max max-label-length (length label)))
 		  (push (cons label revision) label-revisions))))))))
 
-    (with-current-buffer buf
-      (erase-buffer)
-      (insert (format "Working file: %s\n" file))
+    (vc-setup-buffer buffer)
+    (insert (format "Working file: %s\n" file))
+    (when (memq clearcase-print-log-show-labels '(some all))
+      (insert "Labels:\n")
+      (let ((fmtstr (format "\t%%-%ds %%s\n" max-label-length)))
+        (dolist (label label-revisions)
+          (insert (format fmtstr (car label) (cdr label))))))
 
-      (when (memq clearcase-print-log-show-labels '(some all))
-	(insert "Labels:\n")
-
-	(let ((fmtstr (format "\t%%-%ds %%s\n" max-label-length)))
-	  (dolist (label label-revisions)
-	    (insert (format fmtstr (car label) (cdr label))))))
-
-      (let ((args (list "-fmt" (if (clearcase-ucm-view-p fprop)
-				   clearcase-lshistory-fmt-ucm
-				   clearcase-lshistory-fmt)
-			file)))
-	(unless current-prefix-arg
-	  (setq args (append (list "-branch" (format "brtype:%s"
-						     (clearcase-fprop-branch fprop)))
-			     args)))
-	(apply 'start-process
-	       "cleartool-lshistory" buffer
-	       cleartool-program "lshistory"
-	       args)))))
+    (let ((args (list "-fmt" (if (clearcase-ucm-view-p fprop)
+                                 clearcase-lshistory-fmt-ucm
+                                 clearcase-lshistory-fmt)
+                      file)))
+      (unless current-prefix-arg
+        (setq args (append (list "-branch" (format "brtype:%s"
+                                                   (clearcase-fprop-branch fprop)))
+                           args)))
+      (apply 'start-process
+             "cleartool-lshistory" buffer
+             cleartool-program "lshistory"
+             args))))
 
 ;;;;;; log-view-mode
 (defconst clearcase-log-view-file-re

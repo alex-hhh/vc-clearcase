@@ -1,0 +1,10 @@
+-*- outline -*-
+
+* Emacs 23 Changes
+
+** vc-clearcase-dir-state
+
+   vc.el has changed so that dir-state should now scan all directories
+   recursively instead of just processing the files in the specified
+   directory.
+

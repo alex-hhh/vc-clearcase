@@ -1,7 +1,8 @@
 ;; vc-clearcase.el --- support for ClearCase version control system
-;; Emacs23 version, search for TODO (Emacs23) for problems
 ;;
-;; Copyright (C) 2006, 2007, 2008 Alexandru Harsanyi
+;; NOTE: this version will not work with Emacs releases prior to version 23.
+;;
+;; Copyright (C) 2006, 2007, 2008, 2009 Alexandru Harsanyi
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by

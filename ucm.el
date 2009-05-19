@@ -1,6 +1,6 @@
 ;; ucm.el -- Support for ClearCase Unified Change Management (UCM)
 
-;; Copyright (C) 2007,2008 Alexandru Harsanyi
+;; Copyright (C) 2007,2008,2009 Alexandru Harsanyi
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by

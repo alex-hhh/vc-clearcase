@@ -1068,9 +1068,9 @@ to be read from cleartool."
    prompt
    '(lambda (string predicate flag)
      (let ((fn (cond ((eq flag t) 'all-completions)
-		     ((eq flag 'lambda) 'test-completion
+		     ((eq flag 'lambda) 'test-completion)
 		     (t 'try-completion))))
-       (funcall fn string clearcase-edcs-all-view-tags predicate))))
+       (funcall fn string clearcase-edcs-all-view-tags predicate)))
    nil
    nil
    initial))

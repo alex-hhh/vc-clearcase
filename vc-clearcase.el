@@ -2696,6 +2696,82 @@ and `vc-clearcase-annotate-revision-atline' work fast."
   "Return the version of (point)."
   (get-text-property (point) 'vc-clearcase-revision))
 
+
+;;;;;; extra annotate commands
+
+(defun vc-clearcase-annotate-contributor ()
+  "Annotate the contributor of the current revision.
+The contributor is the revision that was merged into the current
+one.  If multiple contributors exist, the user is prompted to
+select one."
+  (interactive)
+  (let* ((contributors (clearcase-revision-contributors 
+                        vc-annotate-parent-file
+                        vc-annotate-parent-rev))
+         (rev (cond 
+                ((null contributors)
+                 (error "Revision %s has no contributors" vc-annotate-parent-rev))
+                ((> (length contributors) 1)
+                 (completing-read "Select contributor: " contributors nil t))
+                (t (car contributors)))))
+    (vc-annotate-warp-revision rev)))
+
+(defun vc-clearcase-annotate-contributor-to-line ()
+  "Annotate the contributor of the revision at the current line.
+The contributor is the revision that was merged into the selected
+revision.  If multiple contributors exist, the user is prompted
+to select one."
+  (interactive)
+  (let* ((rev-at-line (vc-annotate-extract-revision-at-line))
+         (contributors (clearcase-revision-contributors 
+                       vc-annotate-parent-file
+                       rev-at-line))
+         (rev (cond 
+                ((null contributors)
+                 (error "Revision %s has no contributors" rev-at-line))
+                ((> (length contributors) 1)
+                 (completing-read "Select contributor: " contributors nil t))
+                (t (car contributors)))))
+    (vc-annotate-warp-revision rev)))
+
+(defun vc-clearcase-annotate-latest-on-branch ()
+  "Annotate the latest revision on the current branch."
+  (interactive)
+  (let ((latest (replace-regexp-in-string 
+                 "[\\/]\\([0-9]+\\)$" "LATEST" vc-annotate-parent-rev t t 1)))
+    (vc-annotate-warp-revision latest)))
+
+(defun vc-clearcase-patch-annotate-mode()
+  "Add menu and keys for clearcase specific annotation commands
+to vc-annotate-mode."
+
+  (declare (special vc-annotate-mode-map vc-annotate-mode-menu))
+
+  (let ((m vc-annotate-mode-map))
+    (define-key m "A" 'vc-clearcase-annotate-contributor-to-line)
+    (define-key m "P" 'vc-clearcase-annotate-contributor)
+    (define-key m "L" 'vc-clearcase-annotate-latest-on-branch))
+
+  (dolist (menu-item '(["--" nil 
+                        :visible (eq vc-annotate-backend 'CLEARCASE)]
+                       
+                       ["Clearcase annotate contributor" 
+                        vc-clearcase-annotate-contributor 
+                        :visible (eq vc-annotate-backend 'CLEARCASE)]
+
+                       ["Clearcase annotate contributor of line" 
+                        vc-clearcase-annotate-contributor-to-line 
+                        :visible (eq vc-annotate-backend 'CLEARCASE)]
+
+                       ["Clearcase annotate latest on branch" 
+                        vc-clearcase-annotate-latest-on-branch
+                        :visible (eq vc-annotate-backend 'CLEARCASE)]))
+
+    (easy-menu-add-item vc-annotate-mode-menu '() menu-item)))
+
+(eval-after-load "vc-annotate"
+  '(vc-clearcase-patch-annotate-mode))
+
 ;;;;; SNAPSHOT SYSTEM
 ;;;;;; create-tag
 (defcustom clearcase-no-label-action 'ask

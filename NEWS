@@ -1,5 +1,10 @@
 -*- outline -*- 
 
+* Release 3.1
+
+** Fix Bug 2493759 (error when checking out files)
+** Other minor fixes 
+
 * Release 3.0
   NOTE: this release was not tested properly, as I don't use Emacs 23 yet.
 

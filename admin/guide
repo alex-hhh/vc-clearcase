@@ -1,3 +1,6 @@
-hg tag -m "Tagged release 3.1" vc-clearcase-3-1
-hg archive ../vc-clearcase-files/vc-clearcase-3.1
-scp vc-clearcase-3.1.tar.gz haral@frs.sourceforge.net:uploads
+export RELEASE=3.1
+export RELEASE_TAG=`echo $RELEASE | sed 's/\./-/'`
+hg tag -m "Tagged release $RELEASE" vc-clearcase-RELEASE_TAG
+hg archive ../vc-clearcase-files/vc-clearcase-$RELEASE
+scp vc-clearcase-$RELEASE.tar.gz haral@frs.sourceforge.net:uploads
+

@@ -1,5 +1,16 @@
 -*- outline -*- 
 
+* Release 3.2
+
+** Fix Bug #2821317 (ocasional hand while waiting for cleartool output)
+** Extra annotate commands
+   Three new commands are added to the annotate-mode menu, these are used to
+   annotate revisions that were merged into a revision.  The commands are:
+   `vc-clearcase-annotate-contributor',
+   `vc-clearcase-annotate-contributor-to-line',
+   `vc-clearcase-annotate-latest-on-branch'
+** Other minor fixes
+
 * Release 3.1
 
 ** Fix Bug 2493759 (error when checking out files)

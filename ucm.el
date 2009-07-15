@@ -1364,6 +1364,7 @@ the activity name, the second is t.")
 ;;; Local Variables:
 ;;; mode: emacs-lisp
 ;;; mode: outline-minor
+;;; mode: bug-reference
 ;;; outline-regexp: ";;;;+"
 ;;; End:
 

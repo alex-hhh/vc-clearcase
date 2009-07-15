@@ -63,7 +63,7 @@
 (require 'vc)
 (require 'log-view)
 
-;; Bug 1608947: This is needed at runtime for the `find' call.
+;; Bug #1608947: This is needed at runtime for the `find' call.
 (require 'cl)
 
 ;; This is present in Emacs 22.  If it is available, we provide
@@ -296,7 +296,7 @@ The report is appended to the *cleartool-aborts* buffer."
 		      (buffer-substring-no-properties (point-min) (point-max))))
 		   (insert "*** tq-buffer was killed ***")))))
 
-      ;; Bug 1564792: make sure we run this part even if the code
+      ;; Bug #1564792: make sure we run this part even if the code
       ;; above fails.
 
       (tq-close cleartool-tq)
@@ -312,7 +312,7 @@ The report is appended to the *cleartool-aborts* buffer."
 (defsubst cleartool-tq-maybe-start ()
   "Start the transaction queue to cleartool, if not already started."
   (unless (and cleartool-tq
-	       ;; Bug 1564792: check if someone killed the tq buffer.
+	       ;; Bug #1564792: check if someone killed the tq buffer.
 	       (let ((b (tq-buffer cleartool-tq)))
 		 (if (and b (buffer-name b))
 		     t
@@ -3762,7 +3762,7 @@ See `clearcase-trace-cleartool-tq' and
        (ad-activate 'vc-create-snapshot)
        (cleartool-tq-maybe-start)))
 
-;; Bug 1818879: Only add 'CLEARCASE to `vc-handled-backends' and start the
+;; Bug #1818879: Only add 'CLEARCASE to `vc-handled-backends' and start the
 ;; transaction queue when we can find cleartool.
 
 ;;;###autoload
@@ -3785,6 +3785,7 @@ See `clearcase-trace-cleartool-tq' and
 ;;; Local Variables:
 ;;; mode: emacs-lisp
 ;;; mode: outline-minor
+;;; mode: bug-reference
 ;;; outline-regexp: ";;;;+"
 ;;; End:
 

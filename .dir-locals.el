@@ -1,0 +1,1 @@
+((nil . ((bug-reference-url-format . "http://sf.net/tracker/?func=detail&aid=%s&group_id=160898&atid=817687"))))

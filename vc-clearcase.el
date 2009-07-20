@@ -2688,12 +2688,16 @@ and `vc-clearcase-annotate-revision-atline' work fast."
 
 ;;;;;; extra annotate commands
 
+(declare-function vc-annotate-warp-revision "vc-annotate.el")
+(declare-function vc-annotate-extract-revision-at-line "vc-annotate.el")
+
 (defun vc-clearcase-annotate-contributor ()
   "Annotate the contributor of the current revision.
 The contributor is the revision that was merged into the current
 one.  If multiple contributors exist, the user is prompted to
 select one."
   (interactive)
+  (declare (special vc-annotate-parent-file vc-annotate-parent-rev))
   (let* ((contributors (clearcase-revision-contributors 
                         vc-annotate-parent-file
                         vc-annotate-parent-rev))
@@ -2711,6 +2715,7 @@ The contributor is the revision that was merged into the selected
 revision.  If multiple contributors exist, the user is prompted
 to select one."
   (interactive)
+  (declare (special vc-annotate-parent-file vc-annotate-parent-rev))
   (let* ((rev-at-line (vc-annotate-extract-revision-at-line))
          (contributors (clearcase-revision-contributors 
                        vc-annotate-parent-file
@@ -2726,6 +2731,7 @@ to select one."
 (defun vc-clearcase-annotate-latest-on-branch ()
   "Annotate the latest revision on the current branch."
   (interactive)
+  (declare (special vc-annotate-parent-rev))
   (let ((latest (replace-regexp-in-string 
                  "[\\/]\\([0-9]+\\)$" "LATEST" vc-annotate-parent-rev t t 1)))
     (vc-annotate-warp-revision latest)))

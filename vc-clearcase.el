@@ -1455,6 +1455,8 @@ configspec rule does not branch.  (we should check that an update
 'needs-merge -- file is not the latest on our branch and we
 checked it out.
 
+'unregistered -- file is not registered with ClearCase.
+
 'unlocked-changes -- file is hijacked."
   (setq file (expand-file-name file))
 
@@ -1463,20 +1465,18 @@ checked it out.
   (clearcase-maybe-set-vc-state file 'force)
 
   (let ((fprop (clearcase-file-fprop file)))
-
     ;; we are about to operate on the file, so check if the view is
     ;; consistent.  Clearcase operations will occasionally fail saying that an
     ;; update is already in progress for this view.  We can anticipate that,
     ;; because the rule that selects this version will be "Rule: <rule info
     ;; unavailable>".  In that case, we exit with an error telling the user to
     ;; update his view.
-
-    (when (and (clearcase-snapshot-view-p fprop)
-	       (clearcase-fprop-broken-view-p fprop))
+    ;;
+    ;; note that FPROP might be nil if FILE is unregistered.
+    (when (and fprop
+               (clearcase-snapshot-view-p fprop)
+               (clearcase-fprop-broken-view-p fprop))
       (error "Snapshot view is inconsistent, run an update"))
-
-    ;; return the state.  The heuristic already gives all the information we
-    ;; need.
     (vc-clearcase-state-heuristic file)))
 
 ;;;;;; state-heuristic
@@ -1489,6 +1489,8 @@ information."
   (clearcase-maybe-set-vc-state file)
   (let ((fprop (clearcase-file-fprop file)))
     (cond
+      ((null fprop) 'unregistered)
+
       ((clearcase-fprop-hijacked-p fprop)
        'unlocked-changes)
 
@@ -1694,27 +1696,32 @@ abbreviating these strings based on site-specific information."
 
 ;;;;; STATE-CHANGING FUNCTIONS
 ;;;;;; register
-(defun vc-clearcase-register (file &optional rev comment)
-  "Register FILE with clearcase.  REV and COMMENT are ignored.
+(defun vc-clearcase-register (files &optional rev comment)
+  "Register FILE with clearcase.  REV is ignored.
+COMMENT if present will be used as the comment for creating the
+element.
+
 ClearCase requires the directory in which file resides to be
 checked out for the insertion to work.  If the directory is
 checked out, we leave it checked out, otherwise we do a checkout
-for the file insertion than a checkin.
+for the file insertion than a checkin."
 
-NOTE: if dir is not under clearcase, this code will fail.  We
-don't attempt to register a directory in clearcase even if one of
-it's parents is registered."
-
-  (when (consp file)
-    (assert (= (length file) 1) "Only one file is accepted")
-    (setf file (car file)))
-  (setq file (expand-file-name file))
-  (with-clearcase-checkout (file-name-directory file)
-    (let ((cleartool-timeout (* 2 cleartool-timeout)))
-      (cleartool "mkelem -nc \"%s\"" file))
-    (let ((fprop (clearcase-make-fprop :file-name file)))
-      (vc-file-setprop file 'vc-clearcase-fprop fprop)
-      (clearcase-maybe-set-vc-state file 'force))))
+  (unless (consp files)
+    (setq files (list files)))
+  (setq files (mapcar 'expand-file-name files))
+  (let ((dirs (sort (mapcar 'file-name-directory files) 'string<)))
+    (setq dirs (remove-duplicates dirs :test 'equal))
+    (with-clearcase-cfile (cfile (or comment ""))
+      (dolist (dir dirs)
+        (with-clearcase-checkout dir
+          ;; Register all files in this directory
+          (dolist (file files)
+            (when (equal dir (file-name-directory file))
+              (let ((cleartool-timeout (* 2 cleartool-timeout)))
+                (cleartool "mkelem -cfile %s \"%s\"" cfile file))
+              (let ((fprop (clearcase-make-fprop :file-name file)))
+                (vc-file-setprop file 'vc-clearcase-fprop fprop)
+                (clearcase-maybe-set-vc-state file 'force)))))))))
 
 ;;;;;; responsible-p
 

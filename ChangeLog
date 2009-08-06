@@ -1,3 +1,10 @@
+2009-08-03  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase-register): 437 support registering
+	multiple files.  Also use the COMMENT parameter if passed in.
+	(vc-clearcase-state, vc-clearcase-state-heuristic): return
+	'unregistered when file is not registered with ClearCase
+
 2009-07-20  Alex Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (vc-annotate-warp-revisionm)

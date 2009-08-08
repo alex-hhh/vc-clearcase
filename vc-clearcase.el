@@ -19,10 +19,10 @@
 ;; Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ;;
 
-;; Author: Alexandru Harsanyi (haral@users.sourceforge.net)
+;; Author: Alexandru Harsanyi (AlexHarsanyi@gmail.com)
 ;; Created: 28 July 2004
 ;; Keywords: version-control, clearcase
-;; Homepage: http://sourceforge.net/projects/vc-clearcase/
+;; Homepage: http://code.google.com/p/vc-clearcase/
 
 ;;; Commentary:
 ;;
@@ -79,7 +79,7 @@
 
 (defconst vc-clearcase-version "3.2")
 
-(defconst vc-clearcase-maintainer-address "haral@users.sourceforge.net")
+(defconst vc-clearcase-maintainer-address "AlexHarsanyi@gmail.com")
 
 ;;;###autoload
 (defgroup vc-clearcase nil

@@ -1,3 +1,11 @@
+2009-08-13  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-revision-contributors): make REVISION
+	optional, to allow for fething contributors for a checked out
+	revision.
+	(vc-clearcase-state-heuristic): if the latest version was merged
+	into the current checkedout one, mark the file as 'edited
+
 2009-08-03  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (vc-clearcase-register): 437 support registering

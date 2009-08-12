@@ -1243,10 +1243,15 @@ ClearCase uses."
       (setq keep-file (format "%s.keep.%d" file-name n)))
     keep-file))
 
-(defun clearcase-revision-contributors (file revision)
-  "Return the revisions which were merged into FILE's REVISION."
+(defun clearcase-revision-contributors (file &optional revision)
+  "Return the revisions which were merged into FILE's REVISION.
+REVISION can be nil, in which case the file's current revision or
+a checked out revision is assumed."
   (assert (vc-clearcase-registered file))
-  (let ((merge-links (cleartool "desc -short -ahlink Merge \"%s@@%s\"" file revision))
+  (let ((merge-links 
+         (if revision
+             (cleartool "desc -short -ahlink Merge \"%s@@%s\"" file revision)
+             (cleartool "desc -short -ahlink Merge \"%s\"" file)))
 	result)
     (dolist (merge-link (split-string merge-links "[\n\r]"))
       (when (string-match "^<- " merge-link) ; "Merge From" arrow
@@ -1495,10 +1500,13 @@ information."
        'unlocked-changes)
 
       ((clearcase-fprop-checkedout-p fprop)
-       (if (string= (clearcase-fprop-latest fprop)
-		    (clearcase-fprop-parent fprop))
-	   'edited
-	   'needs-merge))
+       (let ((latest (clearcase-fprop-latest fprop))
+             (parent (clearcase-fprop-parent fprop)))
+         (if (or (string= latest parent)
+                 ;; Already merged?
+                 (member latest (clearcase-revision-contributors file)))
+             'edited
+             'needs-merge)))
 
       ((or (clearcase-fprop-checkout-denied-p fprop)
 	   (clearcase-fprop-checkout-will-branch-p fprop)

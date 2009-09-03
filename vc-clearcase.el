@@ -2460,8 +2460,6 @@ The diff is stored in the current buffer.  The function returns t
 if the revisions are identical and nil otherwise.
 This is a helper function for `vc-clearcase-diff'"
 
-  (setq file (file-relative-name file default-directory))
-
   ;; The `diff' function likes to display the diff buffer, but within vc, the
   ;; choice to display it or not is left to `vc-version-diff'.
   (save-window-excursion
@@ -2469,7 +2467,8 @@ This is a helper function for `vc-clearcase-diff'"
 	  (old (vc-version-backup-file-name file rev1 'manual))
 	  (new (if rev2
 		   (vc-version-backup-file-name file rev2 'manual)
-		   file)))
+		   file))
+          (label (file-relative-name file default-directory)))
 
       (when (file-exists-p old)
 	(delete-file old))
@@ -2483,10 +2482,10 @@ This is a helper function for `vc-clearcase-diff'"
       (let ((resize-mini-windows nil))
 	(shell-command
 	 (format "%s %s --label \"%s\" --label \"%s\" \"%s\" \"%s\""
-		 diff-command diff-switches
-		 (concat file " " (or rev1 ""))
-		 (concat file " " (or rev2 ""))
-		 old new)
+	         diff-command diff-switches
+	         (concat label " " (or rev1 ""))
+	         (concat label " " (or rev2 ""))
+	         old new)
 	 (current-buffer)))
 
       ;; delete the temporary files we created

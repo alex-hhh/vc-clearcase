@@ -716,7 +716,16 @@ otherwise it returns the value of the last form in BODY."
 
 (defsubst clearcase-file-fprop (file)
   "Return the fprop structure associated with FILE."
-  (vc-file-getprop (expand-file-name file) 'vc-clearcase-fprop))
+  (setq file (expand-file-name file))
+  (or (vc-file-getprop file 'vc-clearcase-fprop)
+      ;; If we cannot find a FPROP for FILE, check if the buffer has a
+      ;; 'vc-parent-buffer local variable and try to get a FPROP for the file
+      ;; in that buffer.  This is useful when we ask for a fprop of a
+      ;; versioned file (e.g Foo.cpp~_main_23~).
+      (ignore-errors
+        (with-current-buffer (find-file-noselect file)
+          (and vc-parent-buffer
+               (clearcase-file-fprop (buffer-file-name vc-parent-buffer)))))))
 
 (defsubst clearcase-fprop-initialized-p (fprop)
   "Return true if FPROP is initialized.

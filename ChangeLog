@@ -1,3 +1,8 @@
+2009-09-16  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-file-fprop): 445 find the FPROP in
+	derived buffers of the file (such as version backups)
+
 2009-09-04  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-diff-with-diff): don't make FILE

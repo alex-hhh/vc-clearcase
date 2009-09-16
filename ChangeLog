@@ -2,6 +2,8 @@
 
 	* vc-clearcase.el (clearcase-file-fprop): 445 find the FPROP in
 	derived buffers of the file (such as version backups)
+	(clearcase-diff-with-diff): 446 use `vc-find-revision' to obtain
+	required revisions, also don't delete the revisions afterwards.
 
 2009-09-04  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 

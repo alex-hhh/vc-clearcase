@@ -2471,22 +2471,21 @@ This is a helper function for `vc-clearcase-diff'"
 
   ;; The `diff' function likes to display the diff buffer, but within vc, the
   ;; choice to display it or not is left to `vc-version-diff'.
+  ;;
+  ;; We use `vc-find-revision' to obtain the file revisions we are about to
+  ;; diff and we don't delete these revisions from disk.  This has the
+  ;; advantage that repeating the diff will not require to get the version
+  ;; from ClearCase again, but it will litter the workspace with version
+  ;; backups.  This is a good trade off, at least for me :-)
   (save-window-excursion
     (let ((diff-start-pos (point))
-	  (old (vc-version-backup-file-name file rev1 'manual))
+	  (old (with-current-buffer (vc-find-revision file rev1)
+                 (buffer-file-name)))
 	  (new (if rev2
-		   (vc-version-backup-file-name file rev2 'manual)
+                   (with-current-buffer (vc-find-revision file rev2)
+                     (buffer-file-name))
 		   file))
           (label (file-relative-name file default-directory)))
-
-      (when (file-exists-p old)
-	(delete-file old))
-      (clearcase-find-version-helper file rev1 old)
-
-      (when rev2
-	(when (file-exists-p new)
-	  (delete-file new))
-	(clearcase-find-version-helper file rev2 new))
 
       (let ((resize-mini-windows nil))
 	(shell-command
@@ -2496,10 +2495,6 @@ This is a helper function for `vc-clearcase-diff'"
 	         (concat label " " (or rev2 ""))
 	         old new)
 	 (current-buffer)))
-
-      ;; delete the temporary files we created
-      (delete-file old)
-      (when rev2 (delete-file new))
 
       (goto-char diff-start-pos)
       (and (re-search-forward "(no differences)" (point-max) 'noerror) t))))

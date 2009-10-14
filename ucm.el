@@ -1079,8 +1079,7 @@ If no revisions are selected, the current revision is checked in."
 		(interactive)
 		(with-cleartool-directory dir
 		  (let ((comment-text
-			 (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
-			   (buffer-substring-no-properties (point-min) (point-max)))))
+                         (buffer-substring-no-properties (point-min) (point-max))))
 		    (vc-clearcase-checkin modified-files nil comment-text)))
 		(clearcase-refresh-files files)
 		(with-current-buffer buf
@@ -1276,8 +1275,7 @@ checked-in using \\[log-edit-show-files]."
 		  (with-cleartool-directory dir
 		    (with-temp-message (format "Checking in %s..." activity)
 		      (let ((comment-text
-			     (with-current-buffer (get-buffer "*UCM-Checkin-Log*")
-			       (buffer-substring-no-properties (point-min) (point-max))))
+                             (buffer-substring-no-properties (point-min) (point-max)))
 			    (default-directory dir)
 			    ;; Need to grab the file list again, in case it
 			    ;; has changed.

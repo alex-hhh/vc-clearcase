@@ -1280,6 +1280,19 @@ a checked out revision is assumed."
       (setq pos (match-end 0)))
     attributes))
 
+(defun clearcase-add-attribute (object attribute value)
+  "Attach to the ClearCase OBJECT an ATTRIBUTE with VALUE.
+OBJECT can be any ClearCase object (branch, label, activity,
+stream, etc.).  If the object already has a value for this
+attribute, it will be replaced."
+  (cleartool "mkattr -replace %s '\"%s\"' %s" attribute value object))
+
+(defun clearcase-remove-attribute (object attribute)
+  "Remove from the ClearCase OBJECT an ATTRIBUTE.
+OBJECT can be any ClearCase object (branch, label, activity,
+stream, etc.)."
+  (ignore-cleartool-errors (cleartool "rmattr -nc %s %s" attribute object)))
+
 (defun clearcase-maybe-set-vc-state (file &optional force)
   "Lazily set the clearcase specific properties of FILE.
 If FORCE is not nil, always read the properties."

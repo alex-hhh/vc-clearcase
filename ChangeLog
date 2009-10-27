@@ -1,5 +1,8 @@
 2009-10-27  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
+	* ucm.el (ucm-read-activity): 448 use a better default activity in
+	`ucm-actb-mode' and `ucm-lsact-mode` buffers.
+
 	* vc-clearcase.el (clearcase-add-attribute)
 	(clearcase-remove-attribute): new functions
 

@@ -102,10 +102,11 @@ When INCLUDE-OBSOLETE is not nil, obsolete activities are also
 included in the list.
 
 INITIAL is the initial activity name presented to the user.  When
-nil, the current activity in the view is presented to the user.
+nil, a default activity is selected.  In `ucm-actb-mode' and
+`ucm-lsact-mode', the current activity is used, in all other
+places the current activity in the view is presented to the user.
 When it is a symbol, no default activity is presented to the
 user."
-
   (with-cleartool-directory (expand-file-name default-directory)
     (unless view-tag
       (setq view-tag
@@ -113,8 +114,16 @@ user."
 	     "[\n\r]+" "" (cleartool "pwv -short"))))
     (unless initial
       (setq initial
-	    (ignore-cleartool-errors
-	      (cleartool-ask "lsact -cact -fmt \"%n\"")))))
+            (cond ((eq major-mode 'ucm-actb-mode)
+                   ucm-activity)
+                  ((eq major-mode 'ucm-lsact-mode)
+                   (let ((node (ewoc-locate ucm-lsact-ewoc (point))))
+                     (when node
+                       (let ((data (ewoc-data node)))
+                         (ucm-lsact-activity-name data)))))
+                  (t
+                   (ignore-cleartool-errors
+                     (cleartool-ask "lsact -cact -fmt \"%n\"")))))))
 
   ;; The view might not be known, so we pass in the `default-directory' to
   ;; `clearcase-get-vprop' so it can be properly created.

@@ -17,10 +17,10 @@
 ;; Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ;;
 
-;; Author: Alexandru Harsanyi (haral@users.sourceforge.net)
+;; Author: Alexandru Harsanyi (AlexHarsanyi@gmail.com)
 ;; Created: 25 Nov 2007
 ;; Keywords: version-control, clearcase
-;; Homepage: http://sourceforge.net/projects/vc-clearcase/
+;; Homepage: http://code.google.com/p/vc-clearcase/
 
 ;;; Commentary
 ;; This implements support for ClearCase UCM.  The user functions

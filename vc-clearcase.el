@@ -399,7 +399,7 @@ callback function if that is available."
 	  (setq received-some-data
 		(or 
                  ;; will return t if some data was received
-                 (accept-process-output cleartool-process 2 0 t)
+                 (accept-process-output cleartool-process 2 0)
                  received-some-data))))
 
       (when (and (not received-some-data)
@@ -2313,7 +2313,7 @@ printed."
 						     (clearcase-fprop-branch fprop)))
 			     args)))
 	(apply 'start-process
-	       "cleartool-lshistory" buffer
+	       "cleartool-lshistory" buf
 	       cleartool-program "lshistory"
 	       args)))))
 
@@ -3672,54 +3672,55 @@ See `clearcase-trace-cleartool-tq' and
 
 ;; compatibility with previous version
 
+(when (fboundp 'define-obsolete-variable-alias)
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-cleartool-program 'cleartool-program)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-vtree-program 'clearcase-vtree-program)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-cleartool-timeout 'cleartool-timeout)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-cleartool-idle-timeout 'cleartool-idle-timeout)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-cleartool-save-stop-data 'cleartool-save-stop-data)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-checkout-comment-type 'clearcase-checkout-comment-type)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-checkout-policy 'clearcase-checkout-policy)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-rmbranch-on-revert-flag 'clearcase-rmbranch-on-revert-flag)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-diff-cleanup-flag 'clearcase-diff-cleanup-flag)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-use-external-diff 'clearcase-use-external-diff)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-no-label-action 'clearcase-no-label-action)
 
 ;;;###autoload
-(define-obsolete-variable-alias
+  (define-obsolete-variable-alias
     'ah-clearcase-confirm-label-move 'clearcase-confirm-label-move)
-
+)
 (provide 'vc-clearcase)
 
 ;;; Local Variables:

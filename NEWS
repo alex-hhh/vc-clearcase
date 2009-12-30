@@ -1,5 +1,9 @@
 -*- outline -*- 
 
+* Release 2.3
+
+** Fix Bug #2 (Emacs 21 compatibility fixes)
+
 * Release 2.2
 
 ** Fix Bug #2821317 (ocasional hang while waiting for cleartool)

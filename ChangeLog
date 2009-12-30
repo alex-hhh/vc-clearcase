@@ -1,3 +1,8 @@
+2009-07-15  Alex Harsanyi  <haral@users.sourceforge.net>
+
+	* vc-clearcase.el (cleartool-wait-for): 423 Fix Bug #2821317, `or'
+	short-circuit was preventing `accept-process-output' being called.
+
 2008-11-10  Alexandru Harsanyi  <haral@users.sourceforge.net>
 
 	* vc-clearcase.el (clearcase-diff-with-diff): use relative file

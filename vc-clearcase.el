@@ -75,7 +75,7 @@
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
 
-(defconst vc-clearcase-version "2.0")
+(defconst vc-clearcase-version "2.2")
 
 (defconst vc-clearcase-maintainer-address "haral@users.sourceforge.net")
 
@@ -393,25 +393,14 @@ callback function if that is available."
   (while (< cleartool-ctid tid)
     (let (received-some-data
 	  (cleartool-process (tq-process cleartool-tq)))
+
       (with-timeout ((or timeout cleartool-timeout))
 	(while (< cleartool-ctid tid)
 	  (setq received-some-data
-		(or received-some-data
-		    ;; will return t if some data was received
-		    (accept-process-output cleartool-process 2 0 t)))
-
-	  ;; Hmm, sometimes the input from cleartool is not processed
-	  ;; in accept-process-output and we need to call sit-for with
-	  ;; a non zero argument.  This occurs when we 'uncheckout' a
-	  ;; revision.  It will loop forever (outer while) since
-	  ;; `cleartool-tq-handler' is not called to increment
-	  ;; `cleartool-ctid'.  There's some race condition here,
-	  ;; but I'm not sure what it is.  Do not remove the sit-for
-	  ;; call without understanding what it does.  If you remove
-	  ;; it, it will work in 99% of the cases and fail
-	  ;; mysteriously in 1%.
-	  (when (< cleartool-ctid tid)
-	    (sit-for 0.5))))
+		(or 
+                 ;; will return t if some data was received
+                 (accept-process-output cleartool-process 2 0 t)
+                 received-some-data))))
 
       (when (and (not received-some-data)
 		 (< cleartool-ctid tid))

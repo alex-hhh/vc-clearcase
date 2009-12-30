@@ -1,5 +1,9 @@
 -*- outline -*- 
 
+* Release 2.2
+
+** Fix Bug #2821317 (ocasional hang while waiting for cleartool)
+
 * Release 2.1
 
 ** when using an external diff, the diff program is called directly

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-EMACS=${EMACS:-/usr/local/bin/emacs}
+EMACS=${EMACS:-`which emacs`}
 
 TMP=`mktemp -t build.sh.XXXXXX`
 trap "rm $TMP* 2>/dev/null" 0

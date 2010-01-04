@@ -946,7 +946,8 @@ determine the root path for a snapshot view."
 		 (null (clearcase-vprop-root-path vprop))
 		 (clearcase-snapshot-view-p vprop))
 	(setf (clearcase-vprop-root-path vprop)
-	      (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -root"))))))
+              (file-name-as-directory
+               (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -root")))))))
   vprop)
 
 
@@ -2889,6 +2890,18 @@ element * NAME -nocheckout"
     (message "Finished applying label")))
 
 ;;;;; MISCELLANEOUS
+;;;;;; root
+(defun vc-clearcase-root (file)
+  "Return the view root directory for FILE."
+  ;; WARNING: this function is not supported for dynamic views, as we don't
+  ;; have a root-path for them (cleartool pwv -root) does not return anything
+  ;; for a dynamic view.  Since I don't have access to a dynamic view, I
+  ;; cannot find a workaround for this issue.
+  (let ((fprop (clearcase-file-fprop file)))
+    (assert fprop)
+    (let ((vprop (clearcase-get-vprop fprop)))
+      (assert (clearcase-snapshot-view-p vprop))
+      (clearcase-vprop-root-path vprop))))
 ;;;;;; previous-version
 (defun vc-clearcase-previous-revision (file rev)
   "Return the FILE revision that precedes the revision REV.

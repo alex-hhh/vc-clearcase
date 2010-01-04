@@ -3193,7 +3193,8 @@ be browsed)"
 	(progn
 	  (message "Starting Vtree browser...")
 	  (start-process-shell-command
-	   "Vtree_browser" nil clearcase-vtree-program file))
+	   "Vtree_browser" nil 
+           (format "%s \"%s\"" clearcase-vtree-program file)))
 	(message "Not a clearcase file"))))
 
 ;;;;;; clearcase-file-not-found-handler

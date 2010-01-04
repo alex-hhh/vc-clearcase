@@ -3,6 +3,8 @@
 	* vc-clearcase.el (clearcase-setup-vprop): store the root-path
 	directory with a trailing slash.
 	(vc-clearcase-root): new function
+	(vc-clearcase-gui-vtree-browser): fix call to
+	`start-process-shell-command'
 
 2009-10-27  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 

@@ -1,3 +1,9 @@
+2010-01-04  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-setup-vprop): store the root-path
+	directory with a trailing slash.
+	(vc-clearcase-root): new function
+
 2009-10-27  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* ucm.el (ucm-read-activity): 448 use a better default activity in

@@ -4,6 +4,7 @@
 	(vc-clearcase-print-log): suport START-REVISION and LIMIT args
 	(clearcase-lshistory-fmt)
 	(clearcase-lshistory-fmt-ucm): escape the newlines
+	(vc-clearcase-root): find the root for directory arguments too
 
 2010-01-04  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 

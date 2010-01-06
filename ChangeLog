@@ -1,3 +1,10 @@
+2010-01-06  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el
+	(vc-clearcase-print-log): suport START-REVISION and LIMIT args
+	(clearcase-lshistory-fmt)
+	(clearcase-lshistory-fmt-ucm): escape the newlines
+
 2010-01-04  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-setup-vprop): store the root-path

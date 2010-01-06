@@ -2307,26 +2307,33 @@ all -- all the labels for each version are displayed.  This
   :group 'vc-clearcase)
 
 (defvar clearcase-lshistory-fmt
-  (concat "----------------------------\n"
-	  "revision %Vn (%e)\n"
-	  "date: %d; author: %u\n"
+  (concat "----------------------------\\n"
+	  "revision %Vn (%e)\\n"
+	  "date: %d; author: %u\\n"
 	  "%c")
   "Format string to use when listing file history.")
 
 (defvar clearcase-lshistory-fmt-ucm
-  (concat "----------------------------\n"
-	  "revision %Vn (%e)\n"
-	  "date: %d; author: %u\n"
-	  "activity: %[activity]p\n"
+  (concat "----------------------------\\n"
+	  "revision %Vn (%e)\\n"
+	  "date: %d; author: %u\\n"
+	  "activity: %[activity]p\\n"
 	  "%c")
   "Format string so use when listing file history.
 This is used when the file is in a UCM project.")
 
-(defun vc-clearcase-print-log (file &optional buffer)
-  "Insert the history of FILE into the *clearcase-lshistory* buffer.
-By default only the history of the current branch of the file is
-printed.  With a previx argument (C-u) entire file history is
-printed."
+(defun vc-clearcase-print-log (file buffer &optional shortlog start-revision limit)
+  "Insert the history of FILE into BUFFER (cleartool lshistory).
+Up to LIMIT log entries from the current branch are printed.  Use
+\\[universal-argument] to print LIMIT log entries from the entire
+file history.
+
+SHORTLOG is ignored.
+
+If START-REVISION is not nil and LIMIT is 1, only the log entry
+for START-REVISION is printed.  If LIMIT is more than 1 and
+START-REVISION is not nil, a warning will be printed and
+START-REVISION will be ignored."
 
   ;; TODO (Emacs23): vc-clearcase-print-log
   ;;
@@ -2385,18 +2392,47 @@ printed."
         (dolist (label label-revisions)
           (insert (format fmtstr (car label) (cdr label))))))
 
-    (let ((args (list "-fmt" (if (clearcase-ucm-view-p fprop)
-                                 clearcase-lshistory-fmt-ucm
-                                 clearcase-lshistory-fmt)
-                      file)))
-      (unless current-prefix-arg
-        (setq args (append (list "-branch" (format "brtype:%s"
-                                                   (clearcase-fprop-branch fprop)))
-                           args)))
-      (apply 'start-process
-             "cleartool-lshistory" buffer
-             cleartool-program "lshistory"
-             args))))
+    ;; The current requirement is to support the START-REVISION arg only when
+    ;; limit is 1, that is, we only print the log entry for START-REVISION.
+    ;; It is not clear how to print a ClearCase log starting at a particular
+    ;; revision: we use the describe command to print information about one
+    ;; revision...
+
+    (when (and start-revision (not (equal limit 1)))
+      (warn "vc-clearcase-print-log: START-REVISION = %s, LIMIT = %s not supported"
+            start-revision limit))
+    
+    (if (and start-revision (equal limit 1))
+        (insert
+         (cleartool "desc -fmt \"%s\" \"%s@@%s\""
+                    (if (clearcase-ucm-view-p fprop)
+                        clearcase-lshistory-fmt-ucm
+                        clearcase-lshistory-fmt)
+                    file
+                    start-revision))
+        ;; else
+        (let (args)
+          (push "-fmt" args)
+          (push (if (clearcase-ucm-view-p fprop)
+                    clearcase-lshistory-fmt-ucm
+                clearcase-lshistory-fmt) args)
+          
+          (when limit
+            (push "-last" args)
+            (push (format "%s" limit) args))
+
+          (unless current-prefix-arg
+            ;; Print only the events on the current branch unless C-u is
+            ;; specified.
+            (push "-branch" args)
+            (push (format "brtype:%s" (clearcase-fprop-branch fprop)) args))
+
+          (push file args)
+
+          (apply 'start-process
+                 "cleartool-lshistory" buffer
+                 cleartool-program "lshistory"
+                 (nreverse args))))))
 
 ;;;;;; log-view-mode
 (defconst clearcase-log-view-file-re

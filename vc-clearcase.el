@@ -2934,10 +2934,14 @@ element * NAME -nocheckout"
   ;; for a dynamic view.  Since I don't have access to a dynamic view, I
   ;; cannot find a workaround for this issue.
   (let ((fprop (clearcase-file-fprop file)))
-    (assert fprop)
-    (let ((vprop (clearcase-get-vprop fprop)))
-      (assert (clearcase-snapshot-view-p vprop))
-      (clearcase-vprop-root-path vprop))))
+    (if fprop
+        (let ((vprop (clearcase-get-vprop fprop)))
+          (assert (clearcase-snapshot-view-p vprop))
+          (clearcase-vprop-root-path vprop))
+        ;; Else
+        (with-cleartool-directory (file-name-directory file)
+          (replace-regexp-in-string "[\n\r]+" ""
+                                    (cleartool "pwv -root"))))))
 ;;;;;; previous-version
 (defun vc-clearcase-previous-revision (file rev)
   "Return the FILE revision that precedes the revision REV.

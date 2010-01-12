@@ -2933,6 +2933,7 @@ element * NAME -nocheckout"
   ;; have a root-path for them (cleartool pwv -root) does not return anything
   ;; for a dynamic view.  Since I don't have access to a dynamic view, I
   ;; cannot find a workaround for this issue.
+  (setq file (expand-file-name file))
   (let ((fprop (clearcase-file-fprop file)))
     (if fprop
         (let ((vprop (clearcase-get-vprop fprop)))

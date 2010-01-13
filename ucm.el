@@ -1118,7 +1118,8 @@ If no revisions are selected, the current revision is checked in."
     (dolist (file files)
       (message "Reverting %s" (file-relative-name file))
       (find-file-noselect file)         ; read in file so it has a fprop
-      (vc-clearcase-revert file)))
+      (vc-clearcase-revert file))
+    (clearcase-refresh-files files))
   (ucm-actb-refresh-command))
 
 ;;;;;; ucm-actb-transfer-revisions-command

@@ -3,6 +3,7 @@
 	* ucm.el (ucm-actb-checkin-command)
 	(ucm-checkin-activity): add support for diff in the log edit
 	buffer
+	(ucm-actb-revert-command): refresh the status of reverted files.
 
 	* vc-clearcase.el (clearcase-diff-with-diff): use
 	`shell-command-to-string' to prevent erasing previous content in

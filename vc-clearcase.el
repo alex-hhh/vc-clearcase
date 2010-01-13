@@ -2538,13 +2538,14 @@ This is a helper function for `vc-clearcase-diff'"
           (label (file-relative-name file default-directory)))
 
       (let ((resize-mini-windows nil))
-	(shell-command
-	 (format "%s %s --label \"%s\" --label \"%s\" \"%s\" \"%s\""
-	         diff-command diff-switches
-	         (concat label " " (or rev1 ""))
-	         (concat label " " (or rev2 ""))
-	         old new)
-	 (current-buffer)))
+        ;; We cannot use shell-command here as it erases the buffer which will
+        ;; erase any previous diffs in that buffer
+	(insert (shell-command-to-string
+                 (format "%s %s --label \"%s\" --label \"%s\" \"%s\" \"%s\""
+                         diff-command diff-switches
+                         (concat label " " (or rev1 ""))
+                         (concat label " " (or rev2 ""))
+                         old new))))
 
       (goto-char diff-start-pos)
       (and (re-search-forward "(no differences)" (point-max) 'noerror) t))))
@@ -2617,21 +2618,23 @@ when REV2 is nil, the current contents of the file are used."
 	  (all-identical? t)
           (diff-start-pos (point)))
       (dolist (file files)
-	;; always use cleartool diff when comparing directory
-	;; revisions.
-        (let ((fprop (clearcase-file-fprop file))
-              (external-diff? (and clearcase-use-external-diff
-                                   (not (file-directory-p file)))))
-          (unless rev1
-            (setq rev1 (clearcase-fprop-version fprop)))
-          (let ((identical? (if external-diff?
-                                (clearcase-diff-with-diff file rev1 rev2)
-                                (clearcase-diff-with-cleartool file rev1 rev2))))
-            (when identical?
-              (kill-region diff-start-pos (point-max)))
-            (setq all-identical? (and all-identical? identical?)))))
-      (goto-char diff-start-pos)
-      all-identical?)))
+        (let ((rev1 rev1)
+              (rev2 rev2))
+          ;; always use cleartool diff when comparing directory
+          ;; revisions.
+          (let ((fprop (clearcase-file-fprop file))
+                (external-diff? (and clearcase-use-external-diff
+                                     (not (file-directory-p file)))))
+            (unless rev1
+              (setq rev1 (clearcase-fprop-version fprop)))
+            (let ((identical? (if external-diff?
+                                  (clearcase-diff-with-diff file rev1 rev2)
+                                  (clearcase-diff-with-cleartool file rev1 rev2))))
+              (when identical?
+                (kill-region diff-start-pos (point-max)))
+              (setq all-identical? (and all-identical? identical?)))))
+        (goto-char diff-start-pos)
+        all-identical?))))
 
 ;;;;;; annotate-command
 (defun vc-clearcase-annotate-command (file buf rev)

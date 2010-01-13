@@ -1098,7 +1098,16 @@ If no revisions are selected, the current revision is checked in."
 	      `((log-edit-listfun 
                  . ,(lambda ()
                             (interactive)
-                            (mapcar 'file-relative-name modified-files))))
+                            (mapcar 'file-relative-name modified-files)))
+                (log-edit-diff-function
+                 . ,(lambda ()
+                            (interactive)
+                            (with-current-buffer (get-buffer-create "*vc-diff*")
+                              (erase-buffer)
+                              (diff-mode)
+                              (setq buffer-read-only t)
+                              (vc-clearcase-diff modified-files nil nil (current-buffer))
+                              (pop-to-buffer (current-buffer))))))
 	      (get-buffer-create "*UCM-Checkin-Log*"))))
 
 ;;;;;; ucm-actb-revert-command
@@ -1304,7 +1313,18 @@ checked-in using \\[log-edit-show-files]."
                               (interactive)
                               (let ((default-directory dir))
                                 (mapcar 'file-relative-name 
-                                        (ucm-checked-out-files activity dir))))))
+                                        (ucm-checked-out-files activity dir)))))
+                  (log-edit-diff-function
+                   . ,(lambda ()
+                              (interactive)
+                              (let ((default-directory dir))
+                                (with-current-buffer (get-buffer-create "*vc-diff*")
+                                  (erase-buffer)
+                                  (diff-mode)
+                                  (setq buffer-read-only t)
+                                  (let ((files (ucm-checked-out-files activity dir)))
+                                    (vc-clearcase-diff files nil nil (current-buffer)))
+                                  (pop-to-buffer (current-buffer)))))))
                 (get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity dir)

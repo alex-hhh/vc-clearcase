@@ -1,3 +1,7 @@
+2010-01-25  Alexandru Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* Updated license to GPLv3
+
 2010-01-13  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* ucm.el (ucm-actb-checkin-command)

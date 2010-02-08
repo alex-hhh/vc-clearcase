@@ -1,5 +1,25 @@
 -*- outline -*- 
 
+* Release 3.3
+
+** Support for GNU Emacs 23.2 vc features:
+*** print-log will print only a limited number of log entries
+*** displaying a single log entry is faster
+    this is used by vc-annotate to show the log revision of the current line
+*** multiple files can be registered at once
+    you can select multiple unregistered files in a *vc-dir* buffer and
+    register them in one go.
+
+** UCM support improvements
+*** beter default activity for all commands that prompt for an activity name
+*** When checking in files from an activity browser buffer or using `ucm-checkin-activity'
+    you can preview the files that will be checked in using "C-c C-f" and view
+    the diff using "C-c C-d".  This functionality is provided by
+    `log-edit-mode', the vc-clearcase backend provides the necessary
+    information.
+
+** various minor bugfixes
+
 * Release 3.2
 
 ** Fix Bug #2821317 (ocasional hand while waiting for cleartool output)

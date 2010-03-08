@@ -1,5 +1,6 @@
 ;; -*- no-byte-compile: t -*-
 
-;; Keep the sourceforge address until we have some bugs to link to on the new
-;; Google Code page
-((nil . ((bug-reference-url-format . "http://sf.net/tracker/?func=detail&aid=%s&group_id=160898&atid=817687"))))
+((nil . ((bug-reference-url-format . "http://code.google.com/p/vc-clearcase/issues/detail?id=%s"))))
+
+;; Old SF Bug tracker, bugs are still referenced in here
+;; "http://sf.net/tracker/?func=detail&aid=%s&group_id=160898&atid=817687"

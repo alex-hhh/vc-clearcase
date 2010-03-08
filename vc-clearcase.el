@@ -1097,11 +1097,12 @@ This can be used to obtain the vob-tag required for the
     (let ((view-root (cleartool "pwv -root")))
       (let ((path-elements (split-string path "[\\\\\\/]"))
 	    (prefix-length (length (split-string view-root "[\\\\\\/]"))))
-	;; On Windows, the vob tag looks like "/Vob_Name", on Solaris, it is
+	;; On Windows, the vob tag looks like "\\Vob_Name", on Solaris, it is
 	;; "/vobs/Vob_Name".
-	(concat "/" (nth prefix-length path-elements)
-		(unless (eq system-type 'windows-nt)
-		  (concat "/" (nth (1+ prefix-length) path-elements))))))))
+        (if (eq system-type 'windows-nt)
+            (concat "\\" (nth prefix-length path-elements))
+            (concat "/" (nth prefix-length path-elements)
+                    (concat "/" (nth (1+ prefix-length) path-elements))))))))
 
 (defvar clearcase-all-labels nil
   "An obarray containing all labels (stored as symbols).")

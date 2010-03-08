@@ -1,3 +1,8 @@
+2010-03-08  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-vob-tag-for-path): on windows,
+	constuct the vob tag with a backslash (\VOBTAG).  Bug #3
+
 2010-01-25  Alexandru Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* Updated license to GPLv3

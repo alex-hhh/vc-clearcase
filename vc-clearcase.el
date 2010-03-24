@@ -710,18 +710,28 @@ otherwise it returns the value of the last form in BODY."
   revision-list
   )
 
-(defsubst clearcase-file-fprop (file)
+(defun clearcase-file-fprop (file)
   "Return the fprop structure associated with FILE."
-  (setq file (expand-file-name file))
-  (or (vc-file-getprop file 'vc-clearcase-fprop)
-      ;; If we cannot find a FPROP for FILE, check if the buffer has a
-      ;; 'vc-parent-buffer local variable and try to get a FPROP for the file
-      ;; in that buffer.  This is useful when we ask for a fprop of a
-      ;; versioned file (e.g Foo.cpp~_main_23~).
+  ;; Try different methods of getting the fprop, from fastest to slowest:
+  (or 
+   ;; Straightforward...
+   (vc-file-getprop file 'vc-clearcase-fprop)
+
+   ;; Try expanding the file name...
+   (vc-file-getprop (expand-file-name file) 'vc-clearcase-fprop)
+
+   ;; Try reading the file into a buffer and get the FPROP that way (UCM might
+   ;; call VC operations on files that are not already loaded)
       (ignore-errors
         (with-current-buffer (find-file-noselect file)
+       (vc-file-getprop (buffer-file-name) 'vc-clearcase-fprop)))
+
+   ;; This is a buffer derived from a version controlled file
+   ;; (E.g. Foo.cpp~_main_23~), in that case find the FPROP of the original
+   ;; file.  This needs to be last, as it interacts badly with *vc-dir* for
+   ;; now...
           (and vc-parent-buffer
-               (clearcase-file-fprop (buffer-file-name vc-parent-buffer)))))))
+        (vc-file-getprop (buffer-file-name vc-parent-buffer) 'vc-clearcase-fprop))))
 
 (defsubst clearcase-fprop-initialized-p (fprop)
   "Return true if FPROP is initialized.

@@ -722,15 +722,16 @@ otherwise it returns the value of the last form in BODY."
 
    ;; Try reading the file into a buffer and get the FPROP that way (UCM might
    ;; call VC operations on files that are not already loaded)
-      (ignore-errors
-        (with-current-buffer (find-file-noselect file)
+   (ignore-errors
+     (with-current-buffer (find-file-noselect file)
        (vc-file-getprop (buffer-file-name) 'vc-clearcase-fprop)))
 
    ;; This is a buffer derived from a version controlled file
    ;; (E.g. Foo.cpp~_main_23~), in that case find the FPROP of the original
    ;; file.  This needs to be last, as it interacts badly with *vc-dir* for
    ;; now...
-          (and vc-parent-buffer
+   (and vc-parent-buffer
+        (buffer-file-name vc-parent-buffer)
         (vc-file-getprop (buffer-file-name vc-parent-buffer) 'vc-clearcase-fprop))))
 
 (defsubst clearcase-fprop-initialized-p (fprop)
@@ -2604,20 +2605,18 @@ When BUFFER is nil, *vc-diff* is used instead.
 When REV1 is nil, the files latest (checked-in) revision is used,
 when REV2 is nil, the current contents of the file are used."
 
-  ;; `vc-clearcase-diff' is called by both vc-diff and vc-diff-tree, in the
-  ;; first case, we need to erase the buffer but in the second we should not,
-  ;; as several diffs will accumulate in it.  The only way to tell the two
-  ;; cases appart is that in vc-diff-tree case BUFFER is already the current
-  ;; buffer.  Also, if the files are identical, vc.el expects us not to put
-  ;; anything in the buffer.
-
+  ;; because we don't use `vc-do-command', the diff buffer is not setup
+  ;; properly for us.  Setting it up properly involves some complicate logic,
+  ;; we only need to call `vc-setup-buffer' if the diff buffer is not already
+  ;; the current buffer.
   (unless buffer
     (setq buffer (get-buffer-create "*vc-diff*")))
+  (when (stringp buffer)
+    (setq buffer (get-buffer buffer)))
   (unless (eq buffer (current-buffer))
+    (vc-setup-buffer buffer)
     (with-current-buffer buffer
-      (let ((inhibit-read-only t))
-	(erase-buffer)
-	(diff-mode))))
+      (diff-mode)))
 
   (with-current-buffer buffer
     (goto-char (point-max))

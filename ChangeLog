@@ -2,6 +2,10 @@
 
 	* vc-clearcase.el (clearcase-file-fprop): try different ways of
 	obtaining the files FPROP in order
+	(clearcase-file-fprop): Check if the buffer denoted by
+	`vc-parent-buffer' actually has an associated file.
+	(vc-clearcase-diff): setup the *vc-diff* buffer using
+	`vc-setup-buffer'
 
 2010-03-08  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 

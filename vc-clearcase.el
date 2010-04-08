@@ -1694,28 +1694,24 @@ modified even if no modifications were made."
       (t nil))))
 
 ;;;;;; mode-line-string
-(defcustom clearcase-wash-mode-line-function nil
-  "Function to call to post-process the mode line string.
-This is a function which receives a string representing the
-version control mode line and must return a new string which will
-be used as the mode line.
+(defcustom clearcase-mode-line-function nil
+  "Function called to obtain a mode-line string for a file.
+The function is called by `vc-clearcase-mode-line-string' with a
+single parameter, the file name.  It should return a string which
+will be used by the VC library as the version tag for this file.
 
-The VS modeline for a ClearCase file can be quite long because
-the branch or stream name is included.  This can be agravated by
-site conventions which insist on using strings as 'release',
-'branch' or 'iteration' as part of the branch name.  UCM streams
-have the user name as part of the stream name.
-
-This variable allows the user to implement a mechanism for
-abbreviating these strings based on site-specific information."
+When this variable is nil, `clearcase-default-mode-line-function'
+will be used to produce a mode line."
   :type '(choice (const nil) function)
   :group 'vc-clearcase)
 
-(defun vc-clearcase-mode-line-string (file)
-  "Return the mode line string for FILE."
-  (clearcase-maybe-set-vc-state file)
+(defun clearcase-default-mode-line (file)
+  "Produce a default mode line string for FILE.
+The string will contain information about the status of the file
+and its revision.  For UCM views, the name of the stream is used
+instead of the revision."
   (let ((fprop (clearcase-file-fprop file))
-	tag mode-line)
+	tag)
     (setq tag
 	  (if (clearcase-ucm-view-p fprop)
 	      (let ((vprop (clearcase-get-vprop fprop)))
@@ -1723,15 +1719,20 @@ abbreviating these strings based on site-specific information."
 	      (let ((branch (clearcase-fprop-branch fprop))
 		    (version-number (clearcase-fprop-version-number fprop)))
 		(concat branch "/" version-number))))
-    (setq mode-line (case (clearcase-fprop-status fprop)
-		      ('hijacked "Cc:HIJACKED")
-		      ('broken-view "Cc:BROKEN-VIEW")
-		      ('reserved (concat "Cc:(R)" tag))
-		      ('unreserved (concat "Cc:(U)" tag))
-		      (t (concat "Cc:" tag))))
-    (when clearcase-wash-mode-line-function
-      (setq mode-line (funcall clearcase-wash-mode-line-function mode-line)))
-    mode-line))
+    (case (clearcase-fprop-status fprop)
+      ('hijacked "HIJACKED")
+      ('broken-view "BROKEN-VIEW")
+      ('reserved (concat "(R)" tag))
+      ('unreserved (concat "(U)" tag))
+      (t tag))))
+
+(defun vc-clearcase-mode-line-string (file)
+  "Return the mode line string for FILE."
+  (clearcase-maybe-set-vc-state file)
+  (concat "Cc:"
+          (if clearcase-mode-line-function
+              (funcall clearcase-mode-line-function file)
+              (clearcase-default-mode-line file))))
 
 ;;;;; STATE-CHANGING FUNCTIONS
 ;;;;;; register

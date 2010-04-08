@@ -16,6 +16,16 @@
 
 	* Updated license to GPLv3
 
+2010-01-19  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-mode-line-function): new defcustom,
+	replaces `clearcase-wash-mode-line-function'.
+	(clearcase-default-mode-line): default implementation for the
+	mode-line string.
+	(vc-clearcase-mode-line-string): either call the user supplied
+	function in `clearcase-mode-line-function' or use the default one,
+	`clearcase-default-mode-line'
+
 2010-01-13  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* ucm.el (ucm-actb-checkin-command)

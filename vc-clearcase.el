@@ -3002,7 +3002,9 @@ Return nil if no such revision exists."
 Previous versions of the directory will still contain FILE."
   (setq file (expand-file-name file))
   (with-clearcase-checkout (file-name-directory file)
-    (cleartool "rmname -nc \"%s\"" file)))
+    ;; The -force argument is required here because ClearCase will refuse to
+    ;; remove any file that has a checkout on some other branch...
+    (cleartool "rmname -nc -force \"%s\"" file)))
 
 ;;;;;; rename-file
 (defun vc-clearcase-rename-file (old new)

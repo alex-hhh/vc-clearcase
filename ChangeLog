@@ -1,3 +1,8 @@
+2010-04-08  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase-delete-file): add -force argument
+	to rmname command
+
 2010-03-24  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-file-fprop): try different ways of

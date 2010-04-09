@@ -1349,15 +1349,21 @@ If FORCE is not nil, always read the properties."
                    (setf (clearcase-fprop-activity^ fprop) activity)))))))))
 
 (defadvice vc-version-backup-file-name
-    (after clearcase-cleanup-version (file &optional rev manual regexp))
-  "Cleanup rev of \\ and / so it can be stored as a file name."
-  (when (string-match "~.*~" ad-return-value)
-    (let ((start (match-beginning 0))
-	  (data (match-string 0 ad-return-value)))
-      (setq data (replace-regexp-in-string "[\\\\/]" "_" data))
-      (setq ad-return-value
-	    (concat (substring ad-return-value 0 start) data))))
-  ad-return-value)
+    (before clearcase-cleanup-version (file &optional rev manual regexp))
+  "Create a shorter backup file for ClearCase files.
+REV for ClearCase files can be very long.  We shorten it by using
+only the last branch and version number. 
+
+Note that this will have a problem when branches are created with
+-pbranch option.  See also Bug #4"
+  (let ((fprop (clearcase-file-fprop file)))
+    (when fprop                         ; this is a clearcase file
+      (if rev
+          (when (string-match "[\\\\\/]\\([^\\\\\/]+\\)[\\\\\/]\\([0-9]+\\)$" rev)
+            (setq rev (concat (match-string 1 rev) "~" (match-string 2 rev))))
+          ;; else
+          (setq rev (concat (clearcase-fprop-branch fprop) "~" 
+                            (clearcase-fprop-version-number fprop)))))))
 
 (defadvice vc-start-logentry
     (before clearcase-prepare-checkin-comment

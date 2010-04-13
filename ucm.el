@@ -1315,14 +1315,15 @@ checked-in using \\[log-edit-show-files]."
                   (log-edit-diff-function
                    . ,(lambda ()
                               (interactive)
-                              (let ((default-directory dir))
-                                (with-current-buffer (get-buffer-create "*vc-diff*")
-                                  (erase-buffer)
+                              (let ((default-directory dir)
+                                    (diff-buffer (get-buffer-create "*vc-diff*")))
+                                (vc-setup-buffer diff-buffer)
+                                (with-current-buffer diff-buffer
                                   (diff-mode)
-                                  (setq buffer-read-only t)
-                                  (let ((files (ucm-checked-out-files activity dir)))
-                                    (vc-clearcase-diff files nil nil (current-buffer)))
-                                  (pop-to-buffer (current-buffer)))))))
+                                  (setq buffer-read-only t))
+                                (let ((files (ucm-checked-out-files activity dir)))
+                                  (vc-clearcase-diff files nil nil diff-buffer))
+                                  (pop-to-buffer diff-buffer)))))
                 (get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity dir)

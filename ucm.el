@@ -1328,7 +1328,8 @@ checked-in using \\[log-edit-show-files]."
 
 (defun ucm-checked-out-files (activity dir)
   "Return the list of files checked out under ACTIVITY.
-The file names are relative to the `default-directory'"
+DIR is a directory inside a valid ClearCase view (needed for
+cleartool to work)"
   (with-cleartool-directory dir
     (let ((files nil))
       (dolist (v (split-string
@@ -1339,6 +1340,21 @@ The file names are relative to the `default-directory'"
 		(revision (match-string 2 v)))
 	    (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" revision)
 	      (add-to-list 'files file)))))
+      files)))
+
+(defun ucm-activity-files (activity dir)
+  "Return the list of files that are part of ACTIVITY.
+DIR is a directory inside a valid ClearCase view (needed for
+cleartool to work)"
+  (with-cleartool-directory dir
+    (let ((files nil))
+      (dolist (v (split-string
+		  (cleartool "lsact -fmt \"%%[versions]Cp\" %s" activity)
+		  ", " 'omit-nulls))
+	(when (string-match "\\(.*\\)@@\\(.*\\)" v)
+	  (let ((file (match-string 1 v))
+		(revision (match-string 2 v)))
+            (add-to-list 'files file))))
       files)))
 
 ;;;; ucm-lock-activity, ucm-unlock-activity

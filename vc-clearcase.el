@@ -3294,6 +3294,8 @@ will open the specified version in another window, using
 	    ;; we are hijacking a file
 	    (vc-file-setprop file 'vc-state 'unlocked-changes)
 	    (setf (clearcase-fprop-status fprop) 'hijacked)
+            ;; Make file writable on disk
+            (set-file-modes file (logior (file-modes file) #o220))
 	    (vc-resynch-buffer file t t))))))
   nil)
 

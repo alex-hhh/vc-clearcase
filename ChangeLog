@@ -1,3 +1,15 @@
+2010-05-21  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	Patch by Ola Nilsson <ola.nilsson@gmail.com> for Bug #6
+
+	* vc-clearcase.el (vc-clearcase-annotate-command): use the %SNd
+	"short numerical date" for the dates in the annotate lines.
+	(clearcase-annotate-months): removed.
+	(clearcase-annotate-date-rx, clearcase-annotate-mktime): updated
+	for the new date format.
+	(clearcase-annotate-post-process): reformat the timestamps in the
+	buffer to to DD/MM/YYYY format.
+
 2010-04-30  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-hijack-file-handler): make the

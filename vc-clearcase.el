@@ -2430,7 +2430,7 @@ START-REVISION will be ignored."
           (push "-fmt" args)
           (push (if (clearcase-ucm-view-p fprop)
                     clearcase-lshistory-fmt-ucm
-                clearcase-lshistory-fmt) args)
+                    clearcase-lshistory-fmt) args)
           
           (when limit
             (push "-last" args)
@@ -2658,10 +2658,10 @@ will ask if you want to display the deleted sections as well."
   (let ((pname (concat file (when rev (concat "@@" rev)))))
     (vc-setup-buffer buf)
     (with-current-buffer buf
-      (let ((fmt-args '("-fmt" "%-9.9Sd %-8.8u %Sn |"))
+      (let ((fmt-args '("-fmt" "%-8.8SNd %-8.8u %Sn |"))
 	    (rm-args (when (and current-prefix-arg
 				(y-or-n-p "Show deleted sections? "))
-		       '("-rm" "-rmfmt" "D %-9.9Sd %-8.8u |"))))
+		       '("-rm" "-rmfmt" "D %-8.8SNd %-8.8u |"))))
 	(cleartool-do
 	 "annotate"
 	 (append fmt-args rm-args `("-out" "-" "-nheader" ,pname))
@@ -2671,13 +2671,8 @@ will ask if you want to display the deleted sections as well."
 		(let ((buffer (current-buffer)))
 		  (clearcase-annotate-post-process buffer))))))))
 
-(defconst clearcase-annotate-months
-  '(("Jan" . 1) ("Feb" . 2) ("Mar" . 3) ("Apr" . 4)
-    ("May" . 5) ("Jun" . 6) ("Jul" . 7) ("Aug" . 8)
-    ("Sep" . 9) ("Oct" . 10) ("Nov" . 11) ("Dec" . 12)))
-
 (defconst clearcase-annotate-date-rx
-  "\\([0-9]+\\)-\\([A-Za-z]+\\)-\\([0-9]+\\)")
+  "\\([0-9]\\{4\\}\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)")
 
 (defun clearcase-annotate-mktime (time-str)
   "Convert TIME-STR into a fractional number of days.
@@ -2685,12 +2680,9 @@ NOTE: we don't use `vc-annotate-convert-time' since it is not
 available in Emacs 21."
   (when (and (stringp time-str)
 	     (string-match clearcase-annotate-date-rx time-str))
-    (let ((day (string-to-number (match-string 1 time-str)))
-	  (month
-	   (cdr (assoc (match-string 2 time-str)
-		       clearcase-annotate-months)))
-	  (year (string-to-number (match-string 3 time-str))))
-      (incf year (if (< year 70) 2000 1900))
+    (let ((day (string-to-number (match-string 3 time-str)))
+          (month (string-to-number (match-string 2 time-str)))
+          (year (string-to-number (match-string 1 time-str))))
       (/ (float-time (encode-time 0 0 0 day month year)) 24 3600))))
 
 (defun clearcase-annotate-post-process (buffer)
@@ -2699,9 +2691,12 @@ These will be stored as properties, so
 `vc-clearcase-annotate-difference', `vc-clearcase-annotate-time'
 and `vc-clearcase-annotate-revision-atline' work fast."
   (with-current-buffer buffer
-    (let ((inhibit-read-only t)
-	  (date-rx "^[0-9]+-[A-Za-z]+-[0-9]+")
-	  (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|"))
+    (let* ((inhibit-read-only t)
+           (date-rx (concat "^" clearcase-annotate-date-rx))
+           (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|")
+           (date-str-len (length (format-time-string "%x" (current-time))))
+           (continuation-str (format (concat "%" (number-to-string date-str-len)
+                                             "s          .                    |") "")))
       ;; Step 1: parse the buffer and annotate the text with the time
       ;; and revision number of each line
       (goto-char (point-max))
@@ -2711,8 +2706,12 @@ and `vc-clearcase-annotate-revision-atline' work fast."
 	    time-str revision-str time age)
 	(while (re-search-backward date-rx nil 'noerror)
 	  (setq time-str (match-string-no-properties 0))
-	  (setq time (clearcase-annotate-mktime time-str))
+	  (setq time (save-match-data (clearcase-annotate-mktime time-str)))
 	  (setq age (- now time))
+
+	  ;; re-format the time string
+          (setq time-str (format-time-string "%x" (days-to-time time)))
+          (replace-match time-str nil t)
 
 	  (when (re-search-forward version-rx (c-point 'eol) 'noerror)
 	    (setq revision-str (match-string-no-properties 1)))
@@ -2722,37 +2721,38 @@ and `vc-clearcase-annotate-revision-atline' work fast."
 	  (put-text-property beg end 'vc-clearcase-time time)
 	  (put-text-property beg end 'vc-clearcase-age age)
 	  (put-text-property beg end 'vc-clearcase-revision revision-str)
-	  (setq end (1- beg))))
-      ;; Step 2: all the '|' markers in continuation lines
-      (goto-char (point-min))
-      (while (re-search-forward "^ +\\. +|" nil t)
-	(let* ((bol (c-point 'bol))
-	       (time (get-text-property bol 'vc-clearcase-time))
-	       (age (get-text-property bol 'vc-clearcase-age))
-	       (revision (get-text-property bol 'vc-clearcase-revision))
-	       (str "                   .                    |")
-	       (max (1- (length str))))
-	  (put-text-property 0 max 'vc-clearcase-time time str)
-	  (put-text-property 0 max 'vc-clearcase-age age str)
-	  (put-text-property 0 max 'vc-clearcase-revision revision str)
-	  (replace-match str nil nil)))
-      ;; Step 3: truncate or expand all the version numbers
-      (goto-char (point-min))
-      (while (re-search-forward version-rx nil t)
-	(let* ((str (match-string-no-properties 1))
-	       max
-	       (bol (c-point 'bol))
-	       (time (get-text-property bol 'vc-clearcase-time))
-	       (age (get-text-property bol 'vc-clearcase-age))
-	       (revision (get-text-property bol 'vc-clearcase-revision)))
-	  (when (> (length str) 20)
-	    (setq str (substring str -20 (length str))))
-	  (setq str (format " %20s |" str))
-	  (setq max (length str))
-	  (put-text-property 0 max 'vc-clearcase-time time str)
-	  (put-text-property 0 max 'vc-clearcase-age age str)
-	  (put-text-property 0 max 'vc-clearcase-revision revision str)
-	  (replace-match str nil t))))))
+	  (setq end (1- beg)))
+        
+        ;; Step 2: all the '|' markers in continuation lines
+        (goto-char (point-min))
+        (while (re-search-forward "^ +\\. +|" nil t)
+          (let* ((bol (c-point 'bol))
+                 (time (get-text-property bol 'vc-clearcase-time))
+                 (age (get-text-property bol 'vc-clearcase-age))
+                 (revision (get-text-property bol 'vc-clearcase-revision))
+                 (str continuation-str)
+                 (max (1- (length str))))
+            (put-text-property 0 max 'vc-clearcase-time time str)
+            (put-text-property 0 max 'vc-clearcase-age age str)
+            (put-text-property 0 max 'vc-clearcase-revision revision str)
+            (replace-match str nil nil)))
+        ;; Step 3: truncate or expand all the version numbers
+        (goto-char (point-min))
+        (while (re-search-forward version-rx nil t)
+          (let* ((str (match-string-no-properties 1))
+                 max
+                 (bol (c-point 'bol))
+                 (time (get-text-property bol 'vc-clearcase-time))
+                 (age (get-text-property bol 'vc-clearcase-age))
+                 (revision (get-text-property bol 'vc-clearcase-revision)))
+            (when (> (length str) 20)
+              (setq str (substring str -20 (length str))))
+            (setq str (format " %20s |" str))
+            (setq max (length str))
+            (put-text-property 0 max 'vc-clearcase-time time str)
+            (put-text-property 0 max 'vc-clearcase-age age str)
+            (put-text-property 0 max 'vc-clearcase-revision revision str)
+            (replace-match str nil t)))))))
 
 ;;;;;; annotate-difference
 (defun vc-clearcase-annotate-difference (point)
@@ -2802,8 +2802,8 @@ to select one."
   (declare (special vc-annotate-parent-file vc-annotate-parent-rev))
   (let* ((rev-at-line (vc-annotate-extract-revision-at-line))
          (contributors (clearcase-revision-contributors 
-                       vc-annotate-parent-file
-                       rev-at-line))
+                        vc-annotate-parent-file
+                        rev-at-line))
          (rev (cond 
                 ((null contributors)
                  (error "Revision %s has no contributors" rev-at-line))
@@ -3440,8 +3440,8 @@ and LABEL-2'."
        maximize (length rev-1) into lb1-len
        maximize (length rev-2) into lb2-len
        finally do
-       (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds"
-			      file-len lb1-len lb2-len)))
+         (setq line-fmt (format "%% 3d    %%-%ds    %%-%ds    %%-%ds"
+                                file-len lb1-len lb2-len)))
 
     (with-current-buffer (get-buffer-create "*label-diff-report*")
       ;; these are declared in ps-print.el, but I want to avoid an
@@ -3729,7 +3729,6 @@ This is the string returned by the cleartool -version command."
     clearcase-edcs-mode-map
     clearcase-edcs-mode-abbrev-table
     clearcase-annotate-date-rx
-    clearcase-annotate-months
     clearcase-log-view-font-lock-keywords
     cleartool-tq
 

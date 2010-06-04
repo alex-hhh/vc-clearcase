@@ -1,3 +1,8 @@
+2010-06-04  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-annotate-post-process): fixup number
+	of whitespaces in padding string.
+
 2010-05-21  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	Patch by Ola Nilsson <ola.nilsson@gmail.com> for Bug #6

@@ -87,6 +87,16 @@
 UCM activity list buffers."
   :group 'ucm)
 
+;; It used to be that the name "/projects" was recognized on both windows and
+;; unix systems.  It seems that in CC 7, only "\\projects" is recognized
+(defcustom ucm-projects-vob
+  (if (eq system-type 'windows-nt)
+      "\\projects"
+      "/projects")
+  "The name of the UCM projects VOB."
+  :group 'ucm
+  :type 'string)
+
 ;;;; ucm-read-activity
 (defun ucm-read-activity (prompt &optional include-obsolete initial view-tag)
   "Display PROMPT and read a UCM activity with completion.
@@ -196,7 +206,7 @@ activity headline)."
 	 (when (equal status "locked")
 	   (if (y-or-n-p "Activity is locked.  Would you like to unlock it? ")
 	       (progn
-		 (cleartool "unlock activity:%s@/projects" activity)
+		 (cleartool "unlock activity:%s@%s" activity ucm-projects-vob)
 		 (message "Activity %s unlocked" activity))
 	       (error "Cannot set this activity beacuse it is locked.")))
 	 (cleartool "setact \"%s\"" activity))))))
@@ -352,7 +362,7 @@ inclued as well."
 			  :owner owner
 			  :lock lock
 			  :attributes (clearcase-get-attributes
-				       (format "activity:%s@/projects" name))))))
+				       (format "activity:%s@%s" name ucm-projects-vob))))))
     ewoc))
 
 
@@ -928,7 +938,7 @@ structure)"
 	 (ewoc nil))
 
     (loop for (attribute . value)
-       in (clearcase-get-attributes (format "activity:%s@/projects" name))
+       in (clearcase-get-attributes (format "activity:%s@%s" name ucm-projects-vob))
        do (setq header (concat header (format "\t%s = %s\n" (symbol-name attribute) value))))
 
     (setq ewoc (ewoc-create 'ucm-actb-pp header))
@@ -1298,10 +1308,10 @@ checked-in using \\[log-edit-show-files]."
 			    (files (ucm-checked-out-files activity dir)))
 
 			(if (string= comment-text "")
-			    (cleartool "checkin -nc activity:%s@/projects" activity)
+			    (cleartool "checkin -nc activity:%s@%s" activity ucm-projects-vob)
 			    (with-clearcase-cfile (comment comment-text)
-			      (cleartool "checkin -cfile \"%s\" activity:%s@/projects"
-					 comment activity)))
+			      (cleartool "checkin -cfile \"%s\" activity:%s@%s"
+					 comment activity ucm-projects-vob)))
 
 			(clearcase-refresh-files files))))
 		  (set-window-configuration window-configuration))
@@ -1379,8 +1389,8 @@ the activity name, the second is t.")
 	  (progn
 	    (run-hook-with-args
 	     'ucm-before-activity-lock-hook activity current-prefix-arg)
-	    (cleartool "lock %s activity:%s@/projects"
-		       (if current-prefix-arg "-obsolete" "") activity)
+	    (cleartool "lock %s activity:%s@%s"
+		       (if current-prefix-arg "-obsolete" "") activity ucm-projects-vob)
 	    (message "%s is now %s" activity
 		     (if current-prefix-arg "obsolete" "locked")))))))
 
@@ -1396,7 +1406,7 @@ the activity name, the second is t.")
       (if (equal status "unlocked")
 	  (message "%s is already unlocked" activity)
 	  (progn
-	    (cleartool "unlock activity:%s@/projects" activity)
+	    (cleartool "unlock activity:%s@%s" activity ucm-projects-vob)
 	    (message "%s is now unlocked" activity))))))
 
 

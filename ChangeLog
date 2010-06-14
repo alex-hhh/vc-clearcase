@@ -1,3 +1,8 @@
+2010-06-14  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* ucm.el (ucm-projects-vob): new variable, replaces all implicit
+	uses of "/projects" in the code.
+
 2010-06-04  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-annotate-post-process): fixup number

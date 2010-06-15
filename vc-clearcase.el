@@ -2696,7 +2696,7 @@ and `vc-clearcase-annotate-revision-atline' work fast."
            (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|")
            (date-str-len (length (format-time-string "%x" (current-time))))
            (continuation-str (format (concat "%" (number-to-string date-str-len)
-                                             "s          .                     |") "")))
+                                             "s          .                  |") "")))
       ;; Step 1: parse the buffer and annotate the text with the time
       ;; and revision number of each line
       (goto-char (point-max))
@@ -2710,7 +2710,7 @@ and `vc-clearcase-annotate-revision-atline' work fast."
 	  (setq age (- now time))
 
 	  ;; re-format the time string
-          (setq time-str (format-time-string "%x" (days-to-time time)))
+          (setq time-str (format-time-string "%D" (days-to-time time)))
           (replace-match time-str nil t)
 
 	  (when (re-search-forward version-rx (c-point 'eol) 'noerror)

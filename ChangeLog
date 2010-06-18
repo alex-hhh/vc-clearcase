@@ -1,3 +1,20 @@
+2010-06-18  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-annotate-date-format)
+	(clearcase-annotate-user-width)
+	(clearcase-annotate-version-width): new variables.
+	(vc-clearcase-annotate-command): use
+	`clearcase-annotate-user-width' in the format string sent to
+	cleartool
+	(clearcase-annotate-post-process): re-written to do a single pass
+	over the annotate buffer also uses user defined date format and
+	width fields for the version and user.
+	(clearcase-annotate-search-for-property): new function.
+	(vc-clearcase-annotate-time)
+	(vc-clearcase-annotate-extract-revision-at-line): use it
+	(vc-clearcase-annotate-difference): removed as it is not used in
+	Emacs23.
+
 2010-06-15  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-annotate-post-process): use the

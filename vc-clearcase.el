@@ -2650,6 +2650,26 @@ when REV2 is nil, the current contents of the file are used."
         all-identical?))))
 
 ;;;;;; annotate-command
+
+(defconst clearcase-annotate-date-rx
+  "\\([0-9]\\{4\\}\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)")
+
+(defcustom clearcase-annotate-date-format "%x"
+  "Format string for dates in `vc-annotate' buffers.
+See `format-time-string' for format specification."
+  :type 'string
+  :group 'vc-clearcase)
+
+(defcustom clearcase-annotate-user-width 8
+  "Width of user names in `vc-annotate' buffers."
+  :type 'integer
+  :group 'vc-clearcase)
+
+(defcustom clearcase-annotate-version-width 20
+  "Width of version names in `vc-annotate' buffers."
+  :type 'integer
+  :group 'vc-clearcase)
+
 (defun vc-clearcase-annotate-command (file buf rev)
   "Get the annotations for FILE and put them in BUF.
 REV is the revision we want to annotate.  With prefix argument,
@@ -2658,21 +2678,25 @@ will ask if you want to display the deleted sections as well."
   (let ((pname (concat file (when rev (concat "@@" rev)))))
     (vc-setup-buffer buf)
     (with-current-buffer buf
-      (let ((fmt-args '("-fmt" "%-8.8SNd %-8.8u %Sn |"))
-	    (rm-args (when (and current-prefix-arg
-				(y-or-n-p "Show deleted sections? "))
-		       '("-rm" "-rmfmt" "D %-8.8SNd %-8.8u |"))))
-	(cleartool-do
-	 "annotate"
-	 (append fmt-args rm-args `("-out" "-" "-nheader" ,pname))
-	 buf)
-	(setq cleartool-finished-function
-	      '(lambda ()
-		(let ((buffer (current-buffer)))
-		  (clearcase-annotate-post-process buffer))))))))
-
-(defconst clearcase-annotate-date-rx
-  "\\([0-9]\\{4\\}\\)\\([0-9][0-9]\\)\\([0-9][0-9]\\)")
+      (let ((fmt-args (list "-fmt"
+                            (mapconcat 'identity
+                                       '("%-8.8SNd %-" "." "u %Sn |")
+                                       (number-to-string clearcase-annotate-user-width))))
+            (rm-args (when (and current-prefix-arg
+                                (y-or-n-p "Show deleted sections? "))
+                       (list "-rm" "-rmfmt"
+                             (mapconcat 'identity
+                                        '("D %-8.8SNd %-" "." "u |")
+                                        (number-to-string clearcase-annotate-user-width))
+                             ))))
+        (cleartool-do
+         "annotate"
+         (append fmt-args rm-args `("-out" "-" "-nheader" ,pname))
+         buf)
+        (setq cleartool-finished-function
+              '(lambda ()
+                (let ((buffer (current-buffer)))
+                  (clearcase-annotate-post-process buffer))))))))
 
 (defun clearcase-annotate-mktime (time-str)
   "Convert TIME-STR into a fractional number of days.
@@ -2688,87 +2712,95 @@ available in Emacs 21."
 (defun clearcase-annotate-post-process (buffer)
   "Compute the age, time and revision of each line in BUFFER.
 These will be stored as properties, so
-`vc-clearcase-annotate-difference', `vc-clearcase-annotate-time'
-and `vc-clearcase-annotate-revision-atline' work fast."
+`vc-clearcase-annotate-time' and
+`vc-clearcase-annotate-revision-atline' work fast.
+
+We also reformat the date, user and revision data to be nicely
+aligned."
   (with-current-buffer buffer
     (let* ((inhibit-read-only t)
            (date-rx (concat "^" clearcase-annotate-date-rx))
            (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|")
-           (date-str-len (length (format-time-string "%x" (current-time))))
-           (continuation-str (format (concat "%" (number-to-string date-str-len)
-                                             "s          .                  |") "")))
-      ;; Step 1: parse the buffer and annotate the text with the time
-      ;; and revision number of each line
-      (goto-char (point-max))
-      (let ((now (/ (float-time) 24 3600))
-	    (beg (point))
-	    (end (point))
-	    time-str revision-str time age)
-	(while (re-search-backward date-rx nil 'noerror)
-	  (setq time-str (match-string-no-properties 0))
-	  (setq time (save-match-data (clearcase-annotate-mktime time-str)))
-	  (setq age (- now time))
 
-	  ;; re-format the time string
-          (setq time-str (format-time-string "%D" (days-to-time time)))
-          (replace-match time-str nil t)
+           ;; find out the maximum possible length of the date string
+           (date-width (length (format-time-string 
+                                clearcase-annotate-date-format
+                                (apply 'encode-time 
+                                       (parse-time-string "Dec 31, 2010 12:00")))))
 
-	  (when (re-search-forward version-rx (c-point 'eol) 'noerror)
-	    (setq revision-str (match-string-no-properties 1)))
+           (date-pad-format (format "%%-%ds" date-width))
+           (version-pad-format (format " %%%ds |" clearcase-annotate-version-width))
+           (continuation-str (concat
+                              (make-string (+ date-width
+                                              clearcase-annotate-user-width
+                                              1)
+                                           ?\s)
+                              "."
+                              (make-string (1+ clearcase-annotate-version-width) ?\s)
+                              "|")))
 
-	  (beginning-of-line)
-	  (setq beg (point))
-	  (put-text-property beg end 'vc-clearcase-time time)
-	  (put-text-property beg end 'vc-clearcase-age age)
-	  (put-text-property beg end 'vc-clearcase-revision revision-str)
-	  (setq end (1- beg)))
-        
-        ;; Step 2: all the '|' markers in continuation lines
+      ;; Loop over the lines in the annotate buffer.  If we find a line
+      ;; containing revision information, we parse it, store the info as
+      ;; properties, than reformat the line to fit a fixed width.  For lines
+      ;; with no revision information (a line does not contain version info if
+      ;; it has the same info as the previous line), we just insert the
+      ;; continuation-str to be nicely aligned.
+
+      (let (time-str revision-str time)
         (goto-char (point-min))
-        (while (re-search-forward "^ +\\. +|" nil t)
-          (let* ((bol (c-point 'bol))
-                 (time (get-text-property bol 'vc-clearcase-time))
-                 (age (get-text-property bol 'vc-clearcase-age))
-                 (revision (get-text-property bol 'vc-clearcase-revision))
-                 (str continuation-str)
-                 (max (1- (length str))))
-            (put-text-property 0 max 'vc-clearcase-time time str)
-            (put-text-property 0 max 'vc-clearcase-age age str)
-            (put-text-property 0 max 'vc-clearcase-revision revision str)
-            (replace-match str nil nil)))
-        ;; Step 3: truncate or expand all the version numbers
-        (goto-char (point-min))
-        (while (re-search-forward version-rx nil t)
-          (let* ((str (match-string-no-properties 1))
-                 max
-                 (bol (c-point 'bol))
-                 (time (get-text-property bol 'vc-clearcase-time))
-                 (age (get-text-property bol 'vc-clearcase-age))
-                 (revision (get-text-property bol 'vc-clearcase-revision)))
-            (when (> (length str) 20)
-              (setq str (substring str -20 (length str))))
-            (setq str (format " %20s |" str))
-            (setq max (length str))
-            (put-text-property 0 max 'vc-clearcase-time time str)
-            (put-text-property 0 max 'vc-clearcase-age age str)
-            (put-text-property 0 max 'vc-clearcase-revision revision str)
-            (replace-match str nil t)))))))
+        (while (not (equal (point) (point-max)))
+          (cond
+            ((looking-at date-rx)       ; version information on this line
+             
+             (setq time-str (match-string-no-properties 0))
+             (setq time (save-match-data (clearcase-annotate-mktime time-str)))
 
-;;;;;; annotate-difference
-(defun vc-clearcase-annotate-difference (point)
-  "Return the age in days of POINT."
-  (get-text-property point 'vc-clearcase-age))
+             ;;re-format the time string
+             (setq time-str (format date-pad-format
+                                    (format-time-string clearcase-annotate-date-format
+                                                        (days-to-time time))))
+             (replace-match time-str nil t)
+
+             (when (re-search-forward version-rx (c-point 'eol) 'noerror)
+               (setq revision-str (match-string-no-properties 1))
+               ;; Reformat the revision string to fit in `clearcase-annotate-version-width' 
+               (let (str)
+                 (when (> (length revision-str) clearcase-annotate-version-width)
+                   (setq str (substring revision-str (- clearcase-annotate-version-width) (length revision-str))))
+                 (setq str (format version-pad-format str))
+                 (replace-match str nil t)))
+
+             (let ((beg (c-point 'bol))
+                   (end (c-point 'eol)))
+               (put-text-property beg end 'vc-clearcase-time time)
+               (put-text-property beg end 'vc-clearcase-revision revision-str)))
+            
+            ((looking-at "^ +\\. +|")   ; just a continuation line
+             (replace-match continuation-str nil t)))
+
+          (forward-line 1))))))
+             
+(defun clearcase-annotate-search-for-property (property point)
+  "Lookup PROPERTY starting at POINT and moving backwards line by line.
+This is used to look for the time and revisions in the annotate
+buffers."
+  (save-excursion
+    (goto-char point)
+    (beginning-of-line)
+    (while (and (not (eq (point) (point-min)))
+                (not (get-text-property (point) property)))
+      (forward-line -1))
+    (get-text-property (point) property)))
 
 ;;;;;; annotate-time
 (defun vc-clearcase-annotate-time ()
   "Return the time in days of (point)."
-  (get-text-property (point) 'vc-clearcase-time))
+  (clearcase-annotate-search-for-property 'vc-clearcase-time (point)))
 
 ;;;;;; annotate-exact-revision-at-line
 (defun vc-clearcase-annotate-extract-revision-at-line ()
   "Return the version of (point)."
-  (get-text-property (point) 'vc-clearcase-revision))
-
+  (clearcase-annotate-search-for-property 'vc-clearcase-revision (point)))
 
 ;;;;;; extra annotate commands
 

@@ -949,9 +949,9 @@ determine the root path for a snapshot view."
 	  (setf (clearcase-vprop-stream vprop)
 		(cleartool "lsstream -obsolete -fmt \"%%n\" -view %s" view-tag))))
 
-      (when (and dir
-		 (null (clearcase-vprop-root-path vprop))
-		 (clearcase-snapshot-view-p vprop))
+      (when (and dir (null (clearcase-vprop-root-path vprop)))
+        ;; The "pwv -root" command will not work in setviews.  It seems to
+        ;; work fine in dynamic views.
 	(setf (clearcase-vprop-root-path vprop)
               (file-name-as-directory
                (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -root")))))))
@@ -2977,15 +2977,13 @@ element * NAME -nocheckout"
 ;;;;;; root
 (defun vc-clearcase-root (file)
   "Return the view root directory for FILE."
-  ;; WARNING: this function is not supported for dynamic views, as we don't
-  ;; have a root-path for them (cleartool pwv -root) does not return anything
-  ;; for a dynamic view.  Since I don't have access to a dynamic view, I
-  ;; cannot find a workaround for this issue.
+  ;; WARNING: this function is not supported for set dynamic views (cleartool
+  ;; man setview), as we don't have a root-path for them (cleartool pwv -root)
+  ;; does not return anything for a setview.
   (setq file (expand-file-name file))
   (let ((fprop (clearcase-file-fprop file)))
     (if fprop
         (let ((vprop (clearcase-get-vprop fprop)))
-          (assert (clearcase-snapshot-view-p vprop))
           (clearcase-vprop-root-path vprop))
         ;; Else
         (with-cleartool-directory (file-name-directory file)

@@ -1,3 +1,8 @@
+2010-07-01  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-setup-vprop, vc-clearcase-root): try
+	to determine the view root even in dynamic views.
+
 2010-06-18  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-annotate-date-format)

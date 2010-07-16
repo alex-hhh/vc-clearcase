@@ -1,5 +1,16 @@
 -*- outline -*- 
 
+* Release 3.4
+
+This is a bugfix release, containing the following fixes:
+
+** Clearcase 7 compatibility on Windows (Bug #3)
+** Create versioned backups for long paths and versions (Bug #4)
+** Better compatibility with Emacs vc when setting up diff buffers
+** When hijacking a file, it is now made writable on disk
+** Ability to remove a file which has checkouts in other branches
+** Re-wrote annotation display code to support a flexible date format
+
 * Release 3.3
 
 ** Support for GNU Emacs 23.2 vc features:

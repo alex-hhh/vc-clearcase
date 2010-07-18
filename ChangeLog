@@ -1,3 +1,7 @@
+2010-07-18  Alexandru Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase-version): 487 updated to 4.5-pre
+
 2010-07-16  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* release 3.4

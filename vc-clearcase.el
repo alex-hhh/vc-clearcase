@@ -1148,6 +1148,13 @@ This can be used to obtain the vob-tag required for the
             (concat "/" (nth prefix-length path-elements)
                     (concat "/" (nth (1+ prefix-length) path-elements))))))))
 
+(defun clearcase-view-tag-for-path (path)
+  "Returns the view-tag which contains PATH."
+  (when (stringp path)
+    (setq path (expand-file-name path)))
+  (with-cleartool-directory path
+    (replace-regexp-in-string "[\n\r]" "" (cleartool "pwv -short"))))
+
 (defvar clearcase-all-labels nil
   "An obarray containing all labels (stored as symbols).")
 
@@ -1695,6 +1702,19 @@ hijacked files, not files which need to be updated."
 
     ;; we will compute results asynchronously
     nil))
+
+(defun clearcase-dir-format-extra-header (name value)
+  (concat (propertize name 'face 'font-lock-type-face)
+          (propertize value 'face 'font-lock-variable-name-face)))
+
+(defun vc-clearcase-dir-extra-headers (dir)
+  "Generate extra status headers for a ClearCase tree."
+  (concat
+   (clearcase-dir-format-extra-header 
+    "View tag   : " (clearcase-view-tag-for-path dir)) 
+   "\n"
+   (clearcase-dir-format-extra-header 
+    "Vob tag    : " (clearcase-vob-tag-for-path dir))))
 
 ;;;;;; working-revision
 (defun vc-clearcase-working-revision (file)

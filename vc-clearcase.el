@@ -3332,18 +3332,21 @@ Otherwise, it will ask for a file (you can also specify a
 directory, in this case the versions of the directory itself will
 be browsed)"
   (interactive "P")
-  (let ((file (buffer-file-name (current-buffer))))
-    (when ask-for-file
-      (setq file
-	    (expand-file-name
-	     (read-file-name "Browse vtree for: " file file t))))
-    (if (and file (vc-clearcase-registered file))
-	(progn
-	  (message "Starting Vtree browser...")
-	  (start-process-shell-command
-	   "Vtree_browser" nil 
-           (format "%s \"%s\"" clearcase-vtree-program file)))
-	(message "Not a clearcase file"))))
+  (let ((files (if (not ask-for-file)
+                   (nth 1 (vc-deduce-fileset nil nil))
+                   (let ((file (buffer-file-name (current-buffer))))
+                     (expand-file-name
+                      (read-file-name "Browse vtree for: " file file t))))))
+    (mapc (lambda (file)
+            (if (vc-clearcase-registered file)
+                (progn
+                  (message "Starting Vtree browser...")
+                  (set-process-query-on-exit-flag
+                   (start-process-shell-command
+                    "Vtree_browser" nil 
+                    (format "%s \"%s\"" clearcase-vtree-program file)) nil))
+                (message "Not a clearcase file")))
+          files)))
 
 ;;;;;; clearcase-file-not-found-handler
 

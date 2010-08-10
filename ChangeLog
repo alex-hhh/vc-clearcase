@@ -2,6 +2,16 @@
 
 	Patch by Kai Tetzlaff <kai.tetzlaff@web.de>
 
+	Deduce the fileset in the vtree browser
+
+	* vc-clearcase.el (vc-clearcase-gui-vtree-browser): use
+	`vc-deduce-fileset' to obtain the file(s) on which to start the
+	version tree browser.
+
+2010-08-10  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	Patch by Kai Tetzlaff <kai.tetzlaff@web.de>
+
 	Add the view-tag and vob-tag to the vc-dir listing.
 
 	* vc-clearcase.el (clearcase-view-tag-for-path)

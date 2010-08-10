@@ -677,6 +677,25 @@ otherwise it returns the value of the last form in BODY."
 ;; in the form of functions starting with clearcase-fprop- -- they
 ;; return derived information from a fprop.
 
+;; possible values for the STATUS slot:
+;;
+;; nil -- file is up-to-date
+;;
+;; 'reserved -- file is checked out reserved
+;;
+;; 'reserved -- file is checked out unreserved
+;;
+;; 'hijacked -- file was modified without checking it out first
+;;
+;; 'missing -- file was removed from disk but not from ClearCase
+;;
+;; 'special-selection -- file version is not selected by a configspec rule.
+;;     This can happen if the file is the result of a manual merge
+;; 
+;; 'broken-view -- the view is in a broken state and version info cannot be
+;;     retrieved.  This usually results from an aborted update -- running an
+;;     update again should fix the problem.
+
 (defstruct (clearcase-fprop
 	     (:constructor clearcase-make-fprop)
 	     (:copier clearcase-copy-fprop))
@@ -686,7 +705,7 @@ otherwise it returns the value of the last form in BODY."
   version-tid
   version               ; current file revision
   parent                ; parent revision
-  status                ; nil, 'reserved, 'unreserved, 'hijacked, 'broken-view
+  status                ; see notes above
   what-rule             ; confispec rule for the file
 
   ;; the checkout comment (when checked out).  Use `clearcase-fprop-comment'
@@ -748,6 +767,12 @@ FPROP can be nil, meaning it is not initialized."
 (defsubst clearcase-fprop-hijacked-p (fprop)
   "Return true if FPROP is hijacked."
   (eq (clearcase-fprop-status fprop) 'hijacked))
+
+(defsubst clearcase-fprop-missing-p (fprop)
+  "Return true if FPROP corresponds to a file that is missing.
+A missing file is a file which is registered with ClearCase, but
+was removed from the view."
+  (eq (clearcase-fprop-status fprop) 'missing))
 
 (defsubst clearcase-fprop-checkedout-p (fprop)
   "Return the checked out mode for FPROP or nil."
@@ -841,15 +866,21 @@ Note that if the file is checked out, the revision will end in
 semantics (for example it cannot be used for diffing purposes).
 In that case, the version will be adjusted in
 `clearcase-set-fprop-version-stage-2'"
-  (when (string-match "Rule: \\(.*\\)$" ls-string)
-    (setf (clearcase-fprop-what-rule fprop) (match-string 1 ls-string)))
+  (setf (clearcase-fprop-what-rule fprop)
+        (cond ((string-match "Rule: \\(.*\\)$" ls-string)
+               (match-string 1 ls-string))
+              ((string-match "\\[\\(special selection\\)\\]$" ls-string)
+               (match-string 1 ls-string))
+              (t nil)))
   (when (string-match "@@\\([^ \t]+\\)" ls-string)
     (let ((fver (match-string 1 ls-string)))
       (setf (clearcase-fprop-version fprop) fver)))
   ;; The ls string will also tell us when something is wrong with the
   ;; file.
   (setf (clearcase-fprop-status fprop)
-	(cond ((string-match "hijacked" ls-string) 'hijacked)
+	(cond ((string-match "\\[hijacked\\]" ls-string) 'hijacked)
+              ((string-match "\\[special selection\\]$" ls-string) 'special-selection)
+              ((string-match "\\[loaded but missing\\]" ls-string) 'missing)
 	      ((string-match "rule info unavailable" ls-string) 'broken-view)
 	      (t nil))))
 
@@ -873,12 +904,14 @@ the parent version, to conform to vc.el semantics."
       (when co-mode
 	;; The semantics of vc.el requires that the workfile version
 	;; be the parent version if the file is checked out.
-	(setf (clearcase-fprop-version fprop) pver))
-      (setf (clearcase-fprop-parent fprop) pver)
-      ;; a hijacked file should keep its existing checkout status and
-      ;; modeline (set by clearcase-set-fprop-version-stage-1)
-      (unless (memq (clearcase-fprop-status fprop) '(hijacked broken-view))
-	(setf (clearcase-fprop-status fprop) co-mode)))))
+	(setf (clearcase-fprop-version fprop) pver)
+
+        ;; a hijacked or missing file should keep its existing checkout status
+        ;; and modeline (set by clearcase-set-fprop-version-stage-1)
+        (unless (memq (clearcase-fprop-status fprop) '(missing hijacked broken-view))
+          (setf (clearcase-fprop-status fprop) co-mode)))
+
+      (setf (clearcase-fprop-parent fprop) pver))))
 
 (defun clearcase-refresh-files (files)
   "Refresh the status of FILES.
@@ -1454,7 +1487,7 @@ version."
 
       (ignore-cleartool-errors
 	(let ((ls-result (cleartool "ls \"%s\"" file)))
-	  (unless (string-match "Rule: \\(.*\\)$" ls-result)
+	  (unless (string-match "@@\\([^ \t]+\\)" ls-result)
 	    (throw 'done nil))          ; file is not registered
 
 	  (clearcase-set-fprop-version-stage-1 fprop ls-result)
@@ -1535,6 +1568,9 @@ information."
 
       ((clearcase-fprop-hijacked-p fprop)
        'unlocked-changes)
+
+      ((clearcase-fprop-missing-p fprop)
+       'missing)
 
       ((clearcase-fprop-checkedout-p fprop)
        (let ((latest (clearcase-fprop-latest fprop))
@@ -1727,6 +1763,7 @@ instead of the revision."
 		(concat branch "/" version-number))))
     (case (clearcase-fprop-status fprop)
       ('hijacked "HIJACKED")
+      ('missing "MISSING")
       ('broken-view "BROKEN-VIEW")
       ('reserved (concat "(R)" tag))
       ('unreserved (concat "(U)" tag))
@@ -3223,6 +3260,8 @@ the whole revision string."
 		     ('reserved ", checkedout reserved")
 		     ('unreserved ", checkedout unreserved")
 		     ('hijacked ", hijacked")
+		     ('special-selection ", special-selection")
+                     ('missing ", missing")
 		     ('broken-view ", broken view")
 		     (t "")))))
       (message "Not a clearcase file")))

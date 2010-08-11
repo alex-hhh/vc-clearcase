@@ -1,5 +1,10 @@
 2010-08-10  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
+	* vc-clearcase.el (vc-clearcase-root): return nil (instead of
+	signalling an error) if FILE is not inside ClearCase.
+
+2010-08-10  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
 	Patch by Kai Tetzlaff <kai.tetzlaff@web.de>
 
 	Deduce the fileset in the vtree browser

@@ -3038,14 +3038,20 @@ element * NAME -nocheckout"
   ;; man setview), as we don't have a root-path for them (cleartool pwv -root)
   ;; does not return anything for a setview.
   (setq file (expand-file-name file))
-  (let ((fprop (clearcase-file-fprop file)))
-    (if fprop
-        (let ((vprop (clearcase-get-vprop fprop)))
-          (clearcase-vprop-root-path vprop))
-        ;; Else
-        (with-cleartool-directory (file-name-directory file)
-          (replace-regexp-in-string "[\n\r]+" ""
-                                    (cleartool "pwv -root"))))))
+  (condition-case nil
+      (let ((fprop (clearcase-file-fprop file)))
+        (if fprop
+            (let ((vprop (clearcase-get-vprop fprop)))
+              (clearcase-vprop-root-path vprop))
+            ;; Else
+            (with-cleartool-directory (file-name-directory file)
+              (replace-regexp-in-string "[\n\r]+" ""
+                                        (cleartool "pwv -root")))))
+
+    ;; Return nil if there's an error from cleartool -- we might be called on
+    ;; a FILE which is not part of a cleartool view.
+    (cleartool-error nil)))
+
 ;;;;;; previous-version
 (defun vc-clearcase-previous-revision (file rev)
   "Return the FILE revision that precedes the revision REV.

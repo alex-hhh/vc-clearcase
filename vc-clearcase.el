@@ -2821,7 +2821,7 @@ aligned."
              (when (re-search-forward version-rx (c-point 'eol) 'noerror)
                (setq revision-str (match-string-no-properties 1))
                ;; Reformat the revision string to fit in `clearcase-annotate-version-width' 
-               (let (str)
+               (let ((str revision-str))
                  (when (> (length revision-str) clearcase-annotate-version-width)
                    (setq str (substring revision-str (- clearcase-annotate-version-width) (length revision-str))))
                  (setq str (format version-pad-format str))

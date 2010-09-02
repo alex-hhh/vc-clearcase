@@ -1607,7 +1607,10 @@ files from status listings and they can clutter the display.  We
 implement a simple mechanism for filtering out unwanted file: if
 the file name maches any regexp in this set (and it is not
 registered with ClearCase), it will not be displayed in the
-*vc-dir* buffer."
+*vc-dir* buffer.
+
+NOTE: filenames for which `backup-file-name-p' returns true are
+also ignored."
   :type '(repeat string)
   :group 'vc-clearcase)
 
@@ -1638,9 +1641,10 @@ is ignored (see `clearcase-dir-status-ignored-files')"
     ((looking-at "^.+$")                ; not an empty line
      ;; file is not managed by ClearCase
      (let ((file (match-string 0)))
-       ;; unregistered directories and files matching a regexp in
-       ;; clearcase-dir-status-ignored-files will not be displayed.
+       ;; unregistered directories, backup files and files matching a regexp
+       ;; in clearcase-dir-status-ignored-files will not be displayed.
        (unless (or (file-directory-p file)
+                   (backup-file-name-p file)
 		   (some (lambda (rx) (string-match rx file))
 			 clearcase-dir-status-ignored-files))
 	 (list file 'unregistered nil))))

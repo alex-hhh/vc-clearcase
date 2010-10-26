@@ -1,3 +1,8 @@
+2010-10-26  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* ucm.el (ucm-actb-visit-item-command): open the file using the
+	full path, instead of the directory name.
+
 2010-09-02  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-dir-status-parse-line): ignore backup

@@ -1173,9 +1173,10 @@ visited."
 	  (ucm-actb-directory
 	   (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
 	  (ucm-actb-file
-	   (pop-to-buffer (find-file-noselect (ucm-actb-directory-name data))))
+	   (pop-to-buffer (find-file-noselect (ucm-actb-file-full-path data))))
 	  (ucm-actb-revision
-	   ;; `clearcase-file-not-found-handler' will take care of this
+	   ;; `clearcase-file-not-found-handler' will take care of this,
+	   ;; except in dynamic views
 	   (pop-to-buffer (find-file-noselect (ucm-actb-revision-pname data)))))))))
 
 ;;;;;; ucm-actb-ediff-command

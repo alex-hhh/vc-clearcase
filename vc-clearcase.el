@@ -924,6 +924,71 @@ in bulk."
 	  (with-current-buffer (get-file-buffer file)
 	    (revert-buffer nil 'noconfirm nil)))))))
 
+;;;; Clearcase view information
+(defvar clearcase-known-vobs ()
+  "A list of the VOBS we know to exist.  
+Obtained from a \"lsvob -short\" call.")
+
+(defvar clearcase-view-info-for-path-cache 
+  (make-hash-table :test 'equal)
+  "A cache mapphing a path to its vob-tag, used by
+`clearcase-view-info-for-path' to avoid repeated lookups.")
+
+(defun clearcase-view-info-for-path (path)
+  "Return a list containing the VIEW-TAG, VIEW-ROOT and VOB-TAG for PATH."
+  (setq path (expand-file-name path))
+
+  ;; We assume that the list of vobs is known the first time we call this
+  ;; function and that the list never changes.
+  (when (null clearcase-known-vobs)
+    (setq clearcase-known-vobs 
+          (split-string (cleartool "lsvob -short"))))
+
+  (catch 'found
+
+    ;; Is this path in the cache already 
+    (let ((view-info (gethash path clearcase-view-info-for-path-cache)))
+      (when view-info
+        (throw 'found view-info)))
+
+    (with-cleartool-directory
+        (if (file-directory-p path) path (file-name-directory path))
+      (let* ((view-tag 
+              (replace-regexp-in-string "[\n\r]" "" (cleartool "pwv -short")))
+             (path-elements (split-string path "[\\\\\\/]" 'omit-nulls)))
+
+        (dolist (vob-tag clearcase-known-vobs)
+
+          ;; We cannot check if the VOB tag is in the path as a string search,
+          ;; because the patch might use mixed path separators.  Instead, we
+          ;; split the vob-tag and the path in separators and check if the
+          ;; elements match...
+
+          (let* ((vob-elements (split-string vob-tag "[\\\\\\/]" 'omit-nulls))
+                 (vob-tag-pos (search vob-elements path-elements :test 'equal)))
+
+            (when vob-tag-pos
+              (let* ((view-root (mapconcat 'identity (subseq path-elements 0 vob-tag-pos) "/"))
+                     (view-info (list view-tag vob-tag view-root)))
+                (puthash path view-info clearcase-view-info-for-path-cache)
+              (throw 'found view-info)))))))
+
+        ;; no vob-tag for this path
+        nil))
+            
+(defun clearcase-view-tag-for-path (path)
+  "Returns the view-tag which contains PATH."
+  (nth 0 (clearcase-view-info-for-path path)))
+
+(defun clearcase-vob-tag-for-path (path)
+  "Returns the VOB-TAG which contains PATH."
+  (nth 1 (clearcase-view-info-for-path path)))
+
+(defun clearcase-view-root-for-path (path)
+  "Returns the view root directory for PATH."
+  (nth 2 (clearcase-view-info-for-path path)))
+
+
 ;;;; Clearcase view-tag properties
 
 (defstruct (clearcase-vprop
@@ -983,11 +1048,8 @@ determine the root path for a snapshot view."
 		(cleartool "lsstream -obsolete -fmt \"%%n\" -view %s" view-tag))))
 
       (when (and dir (null (clearcase-vprop-root-path vprop)))
-        ;; The "pwv -root" command will not work in setviews.  It seems to
-        ;; work fine in dynamic views.
 	(setf (clearcase-vprop-root-path vprop)
-              (file-name-as-directory
-               (replace-regexp-in-string "[\n\r]+" "" (cleartool "pwv -root")))))))
+              (clearcase-view-root-for-path dir)))))
   vprop)
 
 
@@ -1130,30 +1192,6 @@ to be read from cleartool."
 ;;; The list of labels is reset at each read, and populated on the fly.
 ;;; During the first few seconds of the read, not all the labels will be
 ;;; available.
-
-(defun clearcase-vob-tag-for-path (path)
-  "Return the vob tag in which PATH resides.
-This can be used to obtain the vob-tag required for the
-`clearcase-read-label' function."
-  (setq path (expand-file-name path))
-  (with-cleartool-directory
-      (if (file-directory-p path) path (file-name-directory path))
-    (let ((view-root (cleartool "pwv -root")))
-      (let ((path-elements (split-string path "[\\\\\\/]"))
-	    (prefix-length (length (split-string view-root "[\\\\\\/]"))))
-	;; On Windows, the vob tag looks like "\\Vob_Name", on Solaris, it is
-	;; "/vobs/Vob_Name".
-        (if (eq system-type 'windows-nt)
-            (concat "\\" (nth prefix-length path-elements))
-            (concat "/" (nth prefix-length path-elements)
-                    (concat "/" (nth (1+ prefix-length) path-elements))))))))
-
-(defun clearcase-view-tag-for-path (path)
-  "Returns the view-tag which contains PATH."
-  (when (stringp path)
-    (setq path (expand-file-name path)))
-  (with-cleartool-directory path
-    (replace-regexp-in-string "[\n\r]" "" (cleartool "pwv -short"))))
 
 (defvar clearcase-all-labels nil
   "An obarray containing all labels (stored as symbols).")
@@ -1832,27 +1870,12 @@ for the file insertion than a checkin."
 
 ;;;;;; responsible-p
 
-(defvar clearcase-known-vobs ()
-  "A list of the VOBS we know to exist.
-This is used by `vc-clearcase-responsible-p' to avoid doing a
-lsvob.")
-
 (defun vc-clearcase-responsible-p (file)
   "Return t if we responsible for FILE.
 We consider ourselves responsible if FILE is inside a ClearCase
 view under a VOB directory."
-
   (ignore-cleartool-errors
-    (let ((vob (clearcase-vob-tag-for-path file)))
-      (if (member vob clearcase-known-vobs)
-	  t
-	  ;; else
-	  (progn
-	    ;; lsvob will signal an error if VOB is not valid.
-	    (cleartool "lsvob -short \"%s\"" vob)
-	    (push vob clearcase-known-vobs)
-	    t
-	    )))))
+    (not (null (clearcase-vob-tag-for-path file)))))
 
 ;;;;;; checkin
 (defun vc-clearcase-checkin (files rev comment)
@@ -3037,24 +3060,12 @@ element * NAME -nocheckout"
 ;;;;; MISCELLANEOUS
 ;;;;;; root
 (defun vc-clearcase-root (file)
-  "Return the view root directory for FILE."
-  ;; WARNING: this function is not supported for set dynamic views (cleartool
-  ;; man setview), as we don't have a root-path for them (cleartool pwv -root)
-  ;; does not return anything for a setview.
-  (setq file (expand-file-name file))
-  (condition-case nil
-      (let ((fprop (clearcase-file-fprop file)))
-        (if fprop
-            (let ((vprop (clearcase-get-vprop fprop)))
-              (clearcase-vprop-root-path vprop))
-            ;; Else
-            (with-cleartool-directory (file-name-directory file)
-              (replace-regexp-in-string "[\n\r]+" ""
-                                        (cleartool "pwv -root")))))
-
-    ;; Return nil if there's an error from cleartool -- we might be called on
-    ;; a FILE which is not part of a cleartool view.
-    (cleartool-error nil)))
+  "Return the view root directory for FILE.
+This function will return nil if FILE is not inside a ClearCase
+view.  It will return the empty string if the view is a setview
+in UNIX or Linux."
+  (ignore-cleartool-errors
+    (clearcase-view-root-for-path file)))
 
 ;;;;;; previous-version
 (defun vc-clearcase-previous-revision (file rev)

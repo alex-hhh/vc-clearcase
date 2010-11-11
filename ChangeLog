@@ -1,3 +1,8 @@
+2010-11-10  Michael Albinus  <michael.albinus@gmx.de>
+
+	* vc-clearcase.el (clearcase-dir-status-collect, vc-clearcase-diff):
+	Do not use `kill-line' or `kill-region', they trash the kill ring.
+
 2010-11-10  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-known-vobs)

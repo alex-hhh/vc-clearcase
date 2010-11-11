@@ -1698,15 +1698,15 @@ vc-dir via the update function."
 	(goto-char (point-max))
 	(insert string)
 	(goto-char (point-min))
-	(let ((kill-whole-line t))
-	  (while (and (not (= (point-min) (point-max)))
-		      (progn (re-search-forward "$")
-			     (looking-at "\n"))) ; do we have a full line?
-	    (goto-char (point-min))
-	    (let ((d (clearcase-dir-status-parse-line)))
-	      (when d (push d data)))
-	    (goto-char (point-min))
-	    (kill-line)))))
+	(while (and (not (= (point-min) (point-max)))
+		    (progn (re-search-forward "$")
+			   (looking-at "\n"))) ; do we have a full line?
+	  (goto-char (point-min))
+	  (let ((d (clearcase-dir-status-parse-line)))
+	    (when d (push d data)))
+	  (goto-char (point-min))
+	  (forward-line 1)
+	  (delete-region (point-min) (point)))))
     (funcall (process-get process 'update-function) (nreverse data) t)))
 
 (defun clearcase-dir-status-sentinel (process event)
@@ -2728,7 +2728,7 @@ when REV2 is nil, the current contents of the file are used."
                                   (clearcase-diff-with-diff file rev1 rev2)
                                   (clearcase-diff-with-cleartool file rev1 rev2))))
               (when identical?
-                (kill-region diff-start-pos (point-max)))
+                (delete-region diff-start-pos (point-max)))
               (setq all-identical? (and all-identical? identical?)))))
         (goto-char diff-start-pos)
         all-identical?))))

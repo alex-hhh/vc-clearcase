@@ -395,7 +395,7 @@ callback function if that is available."
       (with-timeout ((or timeout cleartool-timeout))
 	(while (< cleartool-ctid tid)
 	  (setq received-some-data
-		(or 
+		(or
                  ;; will return t if some data was received
                  (accept-process-output cleartool-process 2 0 t)
                  received-some-data))))
@@ -691,7 +691,7 @@ otherwise it returns the value of the last form in BODY."
 ;;
 ;; 'special-selection -- file version is not selected by a configspec rule.
 ;;     This can happen if the file is the result of a manual merge
-;; 
+;;
 ;; 'broken-view -- the view is in a broken state and version info cannot be
 ;;     retrieved.  This usually results from an aborted update -- running an
 ;;     update again should fix the problem.
@@ -732,7 +732,7 @@ otherwise it returns the value of the last form in BODY."
 (defun clearcase-file-fprop (file)
   "Return the fprop structure associated with FILE."
   ;; Try different methods of getting the fprop, from fastest to slowest:
-  (or 
+  (or
    ;; Straightforward...
    (vc-file-getprop file 'vc-clearcase-fprop)
 
@@ -926,10 +926,10 @@ in bulk."
 
 ;;;; Clearcase view information
 (defvar clearcase-known-vobs ()
-  "A list of the VOBS we know to exist.  
+  "A list of the VOBS we know to exist.
 Obtained from a \"lsvob -short\" call.")
 
-(defvar clearcase-view-info-for-path-cache 
+(defvar clearcase-view-info-for-path-cache
   (make-hash-table :test 'equal)
   "A cache mapphing a path to its vob-tag, used by
 `clearcase-view-info-for-path' to avoid repeated lookups.")
@@ -941,19 +941,19 @@ Obtained from a \"lsvob -short\" call.")
   ;; We assume that the list of vobs is known the first time we call this
   ;; function and that the list never changes.
   (when (null clearcase-known-vobs)
-    (setq clearcase-known-vobs 
+    (setq clearcase-known-vobs
           (split-string (cleartool "lsvob -short"))))
 
   (catch 'found
 
-    ;; Is this path in the cache already 
+    ;; Is this path in the cache already
     (let ((view-info (gethash path clearcase-view-info-for-path-cache)))
       (when view-info
         (throw 'found view-info)))
 
     (with-cleartool-directory
         (if (file-directory-p path) path (file-name-directory path))
-      (let* ((view-tag 
+      (let* ((view-tag
               (replace-regexp-in-string "[\n\r]" "" (cleartool "pwv -short")))
              (path-elements (split-string path "[\\\\\\/]" 'omit-nulls)))
 
@@ -975,7 +975,7 @@ Obtained from a \"lsvob -short\" call.")
 
         ;; no vob-tag for this path
         nil))
-            
+
 (defun clearcase-view-tag-for-path (path)
   "Returns the view-tag which contains PATH."
   (nth 0 (clearcase-view-info-for-path path)))
@@ -1344,7 +1344,7 @@ ClearCase uses."
 REVISION can be nil, in which case the file's current revision or
 a checked out revision is assumed."
   (assert (vc-clearcase-registered file))
-  (let ((merge-links 
+  (let ((merge-links
          (if revision
              (cleartool "desc -short -ahlink Merge \"%s@@%s\"" file revision)
              (cleartool "desc -short -ahlink Merge \"%s\"" file)))
@@ -1430,7 +1430,7 @@ If FORCE is not nil, always read the properties."
     (before clearcase-cleanup-version (file &optional rev manual regexp))
   "Create a shorter backup file for ClearCase files.
 REV for ClearCase files can be very long.  We shorten it by using
-only the last branch and version number. 
+only the last branch and version number.
 
 Note that this will have a problem when branches are created with
 -pbranch option.  See also Bug #4"
@@ -1440,7 +1440,7 @@ Note that this will have a problem when branches are created with
           (when (string-match "[\\\\\/]\\([^\\\\\/]+\\)[\\\\\/]\\([0-9]+\\)$" rev)
             (setq rev (concat (match-string 1 rev) "~" (match-string 2 rev))))
           ;; else
-          (setq rev (concat (clearcase-fprop-branch fprop) "~" 
+          (setq rev (concat (clearcase-fprop-branch fprop) "~"
                             (clearcase-fprop-version-number fprop)))))))
 
 (defadvice vc-start-logentry
@@ -1752,10 +1752,10 @@ hijacked files, not files which need to be updated."
 (defun vc-clearcase-dir-extra-headers (dir)
   "Generate extra status headers for a ClearCase tree."
   (concat
-   (clearcase-dir-format-extra-header 
-    "View tag   : " (clearcase-view-tag-for-path dir)) 
+   (clearcase-dir-format-extra-header
+    "View tag   : " (clearcase-view-tag-for-path dir))
    "\n"
-   (clearcase-dir-format-extra-header 
+   (clearcase-dir-format-extra-header
     "Vob tag    : " (clearcase-vob-tag-for-path dir))))
 
 ;;;;;; working-revision
@@ -2500,7 +2500,7 @@ START-REVISION will be ignored."
     (when (and start-revision (not (equal limit 1)))
       (warn "vc-clearcase-print-log: START-REVISION = %s, LIMIT = %s not supported"
             start-revision limit))
-    
+
     (if (and start-revision (equal limit 1))
         (insert
          (cleartool "desc -fmt \"%s\" \"%s@@%s\""
@@ -2515,7 +2515,7 @@ START-REVISION will be ignored."
           (push (if (clearcase-ucm-view-p fprop)
                     clearcase-lshistory-fmt-ucm
                     clearcase-lshistory-fmt) args)
-          
+
           (when limit
             (push "-last" args)
             (push (format "%s" limit) args))
@@ -2807,9 +2807,9 @@ aligned."
            (version-rx " \\([\\/][-a-zA-Z0-9._\\/]+\\) +|")
 
            ;; find out the maximum possible length of the date string
-           (date-width (length (format-time-string 
+           (date-width (length (format-time-string
                                 clearcase-annotate-date-format
-                                (apply 'encode-time 
+                                (apply 'encode-time
                                        (parse-time-string "Dec 31, 2010 12:00")))))
 
            (date-pad-format (format "%%-%ds" date-width))
@@ -2835,7 +2835,7 @@ aligned."
         (while (not (equal (point) (point-max)))
           (cond
             ((looking-at date-rx)       ; version information on this line
-             
+
              (setq time-str (match-string-no-properties 0))
              (setq time (save-match-data (clearcase-annotate-mktime time-str)))
 
@@ -2847,7 +2847,7 @@ aligned."
 
              (when (re-search-forward version-rx (c-point 'eol) 'noerror)
                (setq revision-str (match-string-no-properties 1))
-               ;; Reformat the revision string to fit in `clearcase-annotate-version-width' 
+               ;; Reformat the revision string to fit in `clearcase-annotate-version-width'
                (let ((str revision-str))
                  (when (> (length revision-str) clearcase-annotate-version-width)
                    (setq str (substring revision-str (- clearcase-annotate-version-width) (length revision-str))))
@@ -2858,12 +2858,12 @@ aligned."
                    (end (c-point 'eol)))
                (put-text-property beg end 'vc-clearcase-time time)
                (put-text-property beg end 'vc-clearcase-revision revision-str)))
-            
+
             ((looking-at "^ +\\. +|")   ; just a continuation line
              (replace-match continuation-str nil t)))
 
           (forward-line 1))))))
-             
+
 (defun clearcase-annotate-search-for-property (property point)
   "Lookup PROPERTY starting at POINT and moving backwards line by line.
 This is used to look for the time and revisions in the annotate
@@ -2898,10 +2898,10 @@ one.  If multiple contributors exist, the user is prompted to
 select one."
   (interactive)
   (declare (special vc-annotate-parent-file vc-annotate-parent-rev))
-  (let* ((contributors (clearcase-revision-contributors 
+  (let* ((contributors (clearcase-revision-contributors
                         vc-annotate-parent-file
                         vc-annotate-parent-rev))
-         (rev (cond 
+         (rev (cond
                 ((null contributors)
                  (error "Revision %s has no contributors" vc-annotate-parent-rev))
                 ((> (length contributors) 1)
@@ -2917,10 +2917,10 @@ to select one."
   (interactive)
   (declare (special vc-annotate-parent-file vc-annotate-parent-rev))
   (let* ((rev-at-line (vc-annotate-extract-revision-at-line))
-         (contributors (clearcase-revision-contributors 
+         (contributors (clearcase-revision-contributors
                         vc-annotate-parent-file
                         rev-at-line))
-         (rev (cond 
+         (rev (cond
                 ((null contributors)
                  (error "Revision %s has no contributors" rev-at-line))
                 ((> (length contributors) 1)
@@ -2932,7 +2932,7 @@ to select one."
   "Annotate the latest revision on the current branch."
   (interactive)
   (declare (special vc-annotate-parent-rev))
-  (let ((latest (replace-regexp-in-string 
+  (let ((latest (replace-regexp-in-string
                  "[\\/]\\([0-9]+\\)$" "LATEST" vc-annotate-parent-rev t t 1)))
     (vc-annotate-warp-revision latest)))
 
@@ -2947,18 +2947,18 @@ to vc-annotate-mode."
     (define-key m "P" 'vc-clearcase-annotate-contributor)
     (define-key m "L" 'vc-clearcase-annotate-latest-on-branch))
 
-  (dolist (menu-item '(["--" nil 
-                        :visible (eq vc-annotate-backend 'CLEARCASE)]
-                       
-                       ["Clearcase annotate contributor" 
-                        vc-clearcase-annotate-contributor 
+  (dolist (menu-item '(["--" nil
                         :visible (eq vc-annotate-backend 'CLEARCASE)]
 
-                       ["Clearcase annotate contributor of line" 
-                        vc-clearcase-annotate-contributor-to-line 
+                       ["Clearcase annotate contributor"
+                        vc-clearcase-annotate-contributor
                         :visible (eq vc-annotate-backend 'CLEARCASE)]
 
-                       ["Clearcase annotate latest on branch" 
+                       ["Clearcase annotate contributor of line"
+                        vc-clearcase-annotate-contributor-to-line
+                        :visible (eq vc-annotate-backend 'CLEARCASE)]
+
+                       ["Clearcase annotate latest on branch"
                         vc-clearcase-annotate-latest-on-branch
                         :visible (eq vc-annotate-backend 'CLEARCASE)]))
 
@@ -3364,7 +3364,7 @@ be browsed)"
                   (message "Starting Vtree browser...")
                   (set-process-query-on-exit-flag
                    (start-process-shell-command
-                    "Vtree_browser" nil 
+                    "Vtree_browser" nil
                     (format "%s \"%s\"" clearcase-vtree-program file)) nil))
                 (message "Not a clearcase file")))
           files)))

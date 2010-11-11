@@ -672,7 +672,7 @@ set."
   ;; the previous revision against which we will diff.  Don't use this slot
   ;; directly.  Use `ucm-actb-revision-previous' instead.
   previous^
-  
+
   ;; number of revisions between name and previous^
   (count 1)
 
@@ -766,11 +766,11 @@ the previous revision will be an older one"
       (let ((first (car revisions))
             (rest (cdr revisions)))
         ;; Never merge checked out versions with predecessors.
-        (unless (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" 
+        (unless (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?"
                               (ucm-actb-revision-name first))
           (catch 'next
             (while t
-              (let ((prev (find (ucm-actb-revision-previous first) 
+              (let ((prev (find (ucm-actb-revision-previous first)
                                 rest
                                 :test 'equal
                                 :key 'ucm-actb-revision-name)))
@@ -892,7 +892,7 @@ attach to the activity ewoc."
                           (setq b-branch (match-string 1 b-rev)
                                 b-revision (string-to-number (match-string 2 b-rev))))
                         (or (string< a-branch b-branch)
-                            (and (string= a-branch b-branch) 
+                            (and (string= a-branch b-branch)
                                  (< a-revision b-revision)))))))))
 
     ;; Sort the files inside each directory
@@ -1102,7 +1102,7 @@ If no revisions are selected, the current revision is checked in."
 		  (ucm-actb-refresh-command))
 		(set-window-configuration window-configuration))
 	      'setup
-	      `((log-edit-listfun 
+	      `((log-edit-listfun
                  . ,(lambda ()
                             (interactive)
                             (mapcar 'file-relative-name modified-files)))
@@ -1206,7 +1206,7 @@ visited."
   (ewoc-filter ucm-actb-ewoc
                (lambda (data)
                  (typecase data
-                   (ucm-actb-file 
+                   (ucm-actb-file
                     (message "Optimizing %s" (ucm-actb-file-name data))
                     (ucm-actb-file-optimize-revisions data) t)
                    (ucm-actb-revision
@@ -1317,11 +1317,11 @@ checked-in using \\[log-edit-show-files]."
 			(clearcase-refresh-files files))))
 		  (set-window-configuration window-configuration))
 		'setup
-		`((log-edit-listfun 
+		`((log-edit-listfun
                    . ,(lambda ()
                               (interactive)
                               (let ((default-directory dir))
-                                (mapcar 'file-relative-name 
+                                (mapcar 'file-relative-name
                                         (ucm-checked-out-files activity dir)))))
                   (log-edit-diff-function
                    . ,(lambda ()

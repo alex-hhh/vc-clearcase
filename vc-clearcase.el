@@ -1028,11 +1028,13 @@ We set the view properties plus the stream name for UCM views.
 If DIR is not nil it is a directory inside the view, we use it to
 determine the root path for a snapshot view."
 
-  ;; WARNING: we assume that DIR is a directory inside the view VPROP, but we
-  ;; don't check.  This can lead to problems when DIR is inside a different
-  ;; view...
-
   (with-cleartool-directory dir
+
+    ;; DIR needs to be a directory inside this VPROP.  We check for that.
+    (let ((vtag (replace-regexp-in-string
+		 "[\n\r]+" "" (cleartool "pwv -short"))))
+      (assert (equal vtag (clearcase-vprop-name vprop))))
+
     (unless (clearcase-vprop-properties vprop)
       (let* ((view-tag (clearcase-vprop-name vprop))
 	     (vdata (cleartool "lsview -properties -full %s" view-tag))
@@ -1047,9 +1049,17 @@ determine the root path for a snapshot view."
 	  (setf (clearcase-vprop-stream vprop)
 		(cleartool "lsstream -obsolete -fmt \"%%n\" -view %s" view-tag))))
 
-      (when (and dir (null (clearcase-vprop-root-path vprop)))
-	(setf (clearcase-vprop-root-path vprop)
-              (clearcase-view-root-for-path dir)))))
+      (when (null (clearcase-vprop-root-path vprop))
+        (setf (clearcase-vprop-root-path vprop)
+              (clearcase-view-root-for-path dir)))
+      ;; `clearcase-view-root-for-path' could not determine the view root.  We
+      ;; know that DIR is inside the view (othervise we could not have
+      ;; obtained the view info, so it is not inside a vob tag.  In that case,
+      ;; we simply assume that DIR is the view root.  This is not 100%
+      ;; correct, but matches the current usage of this function.
+      (when (null (clearcase-vprop-root-path vprop))
+        (setf (clearcase-vprop-root-path vprop) dir))))
+
   vprop)
 
 
@@ -1082,7 +1092,8 @@ asking cleartool for information.  See
 	     (vprop (find vtag clearcase-all-vprops
 			  :key 'clearcase-vprop-name :test 'equal)))
 	(unless vprop
-	  (assert dir)
+          (unless dir
+            (error "Need DIR to construct VPROP for %s" vtag))
 	  (setq vprop (clearcase-setup-vprop
 		       (clearcase-make-vprop :name vtag)
 		       dir))
@@ -3767,6 +3778,17 @@ In interactive mode, prompts for a view-tag name."
   (interactive (list (clearcase-read-view-tag "Start dynamic view: ")))
   (message "Starting %s dynamic view..." view-tag)
   (message (cleartool "startview %s" view-tag))
+
+  ;; try to construct a VPROP for the view we just started.  This code will
+  ;; only work if views are mounted in their default locations, M: drive on
+  ;; windows, and /views directory on Linux and UNIX.
+
+  (let ((view-root (if (eq system-type 'windows-nt)
+                       (concat "m:/" view-tag)
+                       (concat "/views/" view-tag))))
+    (when (file-exists-p view-root)
+      (clearcase-get-vprop view-tag view-root)))
+
   (message "Starting %s dynamic view...done." view-tag))
 
 ;;;; Update vc keymap

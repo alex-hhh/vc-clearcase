@@ -752,8 +752,7 @@ the previous revision will be an older one"
 	(previous (ucm-actb-revision-previous revision)))
     (when (string-match "\\<CHECKEDOUT\\(.[0-9]+\\)?" current)
       (setq current nil))
-    ;; make sure file is loaded, as we need a proper FPROP to run the diff.
-    (find-file-noselect file)
+    (vc-clearcase-registered file)      ; may create a FPROP if needed
     (vc-clearcase-diff (list file) previous current)
     (get-buffer "*vc-diff*")))
 
@@ -1070,24 +1069,12 @@ otherwise the marks are set."
   "Checkin selected revisions from the UCM activity buffer.
 If no revisions are selected, the current revision is checked in."
   (interactive)
-  (lexical-let ((files (ucm-actb-collect-marked-checkouts))
-		(buf (current-buffer))
-		(modified-files nil)
-		(reverted-files nil)
+  (lexical-let ((buf (current-buffer))
+		(modified-files (clearcase-revert-unchanged-files 
+                                 (ucm-actb-collect-marked-checkouts)))
 		(dir default-directory)
 		(window-configuration (current-window-configuration)))
 
-    ;; undo checkouts which contain no modifications.
-    (dolist (file files)
-      (find-file-noselect file)         ; read in file so it has a fprop
-      (if (and (file-regular-p file)
-	       (vc-clearcase-workfile-unchanged-p file))
-	  (progn
-	    (message "Undo checkout for unmodified file %s" file)
-	    (cleartool "uncheckout -rm \"%s\"" file)
-	    (push file reverted-files))
-	  (push file modified-files)))
-    (clearcase-refresh-files reverted-files)
     (when (null modified-files)
       (error "No files to checkin."))
 
@@ -1097,7 +1084,7 @@ If no revisions are selected, the current revision is checked in."
 		  (let ((comment-text
                          (buffer-substring-no-properties (point-min) (point-max))))
 		    (vc-clearcase-checkin modified-files nil comment-text)))
-		(clearcase-refresh-files files)
+		(clearcase-refresh-files modified-files)
 		(with-current-buffer buf
 		  (ucm-actb-refresh-command))
 		(set-window-configuration window-configuration))
@@ -1124,10 +1111,10 @@ If no revisions are selected, the current revision is checked in."
   (let ((files (ucm-actb-collect-marked-checkouts)))
     (dolist (file files)
       (message "Reverting %s" (file-relative-name file))
-      (find-file-noselect file)         ; read in file so it has a fprop
-      (vc-clearcase-revert file))
+      (when (vc-clearcase-registered file) ; ensure a FPROP exists!
+        (vc-clearcase-revert file))
     (clearcase-refresh-files files))
-  (ucm-actb-refresh-command))
+  (ucm-actb-refresh-command)))
 
 ;;;;;; ucm-actb-transfer-revisions-command
 (defun ucm-actb-transfer-revisions-command ()
@@ -1279,24 +1266,14 @@ checked-in using \\[log-edit-show-files]."
     (error "Not a real activity"))
   (with-cleartool-directory default-directory
     (lexical-let ((activity activity)
-		  (dir default-directory)
-		  (window-configuration (current-window-configuration)))
-      (let ((modified-files nil)
-	    (reverted-files nil))
-	;; Checked out files which have no changes are reverted now.
-	(dolist (file (ucm-checked-out-files activity dir))
-	  (find-file-noselect file)     ; read in file so it has a fprop
-	  (if (and (file-regular-p file)
-		   (vc-clearcase-workfile-unchanged-p file))
-	      (progn
-		(message "Undo checkout for unmodified file %s" file)
-		(cleartool "uncheckout -rm \"%s\"" file)
-		(push file reverted-files))
-	      (push file modified-files)))
-	(clearcase-refresh-files reverted-files)
-	(when (null modified-files)
-	  (error "No files to checkin.")))
+                  (dir default-directory)
+                  (window-configuration (current-window-configuration)))
 
+      (let ((modified-files (clearcase-revert-unchanged-files 
+                             (ucm-checked-out-files activity dir))))
+        (when (null modified-files)
+          (error "No files to checkin.")))
+      
       (log-edit (lambda ()
 		  (interactive)
 		  (with-cleartool-directory dir
@@ -1307,17 +1284,17 @@ checked-in using \\[log-edit-show-files]."
 			    ;; Need to grab the file list again, in case it
 			    ;; has changed.
 			    (files (ucm-checked-out-files activity dir)))
-
+                        
 			(if (string= comment-text "")
 			    (cleartool "checkin -nc activity:%s@%s" activity ucm-projects-vob)
 			    (with-clearcase-cfile (comment comment-text)
 			      (cleartool "checkin -cfile \"%s\" activity:%s@%s"
 					 comment activity ucm-projects-vob)))
-
+                        
 			(clearcase-refresh-files files))))
 		  (set-window-configuration window-configuration))
-		'setup
-		`((log-edit-listfun
+                'setup
+                `((log-edit-listfun
                    . ,(lambda ()
                               (interactive)
                               (let ((default-directory dir))
@@ -1334,7 +1311,7 @@ checked-in using \\[log-edit-show-files]."
                                   (setq buffer-read-only t))
                                 (let ((files (ucm-checked-out-files activity dir)))
                                   (vc-clearcase-diff files nil nil diff-buffer))
-                                  (pop-to-buffer diff-buffer)))))
+                                (pop-to-buffer diff-buffer)))))
                 (get-buffer-create "*UCM-Checkin-Log*")))))
 
 (defun ucm-checked-out-files (activity dir)

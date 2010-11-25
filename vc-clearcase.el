@@ -924,6 +924,25 @@ in bulk."
 	  (with-current-buffer (get-file-buffer file)
 	    (revert-buffer nil 'noconfirm nil)))))))
 
+(defun clearcase-revert-unchanged-files (files)
+  "Undo checkout for all FILES which are not modified.
+Returns a list of files that are modified."
+  (let ((modified-files nil)
+        (reverted-files nil))
+    ;; Checked out files which have no changes are reverted now.
+    (dolist (file files)
+      (if (and (file-regular-p file)
+               ;; will create a fprop if file is not loaded in emacs
+               (vc-clearcase-registered file)
+               (vc-clearcase-workfile-unchanged-p file))
+          (progn
+            (message "Undo checkout for unmodified file %s" file)
+            (cleartool "uncheckout -rm \"%s\"" file)
+            (push file reverted-files))
+          (push file modified-files)))
+    (clearcase-refresh-files reverted-files)
+    modified-files))
+
 ;;;; Clearcase view information
 (defvar clearcase-known-vobs ()
   "A list of the VOBS we know to exist.

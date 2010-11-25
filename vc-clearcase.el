@@ -1397,6 +1397,15 @@ a checked out revision is assumed."
       (setq pos (match-end 0)))
     attributes))
 
+(defun clearcase-get-attribute (object attribute)
+  "Return the value of the OBJECT's ATTRIBUTE."
+  ;; NOTE %SN[...]a returns string attribues with quotes.  We use READ
+  ;; to strip off quotes, but this is not quite correct.
+  (let ((value (cleartool "desc -fmt \"%%SN[%s]a\" %s" attribute object)))
+    (if (equal value "")
+        nil
+        (read value))))
+
 (defun clearcase-add-attribute (object attribute value)
   "Attach to the ClearCase OBJECT an ATTRIBUTE with VALUE.
 OBJECT can be any ClearCase object (branch, label, activity,

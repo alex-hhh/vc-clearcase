@@ -934,6 +934,7 @@ Returns a list of files that are modified."
       (if (and (file-regular-p file)
                ;; will create a fprop if file is not loaded in emacs
                (vc-clearcase-registered file)
+               (vc-resynch-buffer file) ; in case it was modified externally
                (vc-clearcase-workfile-unchanged-p file))
           (progn
             (message "Undo checkout for unmodified file %s" file)

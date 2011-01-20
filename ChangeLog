@@ -1,3 +1,13 @@
+2011-01-20  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase-registered): use "-dir" option for
+	the ls command (makes it work for directories)
+
+2011-01-18  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-revert-unchanged-files): more
+	reliable detection of files modified outside emacs.
+
 2011-01-13  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-revert-unchanged-files): call

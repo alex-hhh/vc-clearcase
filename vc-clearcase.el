@@ -929,18 +929,34 @@ in bulk."
 Returns a list of files that are modified."
   (let ((modified-files nil)
         (reverted-files nil))
-    ;; Checked out files which have no changes are reverted now.
+    ;; Checked-out files which have no changes are reverted now.
     (dolist (file files)
-      (if (and (file-regular-p file)
-               ;; will create a fprop if file is not loaded in emacs
-               (vc-clearcase-registered file)
-               (vc-resynch-buffer file) ; in case it was modified externally
-               (vc-clearcase-workfile-unchanged-p file))
-          (progn
-            (message "Undo checkout for unmodified file %s" file)
-            (cleartool "uncheckout -rm \"%s\"" file)
-            (push file reverted-files))
+      (if (file-regular-p file)
+          (let ((fprop (clearcase-file-fprop file)))
+
+            (if fprop
+                ;; make sure the file's state is up-to-date, it might have
+                ;; been modified outside emacs...
+                (clearcase-maybe-set-vc-state file 'force)
+                (progn
+                  ;; We don't have a FPROP, this could mean that the file is
+                  ;; not visited in emacs.  Check if the file is registered;
+                  ;; this will create and up-to-date fprop.
+                  (vc-clearcase-registered file)
+                  (setq fprop (clearcase-file-fprop file))))
+
+            (cond ((not fprop) 
+                   (push file modified-files))
+                  ((vc-clearcase-workfile-unchanged-p file)
+                   (message "Undo checkout for unmodified file %s" file)
+                   (cleartool "uncheckout -keep \"%s\"" file)
+                   (push file reverted-files))
+                  (t
+                   (push file modified-files))))
+
+          ;; not a regular file... just assume it is modified...
           (push file modified-files)))
+
     (clearcase-refresh-files reverted-files)
     modified-files))
 
@@ -1571,7 +1587,7 @@ version."
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
       (ignore-cleartool-errors
-	(let ((ls-result (cleartool "ls \"%s\"" file)))
+	(let ((ls-result (cleartool "ls -dir \"%s\"" file)))
 	  (unless (string-match "@@\\([^ \t]+\\)" ls-result)
 	    (throw 'done nil))          ; file is not registered
 

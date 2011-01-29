@@ -1,3 +1,7 @@
+2011-01-29  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase-version): updated to 3.6-pre.
+
 2011-01-20  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (vc-clearcase-registered): use "-dir" option for

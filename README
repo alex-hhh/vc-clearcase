@@ -1,0 +1,27 @@
+vc-clearcase.el is a ClearCase integration package that works as a client to
+the Emacs VC package. In addition to the standard VC functionality, this
+package supports ClearCase specific tasks such as updating static views, edit
+a view's configspec, list checkouts and start the version tree browser GUI on
+a file. UCM is also supported.
+
+NOTE: this version will not work with Emacs releases prior to version 23.
+
+To install the package, follow these steps:
+
+   1/ Copy this directory under the site-lisp directory of your GNU/Emacs
+      installation
+
+   2/ Byte compile vc-clearcase.el and ucm.el.  You can do it from inside
+      Emacs, or from the command line:
+
+      % emacs -batch -f batch-byte-compile vc-clearcase.el
+      % emacs -batch -f batch-byte-compile ucm.el
+
+   3/ Add the following line to your initialization file (~/.emacs.el):
+
+      (load "vc-clearcase-auto")
+
+The ClearCase backend should activate when you open a file inside a ClearCase
+view.
+
+See also the project website http://code.google.com/p/vc-clearcase/

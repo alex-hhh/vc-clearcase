@@ -1833,8 +1833,25 @@ separate version, so we return the parent version in that case."
 
 ;;;;;; checkout-model
 (defun vc-clearcase-checkout-model (files)
-  "Checkout model for ClearCase is always locking for every file."
-  'locking)
+  "Checkout model for ClearCase.
+We use a 'locking checkout mode if all files are checked out
+reserved and an 'implicit checkout mode if any file has an
+unreserved checkout."
+  ;; We use this mechanism, because vc does not seem to refresh the state for
+  ;; locking checkout models, yet for unreserved checkouts, the file's state
+  ;; might change from 'edited to 'needs-merge behind our back (when other
+  ;; users create new revisions because we don't have a reserved checkout).
+  ;;
+  ;; NOTE: an implicit check-out model will cause vc-clearcase-state-heuristic
+  ;; to be called every time we save the file, running up to two cleartool
+  ;; commands to determine the state.  It would be much nicer if vc.el would
+  ;; do a proper state recomputation when it runs `vc-next-action'.
+  (catch 'checkout-model
+    (dolist (file files)
+      (let ((fprop (clearcase-file-fprop file)))
+        (when (and fprop (eq (clearcase-fprop-status fprop) 'unreserved))
+          (throw 'checkout-model 'implicit))))
+    (throw 'checkout-model 'locking)))
 
 ;;;;;; workfile-unchanged-p
 (defun vc-clearcase-workfile-unchanged-p (file)

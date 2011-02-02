@@ -73,7 +73,7 @@
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
 
-(defconst vc-clearcase-version "3.5-pre")
+(defconst vc-clearcase-version "3.6-pre")
 
 (defconst vc-clearcase-maintainer-address "AlexHarsanyi@gmail.com")
 
@@ -683,7 +683,7 @@ otherwise it returns the value of the last form in BODY."
 ;;
 ;; 'reserved -- file is checked out reserved
 ;;
-;; 'reserved -- file is checked out unreserved
+;; 'unreserved -- file is checked out unreserved
 ;;
 ;; 'hijacked -- file was modified without checking it out first
 ;;

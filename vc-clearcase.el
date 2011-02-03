@@ -1539,6 +1539,20 @@ Note that this will have a problem when branches are created with
 		 (read-string "New snapshot name: "))
 	   current-prefix-arg))))
 
+(defadvice vc-next-action
+    (before clearcase-force-recompute-state first)
+  "Force a state recomputation when `vc-next-action' is called.
+This is because checked out files might not be able to be checked
+in if new versions were created since they were checked out.
+
+vc.el used to do this, but it no longer does.  In Clearcase it is
+expensive to do an accurate state recomputation every time we
+save a file."
+  (let ((fileset (vc-deduce-fileset nil t 'state-model-only-files)))
+    (when (eq (car fileset) 'CLEARCASE) ; only for Clearcase filesets
+      (dolist (file (nth 1 fileset))
+        (vc-file-setprop file 'vc-state nil)))))
+
 ;;;; vc.el interface
 ;;;;; BACKEND PROPERTIES
 ;;;;;; revision granularity
@@ -1634,26 +1648,10 @@ checked it out.
 'unregistered -- file is not registered with ClearCase.
 
 'unlocked-changes -- file is hijacked."
-  (setq file (expand-file-name file))
-
   ;; we are asked for a reliable computation of state, so refresh all the
   ;; properties.
   (clearcase-maybe-set-vc-state file 'force)
-
-  (let ((fprop (clearcase-file-fprop file)))
-    ;; we are about to operate on the file, so check if the view is
-    ;; consistent.  Clearcase operations will occasionally fail saying that an
-    ;; update is already in progress for this view.  We can anticipate that,
-    ;; because the rule that selects this version will be "Rule: <rule info
-    ;; unavailable>".  In that case, we exit with an error telling the user to
-    ;; update his view.
-    ;;
-    ;; note that FPROP might be nil if FILE is unregistered.
-    (when (and fprop
-               (clearcase-snapshot-view-p fprop)
-               (clearcase-fprop-broken-view-p fprop))
-      (error "Snapshot view is inconsistent, run an update"))
-    (vc-clearcase-state-heuristic file)))
+  (vc-clearcase-state-heuristic file))
 
 ;;;;;; state-heuristic
 (defun vc-clearcase-state-heuristic (file)
@@ -1661,11 +1659,19 @@ checked it out.
 Use whatever `clearcase-maybe-set-vc-state' gave us.  See
 `vc-clearcase-state' for how states are mapped to ClearCase
 information."
-  (setq file (expand-file-name file))
   (clearcase-maybe-set-vc-state file)
   (let ((fprop (clearcase-file-fprop file)))
     (cond
       ((null fprop) 'unregistered)
+
+      ((and (clearcase-snapshot-view-p fprop)
+            (clearcase-fprop-broken-view-p fprop))
+       ;; Clearcase operations will occasionally fail saying that an update is
+       ;; already in progress for this view.  We can anticipate that, because
+       ;; the rule that selects this version will be "Rule: <rule info
+       ;; unavailable>".  In that case, we exit with an error telling the user
+       ;; to update his view.
+       (error "Snapshot view is inconsistent, run an update"))
 
       ((clearcase-fprop-hijacked-p fprop)
        'unlocked-changes)
@@ -1833,30 +1839,8 @@ separate version, so we return the parent version in that case."
 
 ;;;;;; checkout-model
 (defun vc-clearcase-checkout-model (files)
-  "Checkout model for ClearCase.
-We use a 'locking checkout mode if all files are checked out
-reserved and an 'implicit checkout mode if any file has an
-unreserved checkout."
-  ;; We use this mechanism, because vc does not seem to refresh the state for
-  ;; locking checkout models, yet for unreserved checkouts, the file's state
-  ;; might change from 'edited to 'needs-merge behind our back (other users
-  ;; can create new revisions because we don't have a reserved checkout).
-  ;;
-  ;; NOTE: an implicit check-out model will cause vc-clearcase-state-heuristic
-  ;; to be called every time we save the file, running up to two cleartool
-  ;; commands to determine the state.  It would be much nicer if vc.el would
-  ;; do a proper state recomputation when it runs `vc-next-action'.
-
-  ;; some vc code invokes this function with a single file arg
-  (unless (consp files)
-    (setq files (list files)))
-
-  (catch 'checkout-model
-    (dolist (file files)
-      (let ((fprop (clearcase-file-fprop file)))
-        (when (and fprop (eq (clearcase-fprop-status fprop) 'unreserved))
-          (throw 'checkout-model 'implicit))))
-    (throw 'checkout-model 'locking)))
+  "Checkout model for ClearCase is always locking."
+  'locking)
 
 ;;;;;; workfile-unchanged-p
 (defun vc-clearcase-workfile-unchanged-p (file)
@@ -4052,6 +4036,9 @@ See `clearcase-trace-cleartool-tq' and
   (ad-disable-advice
    'vc-create-snapshot 'before 'clearcase-provide-label-completion)
   (ad-activate 'vc-create-snapshot)
+  (ad-disable-advice 
+   'vc-next-action 'before 'clearcase-force-recompute-state)
+  (ad-activate 'vc-next-action)
   ;; unfortunately, I don't know how to restore the autoload for the
   ;; `vc-clearcase-registered' so we remove ourselves completely
   (setq vc-handled-backends (delq 'CLEARCASE vc-handled-backends)))
@@ -4069,6 +4056,7 @@ See `clearcase-trace-cleartool-tq' and
        (ad-activate 'vc-version-backup-file-name)
        (ad-activate 'vc-start-logentry)
        (ad-activate 'vc-create-snapshot)
+       (ad-activate 'vc-next-action)
        (cleartool-tq-maybe-start)))
 
 ;; Bug #1818879: Only add 'CLEARCASE to `vc-handled-backends' and start the

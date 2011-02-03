@@ -2073,24 +2073,20 @@ works with filesets it must expect several files."
   (clearcase-finish-checkout file rev comment 'unreserved))
 
 (defun clearcase-revision-reserved-p (file)
-  "Return t if FILE is checked out reserved.
+  "Return t if FILE is checked out reserved on the current branch.
 If yes, return the user and view that has the reserved checkout,
 otherwise return nil."
-  (let ((fprop (clearcase-file-fprop file))
-	(checkouts
-	 (split-string
-	  (cleartool "lsco -fmt \"%%PVn %%Rf %%Tf %%u\\n\" \"%s\"" file)
-	  "[\n\r]+")))
-    (let* ((match (concat (clearcase-fprop-version fprop) " reserved"))
-	   (len (length match))
-	   (rev (catch 'found
-		  (dolist (c checkouts)
-		    (when (eq (compare-strings match 0 len c 0 len) t)
-		      (throw 'found c))))))
-      (if rev
-	  (let ((elements (split-string rev)))
-	    (cons (nth 3 elements) (nth 2 elements)))
-	  nil))))
+  (let* ((fprop (clearcase-file-fprop file))
+         (branch (clearcase-fprop-branch fprop))
+         (checkouts
+          (split-string
+           (cleartool "lsco -brtype %s -fmt \"%%Rf %%Tf %%u\\n\" \"%s\"" branch file)
+           "[\n\r]+")))
+    (catch 'found
+      (dolist (co checkouts)
+        (let ((elements (split-string co)))
+          (when (equal (nth 0 elements) "reserved")
+            (throw 'found (cons (nth 2 elements) (nth 1 elements)))))))))
 
 (defcustom clearcase-checkout-comment-type 'normal
   "The type of comments expected from the user on checkout.

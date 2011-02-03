@@ -5,6 +5,12 @@
 	(clearcase-revision-reserved-p): return non nil if any revision on
 	the branch is checked out reserved, not just the current file
 	revision.
+	(vc-next-action): new defadvice: `clearcase-force-recompute-state'
+	(vc-clearcase-checkout-model): change it back to 'locking
+	(vc-clearcase-unload-hook): disable vc-next-action advice
+	(vc-clearcase-state-heuristic): check for broken views here
+	(vc-clearcase-state): just refresh the state and call
+	`vc-clearcase-state-heuristic'
 
 2011-02-02  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 

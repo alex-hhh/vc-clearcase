@@ -80,7 +80,8 @@
 ;;;###autoload
 (defgroup vc-clearcase nil
   "Support for the ClearCase version control system."
-  :group 'tools)
+  :group 'tools
+  :link '(url-link "http://code.google.com/p/vc-clearcase/wiki/UsageNotes"))
 
 ;;;###autoload
 (defcustom cleartool-program "cleartool"

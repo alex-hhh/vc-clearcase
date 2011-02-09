@@ -1,3 +1,9 @@
+2011-02-09  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase): add link to documentation page 
+
+	* ucm.el (ucm): add link to documentation page
+
 2011-02-03  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (vc-clearcase-checkout-model): accept both a

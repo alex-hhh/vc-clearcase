@@ -48,7 +48,8 @@
 
 (defgroup ucm nil
   "Support for UCM under ClearCase"
-  :group 'vc-clearcase)
+  :group 'vc-clearcase
+  :link '(url-link "http://code.google.com/p/vc-clearcase/wiki/UcmSupport"))
 
 ;;;; faces
 (defface ucm-field-name-face

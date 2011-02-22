@@ -2671,6 +2671,14 @@ When nil, the ClearCase internal diff is used instead."
   :type 'boolean
   :group 'vc-clearcase)
 
+(defun clearcase-get-file-version (file rev)
+  "Checkout the FILE's REV into a file and return the file name.
+If the file already exists, the file is not checked out again."
+  (let ((destfile (vc-version-backup-file-name file rev 'manual)))
+    (unless (file-exists-p destfile)
+      (clearcase-find-version-helper file rev destfile))
+    destfile))
+
 (defun clearcase-diff-with-diff (file rev1 rev2)
   "Do a diff on FILE revisions REV1 and REV2 using the diff package.
 The diff is stored in the current buffer.  The function returns t
@@ -2687,11 +2695,9 @@ This is a helper function for `vc-clearcase-diff'"
   ;; backups.  This is a good trade off, at least for me :-)
   (save-window-excursion
     (let ((diff-start-pos (point))
-	  (old (with-current-buffer (vc-find-revision file rev1)
-                 (buffer-file-name)))
+	  (old (clearcase-get-file-version file rev1))
 	  (new (if rev2
-                   (with-current-buffer (vc-find-revision file rev2)
-                     (buffer-file-name))
+                   (clearcase-get-file-version file rev2)
 		   file))
           (label (file-relative-name file default-directory)))
 

@@ -1,4 +1,15 @@
+# -*- mode: conf-colon -*-
+
 syntax: glob
+*~
 *.elc
 *.orig
 .DS_Store
+vc-clearcase-auto.el
+
+syntax:regexp
+
+# Ignore emacs swap files (e.g #ucm.el#).  Note that # is the comment start
+# char and needs to be escaped
+
+\#.*\#$

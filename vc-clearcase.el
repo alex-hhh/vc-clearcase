@@ -2980,14 +2980,12 @@ The contributor is the revision that was merged into the selected
 revision.  If multiple contributors exist, the user is prompted
 to select one."
   (interactive)
-  (declare (special vc-annotate-parent-file vc-annotate-parent-rev))
-  (let* ((rev-at-line (vc-annotate-extract-revision-at-line))
+  (let* ((rev-and-file (vc-annotate-extract-revision-at-line))
          (contributors (clearcase-revision-contributors
-                        vc-annotate-parent-file
-                        rev-at-line))
+                        (cdr rev-and-file) (car rev-and-file)))
          (rev (cond
                 ((null contributors)
-                 (error "Revision %s has no contributors" rev-at-line))
+                 (error "Revision %s has no contributors" (car rev-and-file)))
                 ((> (length contributors) 1)
                  (completing-read "Select contributor: " contributors nil t))
                 (t (car contributors)))))

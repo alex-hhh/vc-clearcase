@@ -3127,6 +3127,8 @@ element * NAME -nocheckout"
 This function will return nil if FILE is not inside a ClearCase
 view.  It will return the empty string if the view is a setview
 in UNIX or Linux."
+  (unless file
+    (setq file default-directory))
   (ignore-cleartool-errors
     (clearcase-view-root-for-path file)))
 

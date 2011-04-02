@@ -8,6 +8,9 @@
 	(clearcase-bind-checkout-comment): new function, added to
 	`vc-before-checkin-hook'
 
+	(vc-clearcase-revision-table)
+	(vc-clearcase-revision-completion-table): new functions
+
 2011-03-30  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (vc-clearcase-root): when called with a nil arg,

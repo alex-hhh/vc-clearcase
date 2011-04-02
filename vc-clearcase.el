@@ -2792,6 +2792,26 @@ when REV2 is nil, the current contents of the file are used."
         (goto-char diff-start-pos)
         all-identical?))))
 
+;;;;;; revision-completion-table
+(defun vc-clearcase-revision-table (file)
+  "Return a list of all the revisions for FILE."
+  (with-cleartool-directory default-directory
+    (let ((pnames (split-string (cleartool "lsvtree -short -all -nco \"%s\"" file))))
+      (mapcar (lambda (pname)
+                (if (string-match "^.*@@\\(.*\\)$" pname)
+                    (match-string 1 pname)
+                    pname))
+              pnames))))
+
+(defun vc-clearcase-revision-completion-table (files)
+  "Return a completion table with all the revisios for FILES."
+  (assert (= (length files) 1) "Clearcase uses per-file versioning")
+  (lexical-let ((files files)
+                table)
+    (setq table (lazy-completion-table
+                 table (lambda () (vc-clearcase-revision-table (car files)))))
+    table))
+
 ;;;;;; annotate-command
 
 (defconst clearcase-annotate-date-rx

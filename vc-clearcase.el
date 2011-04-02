@@ -1500,31 +1500,6 @@ Note that this will have a problem when branches are created with
           (setq rev (concat (clearcase-fprop-branch fprop) "~"
                             (clearcase-fprop-version-number fprop)))))))
 
-(defadvice vc-start-logentry
-    (before clearcase-prepare-checkin-comment
-	    (files extra comment initial-contents msg logbuf action &optional after-hook))
-  "Insert the checkout comment when checking-in FILE."
-
-  ;; When `vc-start-logentry' wants to collect a log message from the user and
-  ;; checkin FILE, we hook in to provide the checkout comment as the default.
-  ;;
-  ;; We must NOT touch COMMENT in these cases:
-  ;;
-  ;; - When FILE is nil (called from vc-dired to provide a checkin comment for
-  ;;   all files)
-  ;;
-  ;; - When COMMENT is NOT nil (it can be a string or t), this means
-  ;;   `vc-start-logentry' does not intend to prompt the user.
-  ;;
-  ;; Of course, we also check that the file is a ClearCase file and that it is
-  ;; checked out (therefore it will be checked in)
-
-  (when (and files (= (length files) 1) (null comment))
-    (let ((fprop (clearcase-file-fprop (car files))))
-      (when (and fprop (clearcase-fprop-checkedout-p fprop))
-	(setf comment (clearcase-fprop-comment fprop))
-	(setf initial-contents t)))))
-
 (defadvice vc-create-snapshot
     (before clearcase-provide-label-completion first
 	    (dir name branchp))
@@ -2042,21 +2017,6 @@ be 'reserved or 'unreserved."
     (clearcase-maybe-set-vc-state file 'force)
     (vc-resynch-buffer file t t)))
 
-;; This would be so much easier if vc-start-logentry would accept a
-;; closure to pass it to us...
-
-(defun clearcase-finish-checkout-reserved (file rev comment)
-  "Do a reserved checkout on FILE with REV and COMMENT.
-NOTE: This function will be called from `vc-start-logentry' which
-works with filesets and it must expect several files."
-  (clearcase-finish-checkout file rev comment 'reserved))
-
-(defun clearcase-finish-checkout-unreserved (file rev comment)
-  "Do an unreserved checkout on FILE with REV and COMMENT.
-NOTE: This function will be called from `vc-start-logentry' which
-works with filesets it must expect several files."
-  (clearcase-finish-checkout file rev comment 'unreserved))
-
 (defun clearcase-revision-reserved-p (file)
   "Return t if FILE is checked out reserved on the current branch.
 If yes, return the user and view that has the reserved checkout,
@@ -2130,22 +2090,23 @@ This method does three completely different things:
   (cond
     ((and editable destfile)
      (error "Cannot checkout to a specific file"))
+
     (editable
      ;; this is the real checkout operation
      (let* ((fprop (clearcase-file-fprop file))
-	    checkout)
+	    checkout-mode)
        (when (clearcase-fprop-checkout-denied-p fprop)
 	 (error "Configspec rule forbids checkout of this file."))
        ;; need to find out if we have to checkout reserved or
        ;; unreserved.
        (ecase clearcase-checkout-policy
-	 ('reserved (setq checkout 'clearcase-finish-checkout-reserved))
-	 ('unreserved (setq checkout 'clearcase-finish-checkout-unreserved))
+	 ('reserved (setq checkout-mode 'reserved))
+	 ('unreserved (setq checkout-mode 'unreserved))
 	 ('heuristic
 	  (cond
 	    ;; if the checkout will create a branch, checkout reserved
 	    ((clearcase-fprop-checkout-will-branch-p fprop)
-	     (setq checkout 'clearcase-finish-checkout-reserved))
+	     (setq checkout-mode 'reserved))
 
 	    ;; if we are not latest on branch and we are asked to
 	    ;; checkout this version (eq rev nil), we checkout
@@ -2155,34 +2116,65 @@ This method does three completely different things:
 				(clearcase-fprop-version fprop))))
 	     ;; patch rev first
 	     (setq rev (clearcase-fprop-version fprop))
-	     (setq checkout 'clearcase-finish-checkout-unreserved))
+	     (setq checkout-mode 'unreserved))
 
 	    ;; if someone else has checked out this revision in
 	    ;; reserved mode, ask the user if he wants an unreserved
 	    ;; checkout.
 	    (t (let ((user-and-view (clearcase-revision-reserved-p file)))
 		 (if user-and-view
-		     (when (yes-or-no-p
-			    (concat
-			     "This revision is checked out reserved by "
-			     (car user-and-view) "in" (cdr user-and-view)
-			     ".  Checkout unreserved? "))
-		       (setq checkout 'clearcase-finish-checkout-unreserved))
+                     (progn
+                       (unless (yes-or-no-p
+                                (concat
+                                 "This revision is checked out reserved by "
+                                 (car user-and-view) "in" (cdr user-and-view)
+                                 ".  Checkout unreserved? "))
+                         (error "Checkout aborted."))
+                       ;; else
+                       (setq checkout-mode 'unreserved))
 		     ;; no one has this version checked out, checkout
 		     ;; reserved.
-		     (setq checkout 'clearcase-finish-checkout-reserved)))))))
-       (if checkout
-	   (ecase clearcase-checkout-comment-type
-	     ('normal (vc-start-logentry
-		       (list file) rev nil nil
-		       "Enter a checkout comment" "*VC-log*" checkout))
-	     ('brief (let ((comment (read-string "Enter a checkout comment: ")))
-		       (funcall checkout file rev comment)))
-	     ('none (funcall checkout file rev "")))
-	   (message "Aborted."))))
+		     (setq checkout-mode 'reserved)))))))
+
+       (ecase clearcase-checkout-comment-type
+         ('normal 
+          (message "Enter a checkout comment")
+          (let ((vc-log-buffer (get-buffer-create "*VC-Log*")))
+            ;; vc-setup-buffer will make the *VC-Log* buffer current
+            (vc-setup-buffer vc-log-buffer)
+            (pop-to-buffer vc-log-buffer)
+            (log-edit
+             (lexical-let ((rev rev)
+                           (file (list file))
+                           (checkout-mode checkout-mode))
+               (lambda ()
+                 (interactive)
+                 (let ((comment (buffer-substring-no-properties (point-min) (point-max)))
+                       (logbuf (current-buffer)))
+                   (pop-to-buffer vc-parent-buffer)
+                   (clearcase-finish-checkout file rev comment checkout-mode)
+                   ;; adapted from vc-finish-logentry, we honour
+                   ;; vc-delete-logbuf-window
+                   (if vc-delete-logbuf-window
+                       (progn
+                         (delete-windows-on logbuf (selected-frame))
+                         ;; Kill buffer and delete any other dedicated
+                         ;; windows/frames.
+                         (kill-buffer logbuf))
+                       ;; else
+                       (with-selected-window (or (get-buffer-window logbuf 0)
+                                                 (selected-window))
+                         (with-current-buffer logbuf
+                           (bury-buffer)))))))
+             'setup)))
+         ('brief (let ((comment (read-string "Enter a checkout comment: ")))
+                   (clearcase-finish-checkout file rev comment checkout-mode)))
+         ('none (clearcase-finish-checkout file rev "" checkout-mode)))))
+
     ((and (not editable) destfile)
      ;; Check out an arbitrary version to the specified file
      (clearcase-find-version-helper file rev destfile))
+
     ((and (not editable) (or (null rev) (eq rev t)))
      ;; Update the file in the view (no-op in dynamic views)
      (let ((update-result (cleartool "update -force -rename \"%s\"" file)))
@@ -2191,8 +2183,10 @@ This method does three completely different things:
 	 (message (match-string 0 update-result)))
        (clearcase-maybe-set-vc-state file 'force)
        (vc-resynch-buffer file t t)))
+
     ((not editable)                     ; last case left for not editable
      (error "Cannot to update to a specific revision"))
+
     (t
      (error "Bad param combinations in vc-clearcase-checkout: %S %S %S"
 	    editable rev destfile))))
@@ -3477,6 +3471,23 @@ will open the specified version in another window, using
 	    (vc-resynch-buffer file t t))))))
   nil)
 
+;;;;;; clearcase-bind-checkout-comment
+(defun clearcase-bind-checkout-comment ()
+  "Bind the checkout comment to the `vc-checkin' parameters.
+This function sould be run from `vc-before-checkin-hook' by
+`vc-checkin'.  We modify the COMMENT parameter to `vc-checkin' to
+contain the checkout comment, if any."
+  ;; (defun vc-checkin (files backend &optional rev comment initial-contents)
+  (declare (special files backend comment initial-contents))
+  (when (and (eq backend 'CLEARCASE)
+             files 
+             (= (length files) 1) 
+             (null comment))
+    (let ((fprop (clearcase-file-fprop (car files))))
+      (when (and fprop (clearcase-fprop-checkedout-p fprop))
+	(setq comment (clearcase-fprop-comment fprop))
+	(setq initial-contents t)))))
+
 ;;;;;; checkout-directory
 ;;;###autoload
 (defun vc-clearcase-checkout-directory (dir)
@@ -4012,6 +4023,8 @@ See `clearcase-trace-cleartool-tq' and
 ;; files after we load vc-clearcase
 (add-hook 'after-save-hook 'clearcase-hijack-file-handler)
 
+(add-hook 'vc-before-checkin-hook 'clearcase-bind-checkout-comment)
+
 ;; Version controlled backups for ClearCase files are in the format:
 ;; file.c.~_main_some_branch_3~.  Similarly, ClearCase will also create
 ;; 'backups' by appending a .keep or .contrib to the filename. These are not
@@ -4028,6 +4041,7 @@ See `clearcase-trace-cleartool-tq' and
 
 (defun vc-clearcase-unload-hook ()
   (remove-hook 'after-save-hook 'clearcase-hijack-file-handler)
+  (remove-hook 'vc-before-checkin-hook 'clearcase-bind-checkout-comment)
   (cond
     ((boundp 'find-file-not-found-functions)
      (remove-hook 'find-file-not-found-functions 'clearcase-file-not-found-handler))
@@ -4037,9 +4051,6 @@ See `clearcase-trace-cleartool-tq' and
   (ad-disable-advice
    'vc-version-backup-file-name 'after 'clearcase-cleanup-version)
   (ad-activate 'vc-version-backup-file-name)
-  (ad-disable-advice
-   'vc-start-logentry 'before 'clearcase-prepare-checkin-comment)
-  (ad-activate 'vc-start-logentry)
   (ad-disable-advice
    'vc-create-snapshot 'before 'clearcase-provide-label-completion)
   (ad-activate 'vc-create-snapshot)
@@ -4061,7 +4072,6 @@ See `clearcase-trace-cleartool-tq' and
        (message "this version of vc-clearcase only works with GNU Emacs 23"))
       (t
        (ad-activate 'vc-version-backup-file-name)
-       (ad-activate 'vc-start-logentry)
        (ad-activate 'vc-create-snapshot)
        (ad-activate 'vc-next-action)
        (cleartool-tq-maybe-start)))

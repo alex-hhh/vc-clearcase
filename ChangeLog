@@ -1,3 +1,7 @@
+2011-05-10  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* ucm.el (ucm-delete-activity): new function
+
 2011-04-01  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (vc-start-logentry): refadvice removed

@@ -263,6 +263,15 @@ number of checked out files."
 			   headline (hash-table-count files) (length revisions) checkouts)
 		  (message "%s" headline)))))))
 
+;;;; ucm-delete-activity
+;;;###autoload
+(defun ucm-delete-activity (activity)
+  "Remove ACTIVITY from UCM ClearCase.
+An activity can only be removed if it contains no versions, it is
+not the current activity and it is not locked."
+  (interactive (list (ucm-read-activity "Delete activity: ")))
+  (cleartool "rmact -force -nc activity:%s@%s" activity ucm-projects-vob))
+
 ;;;; ucm-list-activities
 
 ;; Browse the list of activities in a stream

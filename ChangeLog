@@ -1,3 +1,8 @@
+2011-05-12  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase-revision-completion-table): doc
+	fix.
+
 2011-05-10  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* ucm.el (ucm-delete-activity): new function

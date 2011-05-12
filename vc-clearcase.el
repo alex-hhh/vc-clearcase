@@ -2804,7 +2804,7 @@ when REV2 is nil, the current contents of the file are used."
               pnames))))
 
 (defun vc-clearcase-revision-completion-table (files)
-  "Return a completion table with all the revisios for FILES."
+  "Return a completion table with all the revisions for FILES."
   (assert (= (length files) 1) "Clearcase uses per-file versioning")
   (lexical-let ((files files)
                 table)

@@ -1,4 +1,18 @@
--*- outline -*- 
+-*- mode: outline; mode: bug-reference -*- 
+
+* Release 3.6
+
+** revision completion is available for VC commands that prompt for revisions
+   The revision table is not read until TAB is pressed, as there is a small
+   delay for reading it.
+** new function `ucm-delete-activity' for deleting UCM activities
+   you can only delete an activity if it is not locked and has no revisions
+   associated with it.
+** Fix problem with checking out files under Emacs 23.3 (Bug #11)
+** Faster diffs when an external diff program is used
+   (`clearcase-use-external-diff` is t).  vc-clearcase will no longer load
+   different file revisions in Emacs before diff-ing them.
+** Various compatibility fixes for Emacs 23.3, see ChangeLog for more details.
 
 * Release 3.5
 

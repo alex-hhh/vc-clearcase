@@ -1,3 +1,11 @@
+2011-06-09  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* ucm.el (ucm-actb-refresh-on-checkin)
+	(ucm-actb-refresh-activity): new functions, called when check-in
+	happens
+	(ucm-unload-hook): new function.  Ensure the library can be
+	unloaded properly.
+
 2011-05-18  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (vc-clearcase-version): updated for release 3.6
@@ -44,7 +52,7 @@
 
 2011-02-09  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
-	* vc-clearcase.el (vc-clearcase): add link to documentation page 
+	* vc-clearcase.el (vc-clearcase): add link to documentation page
 
 	* ucm.el (ucm): add link to documentation page
 

@@ -1212,6 +1212,30 @@ visited."
                    (t t))))
   (ewoc-refresh ucm-actb-ewoc))
 
+;;;;;; ucm-actb-refresh-on-checkin
+(defun ucm-actb-refresh-on-checkin ()
+  "Refresh an activity browser buffer when a file is checked in.
+This function is intended to be added to `vc-checkin-hook'"
+  (with-current-buffer (or vc-parent-buffer (current-buffer))
+    (let ((file (buffer-file-name)))
+      ;; NOTE: we should also refresh the activity if the checkin happened
+      ;; from a *vc-dir* buffer.
+      (when file 
+        (let ((fprop (clearcase-file-fprop file)))
+          (when fprop
+            (let ((activity (clearcase-fprop-activity fprop)))
+              (when activity
+                (ucm-actb-refresh-activity activity)))))))))
+
+;;;;;; ucm-actb-refresh-activity
+(defun ucm-actb-refresh-activity (activity)
+  "Refresh all UCM actb buffers that browse ACTIVITY."
+  (dolist (b (buffer-list))
+    (with-current-buffer b
+      (when (and (eq major-mode 'ucm-actb-mode)
+                 (equal ucm-activity activity))
+        (ucm-actb-refresh-command)))))
+
 ;;;;; ucm-browse-activity
 ;;;###autoload
 (defun ucm-browse-activity (activity)
@@ -1301,7 +1325,8 @@ checked-in using \\[log-edit-show-files]."
 			      (cleartool "checkin -cfile \"%s\" activity:%s@%s"
 					 comment activity ucm-projects-vob)))
                         
-			(clearcase-refresh-files files))))
+			(clearcase-refresh-files files)
+                        (ucm-actb-refresh-activity activity))))
 		  (set-window-configuration window-configuration))
                 'setup
                 `((log-edit-listfun
@@ -1397,6 +1422,14 @@ the activity name, the second is t.")
 	    (cleartool "unlock activity:%s@%s" activity ucm-projects-vob)
 	    (message "%s is now unlocked" activity))))))
 
+
+;;;; Finish up
+
+(defun ucm-unload-hook ()
+  (remove-hook 'vc-checkin-hook 'ucm-actb-refresh-on-checkin))
+
+(add-hook 'vc-checkin-hook 'ucm-actb-refresh-on-checkin)
+(add-hook 'ucm-unload-hook 'ucm-unload-hook)
 
 (provide 'ucm)
 

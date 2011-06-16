@@ -2769,6 +2769,7 @@ when REV2 is nil, the current contents of the file are used."
       (diff-mode)))
 
   (with-current-buffer buffer
+    (setq buffer-read-only t)
     (goto-char (point-max))
     (let ((inhibit-read-only t)
 	  (all-identical? t)

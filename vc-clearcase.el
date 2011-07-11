@@ -1695,37 +1695,47 @@ also ignored."
 list of (FILE VC-STATE nil), we always return nil for the EXTRA
 part.  Return nil if the line has no file information or the file
 is ignored (see `clearcase-dir-status-ignored-files')"
-  (beginning-of-line)
-  (cond
-    ((looking-at "^\\(.*\\)@@")         ; version controlled item
-     (let* ((file (match-string 1))
-	    (limit (save-excursion
-		     (re-search-forward "\\s-+Rule: " (c-point 'eol))
-		     (point)))
-	    (state (cond
-		     ((progn
-			(beginning-of-line)
-			(re-search-forward "\\[hijacked\\]" limit 'noerror))
-		      'unlocked-changes)
-		     ((progn
-			(beginning-of-line)
-			(re-search-forward "CHECKEDOUT" limit 'noerror))
-		      'edited)
-		     (t 'up-to-date))))
-       (list file state nil)))
+  (save-restriction
+    (beginning-of-line)
+    (narrow-to-region (point) (c-point 'eol))
+    (cond
+      ((looking-at "^\\(.*\\)@@")         ; version controlled item
+       (let* ((file (match-string 1))
+              (extra nil)
+              (limit (save-excursion
+                       (re-search-forward "\\s-+Rule: " nil 'noerror)
+                       (point)))
+              (state (cond
+                       ((looking-at ".*\\[hijacked\\]")
+                        'unlocked-changes)
+                       ((looking-at ".*\\[loaded but missing\\]")
+                        'missing)
+                       ;; checkedout but removed and special selection states
+                       ;; are really just "edited" states as far as vc.el is
+                       ;; interested.  However, we ofer some hints in the
+                       ;; vc-dir buffer about these.
+                       ((looking-at ".*\\[not loaded, checkedout but removed\\]")
+                        (setq extra "missing")
+                        'edited)
+                       ((looking-at ".*\\[special selection\\]$")
+                        (setq extra "special selection")
+                        'edited)
+                       ((looking-at ".*CHECKEDOUT")
+                        'edited)
+                       (t 'up-to-date))))
+         (list file state extra)))
 
-    ((looking-at "^.+$")                ; not an empty line
-     ;; file is not managed by ClearCase
-     (let ((file (match-string 0)))
-       ;; unregistered directories, backup files and files matching a regexp
-       ;; in clearcase-dir-status-ignored-files will not be displayed.
-       (unless (or (file-directory-p file)
-                   (backup-file-name-p file)
-		   (some (lambda (rx) (string-match rx file))
-			 clearcase-dir-status-ignored-files))
-	 (list file 'unregistered nil))))
-
-    (t nil)))
+      ((looking-at "^.+$")                ; not an empty line
+       ;; file is not managed by ClearCase
+       (let ((file (match-string 0)))
+         ;; unregistered directories, backup files and files matching a regexp
+         ;; in clearcase-dir-status-ignored-files will not be displayed.
+         (unless (or (file-directory-p file)
+                     (backup-file-name-p file)
+                     (some (lambda (rx) (string-match rx file))
+                           clearcase-dir-status-ignored-files))
+           (list file 'unregistered nil))))
+      (t nil))))
 
 (defun clearcase-dir-status-collect (process string)
   "Collect information from a cleartool ls output and give it to
@@ -1763,7 +1773,7 @@ We run a cleartool ls command in the background and parse its
 output.  Note that we will only be able to detect checked out and
 hijacked files, not files which need to be updated."
   (let* ((default-directory dir)
-	 (args (list cleartool-program "ls" "-recurse" "-visible"))
+	 (args (list cleartool-program "ls" "-recurse"))
 	 (process (apply 'start-process "cleartool-ls" (current-buffer) args))
 	 (output-buffer (generate-new-buffer "*cleartool-ls*")))
 
@@ -1795,6 +1805,15 @@ hijacked files, not files which need to be updated."
    "\n"
    (clearcase-dir-format-extra-header
     "Vob tag    : " (clearcase-vob-tag-for-path dir))))
+
+(defun vc-clearcase-dir-printer (info)
+  "Pretty-printer for the vc-dir-fileinfo structure."
+  (let ((extra (vc-dir-fileinfo->extra info)))
+    (vc-default-dir-printer 'CLEARCASE info)
+    (when extra
+      (insert (propertize
+	       (format "   (%s)" extra)
+	       'face 'font-lock-comment-face)))))
 
 ;;;;;; working-revision
 (defun vc-clearcase-working-revision (file)

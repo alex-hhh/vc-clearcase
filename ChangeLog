@@ -1,3 +1,8 @@
+2011-09-09  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-dir-status-parse-line): use
+	`file-relative-name' to normalize the file name.
+
 2011-07-11  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-dir-status-parse-line): recognize

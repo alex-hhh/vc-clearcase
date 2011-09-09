@@ -1723,7 +1723,7 @@ is ignored (see `clearcase-dir-status-ignored-files')"
                        ((looking-at ".*CHECKEDOUT")
                         'edited)
                        (t 'up-to-date))))
-         (list file state extra)))
+         (list (file-relative-name file) state extra)))
 
       ((looking-at "^.+$")                ; not an empty line
        ;; file is not managed by ClearCase
@@ -1734,7 +1734,7 @@ is ignored (see `clearcase-dir-status-ignored-files')"
                      (backup-file-name-p file)
                      (some (lambda (rx) (string-match rx file))
                            clearcase-dir-status-ignored-files))
-           (list file 'unregistered nil))))
+           (list (file-relative-name file) 'unregistered nil))))
       (t nil))))
 
 (defun clearcase-dir-status-collect (process string)

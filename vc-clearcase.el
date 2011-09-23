@@ -2414,37 +2414,16 @@ but we don't do that."
   "Checkout a hijacked FILE and keep its current contents.
 VERSION is not used, and we signal an error if it is not nil.
 
-We save the current contents of the file, perform an unreserved
-checkout, put the contents of the file back in, than try to
-reserve the checkout.  At the end of the process, FILE will be
-checked out and the contents will be the one of the hijacked
-file.  File might be checked out unreserved, if someone already
-has a reserved checkout of the file."
+NOTE: if the file is checked out in another view, the checkout
+will be unreserved."
   (when version
     (error "vc-clearcase-steal-lock: cannot steal a specific version"))
-  (setq file (expand-file-name file))
-  (let ((keep-file (clearcase-get-keep-file-name file)))
-    ;; if something goes wrong in this routine, we leave the keep file
-    ;; in place.  This is consistent with ClearCase behaviour.
-    (rename-file file keep-file)
-    (condition-case err
-
-	(progn
-	  (cleartool "checkout -nquery -ncomment -nwarn -ndata -unreserved \"%s\"" file)
-	  (copy-file keep-file file 'overwrite)
-	  ;; make file writable, in case it wasn't
-	  (set-file-modes file (logior (file-modes file) #o220))
-	  (delete-file keep-file)
-	  (ignore-cleartool-errors
-	    (cleartool "reserve -ncomment \"%s\"" file))
-	  (clearcase-maybe-set-vc-state file 'force))
-
-      (cleartool-error
-       ;; if we failed above, and we don't have a file, put the original file
-       ;; back
-       (unless (file-exists-p file)
-	 (rename-file keep-file file))
-       (error (error-message-string err))))))
+  (cleartool "checkout -ncomment -nwarn -usehijack -unreserved \"%s\"" 
+             (expand-file-name file))
+  ;; Try to reserve the checkout.  This will fail if the file is already
+  ;; checked out on this branch in another view.
+  (ignore-cleartool-errors
+    (cleartool "reserve -ncomment \"%s\"" file)))
 
 ;;;;;; modify-change-comment
 

@@ -1,3 +1,8 @@
+2011-09-23  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (vc-clearcase-steal-lock): use "cleartool co
+	-usehijack" to claim hijacked files.
+
 2011-09-09  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-dir-status-parse-line): use

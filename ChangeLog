@@ -1,3 +1,8 @@
+2011-12-19  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-refresh-files): verify that the
+	buffer visits a real file (not a directory) before refreshing.
+
 2011-09-23  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (vc-clearcase-steal-lock): use "cleartool co

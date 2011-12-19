@@ -922,8 +922,10 @@ in bulk."
     (let ((fprop (clearcase-file-fprop file)))
       (when fprop
 	(with-temp-message (format "Refreshing ClearCase status for %s" file)
-	  (with-current-buffer (get-file-buffer file)
-	    (revert-buffer nil 'noconfirm nil)))))))
+          (let ((buf (get-file-buffer file)))
+            (when (and buf (not (file-directory-p file)))
+              (with-current-buffer buf
+                (revert-buffer nil 'noconfirm nil)))))))))
 
 (defun clearcase-revert-unchanged-files (files)
   "Undo checkout for all FILES which are not modified.

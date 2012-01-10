@@ -57,6 +57,7 @@
 (require 'tq)
 (require 'vc-hooks)
 (require 'vc)
+(require 'vc-dir)
 (require 'log-view)
 
 ;; Bug #1608947: This is needed at runtime for the `find' call.
@@ -730,6 +731,14 @@ otherwise it returns the value of the last form in BODY."
   revision-list
   )
 
+(defcustom clearcase-use-fprop-cache nil
+  "When t, FPROP objects will be saved to disk when a buffer is
+killed.  When a file is opened, its saved FPROP is reused, if it
+is still up-to-date.  This speeds things up by not running
+cleartool commands when files are opened."
+  :type 'boolean
+  :group 'vc-clearcase)
+
 (defun clearcase-file-fprop (file)
   "Return the fprop structure associated with FILE."
   ;; Try different methods of getting the fprop, from fastest to slowest:
@@ -739,6 +748,9 @@ otherwise it returns the value of the last form in BODY."
 
    ;; Try expanding the file name...
    (vc-file-getprop (expand-file-name file) 'vc-clearcase-fprop)
+
+   ;; Try to read it from the cache...
+   (clearcase-get-saved-fprop file)
 
    ;; Try reading the file into a buffer and get the FPROP that way (UCM might
    ;; call VC operations on files that are not already loaded)
@@ -764,6 +776,48 @@ FPROP can be nil, meaning it is not initialized."
 	       (clearcase-fprop-version-tid fprop)))
       t
       nil))
+
+(defun clearcase-save-fprop (fprop)
+  "Save the FPROP to disk if `clearcase-use-fprop-cache' is non-nil."
+  (when clearcase-use-fprop-cache
+    ;; NOTE: this fprop is about to be destroyed anyway, so we clear the TID's
+    ;; in place.  We need to clear the TIDs since they will be invalid when
+    ;; the fprop is loaded in another Emacs session.
+    (setf (clearcase-fprop-version-tid fprop) nil)
+    (setf (clearcase-fprop-comment-tid^ fprop) nil)
+    (setf (clearcase-fprop-activity-tid^ fprop) nil)
+    (let ((dir (concat (file-name-directory (clearcase-fprop-file-name fprop)) ".vc-clearcase/"))
+          (file (concat (file-name-nondirectory (clearcase-fprop-file-name fprop)) ".fprop")))
+      (make-directory dir 'parents)
+      (with-temp-file (concat dir file)
+        (prin1 fprop (current-buffer))))))
+
+(defun clearcase-get-saved-fprop (file)
+  "Return a saved FPROP object for FILE if `clearcase-use-fprop-cache' is non-nil.
+Return nil if no FPROP is found or it is outdated. The FPROP is
+outdated if its modification time is older than FILE's
+modification and status change time."
+  (when clearcase-use-fprop-cache
+    (let ((dir (concat (file-name-directory file) ".vc-clearcase/"))
+          (fprop-file (concat (file-name-nondirectory file) ".fprop")))
+      (let ((fprop-file (concat dir fprop-file)))
+        (when (file-exists-p fprop-file)
+          (let* ((file-attr (file-attributes file))
+                 (mtime (nth 5 file-attr)) ; modification time
+                 (stime (nth 6 file-attr)) ; status change time
+                 (fprop-file-mtime (nth 5 (file-attributes fprop-file))))
+            (when (and (time-less-p mtime fprop-file-mtime)
+                       (time-less-p stime fprop-file-mtime))
+              (with-temp-buffer 
+                (insert-file-contents fprop-file)
+                (goto-char (point-min))
+                ;; do basic validation and error handling: if there's a
+                ;; problem reading the FPROP, just return nil.  A new FPROP
+                ;; will be written out by `clearcase-save-fprop'
+                (condition-case nil
+                    (let ((fprop (read (current-buffer))))
+                      (if (clearcase-fprop-p fprop) fprop nil))
+                  (error nil))))))))))
 
 (defsubst clearcase-fprop-hijacked-p (fprop)
   "Return true if FPROP is hijacked."
@@ -1571,10 +1625,10 @@ version."
     (let ((fprop (clearcase-file-fprop file)))
 
       (when (clearcase-fprop-initialized-p fprop)
+	(vc-file-setprop file 'vc-clearcase-fprop fprop)
 	(throw 'done t))
 
       ;; we need to ask ClearCase if the file is registered or not.
-
       (unless fprop
 	(setq fprop (clearcase-make-fprop :file-name file)))
 
@@ -4046,6 +4100,15 @@ See `clearcase-trace-cleartool-tq' and
 
 (add-hook 'vc-before-checkin-hook 'clearcase-bind-checkout-comment)
 
+(defun clearcase-save-fprop-on-kill ()
+  "Save the current buffer's FPROP when it is killed."
+  (when buffer-file-name
+    (let ((fprop (clearcase-file-fprop buffer-file-name)))
+      (when fprop
+        (clearcase-save-fprop fprop)))))
+
+(add-hook 'kill-buffer-hook 'clearcase-save-fprop-on-kill)
+
 ;; Version controlled backups for ClearCase files are in the format:
 ;; file.c.~_main_some_branch_3~.  Similarly, ClearCase will also create
 ;; 'backups' by appending a .keep or .contrib to the filename. These are not
@@ -4063,6 +4126,7 @@ See `clearcase-trace-cleartool-tq' and
 (defun vc-clearcase-unload-hook ()
   (remove-hook 'after-save-hook 'clearcase-hijack-file-handler)
   (remove-hook 'vc-before-checkin-hook 'clearcase-bind-checkout-comment)
+  (remove-hook 'kill-buffer-hook 'clearcase-save-fprop-on-kill)
   (cond
     ((boundp 'find-file-not-found-functions)
      (remove-hook 'find-file-not-found-functions 'clearcase-file-not-found-handler))

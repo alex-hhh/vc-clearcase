@@ -1,3 +1,15 @@
+2012-01-09  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-use-fprop-cache): new defcustom
+	(clearcase-file-fprop): also use the cache when looking for a
+	FPROP.
+	(clearcase-save-fprop, clearcase-get-saved-fprop): new fprop
+	(vc-clearcase-registered): make sure the fprop is added to the
+	file's vc-properties.
+	(kill-buffer-hook): add clearcase-file-fprop to the hook.
+	(vc-clearcase-unload-hook): remove clearcase-file-fprop when
+	unloading.
+
 2011-12-19  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-refresh-files): verify that the

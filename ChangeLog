@@ -1,3 +1,8 @@
+2012-01-10  Alex Harsanyi  <AlexHarsanyi@gmail.com>
+
+	* vc-clearcase.el (clearcase-finish-checkout): update the FPROP
+	manually, no need to issue cleartool commands.
+
 2012-01-09  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
 	* vc-clearcase.el (clearcase-use-fprop-cache): new defcustom

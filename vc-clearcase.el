@@ -2088,15 +2088,9 @@ be 'reserved or 'unreserved."
 	  (cleartool-timeout (* 1.5 cleartool-timeout)))
       ;; NOTE: if this fails, we should prompt the user to checkout
       ;; unreserved.
-      (cleartool "checkout %s %s \"%s\"" co-mode options pname)))
-
-  (let ((fprop (clearcase-file-fprop file)))
-    (setf (clearcase-fprop-status fprop) mode)
-    (setf (clearcase-fprop-what-rule fprop) "CHECKEDOUT")
-    (setf (clearcase-fprop-comment^ fprop) comment)
-    (setf (clearcase-fprop-comment-tid^ fprop) 0))
-    
-  (vc-resynch-buffer file t t))
+      (cleartool "checkout %s %s \"%s\"" co-mode options pname))
+    (clearcase-maybe-set-vc-state file 'force)
+    (vc-resynch-buffer file t t)))
 
 (defun clearcase-revision-reserved-p (file)
   "Return t if FILE is checked out reserved on the current branch.

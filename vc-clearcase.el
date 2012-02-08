@@ -1186,7 +1186,9 @@ asking cleartool for information.  See
 			  :key 'clearcase-vprop-name :test 'equal)))
 	(unless vprop
           (unless dir
-            (error "Need DIR to construct VPROP for %s" vtag))
+            (if (clearcase-fprop-p view-tag)
+                (setq dir (file-name-directory (clearcase-fprop-file-name view-tag)))
+                (error "Need DIR to construct VPROP for %s" vtag)))
 	  (setq vprop (clearcase-setup-vprop
 		       (clearcase-make-vprop :name vtag)
 		       dir))

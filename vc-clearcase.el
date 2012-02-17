@@ -4104,10 +4104,15 @@ See `clearcase-trace-cleartool-tq' and
 
 (defun clearcase-save-fprop-on-kill ()
   "Save the current buffer's FPROP when it is killed."
-  (when buffer-file-name
-    (let ((fprop (clearcase-file-fprop buffer-file-name)))
-      (when fprop
-        (clearcase-save-fprop fprop)))))
+  (ignore-errors
+    ;; There are cases when we cannot save the FPROP -- such as when the view
+    ;; was removed or the file is visiting a specific version in a dynamic
+    ;; view.  Since this is just a speed-up optimization, we simply ignore
+    ;; errors if we cannot save the FPROP.
+    (when buffer-file-name
+      (let ((fprop (clearcase-file-fprop buffer-file-name)))
+        (when fprop
+          (clearcase-save-fprop fprop))))))
 
 (add-hook 'kill-buffer-hook 'clearcase-save-fprop-on-kill)
 

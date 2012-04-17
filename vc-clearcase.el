@@ -3538,7 +3538,9 @@ will open the specified version in another window, using
   (let ((file (buffer-file-name)))
     (when file
       (let ((fprop (clearcase-file-fprop file)))
-	(when fprop
+        ;; NOTE: we might get back the FPROP on a derived buffer (e.g a diff
+        ;; buffer).  We only hijack the actual file
+	(when (and fprop (equal (clearcase-fprop-file-name fprop) file))
 	  (unless (clearcase-fprop-checkedout-p fprop)
 	    ;; we are hijacking a file
 	    (vc-file-setprop file 'vc-state 'unlocked-changes)
@@ -4048,7 +4050,7 @@ easier to keep it up-to-date this way.")
     ;; sort varlist, as it is easier to search in the error report.
     (setq varlist
 	  (sort varlist
-		'(lambda (a b)
+		(lambda (a b)
 		  (let ((a-name (symbol-name (if (consp a) (car a) a)))
 			(b-name (symbol-name (if (consp b) (car b) b))))
 		    (string< a-name b-name)))))

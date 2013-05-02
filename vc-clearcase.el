@@ -2110,7 +2110,7 @@ otherwise return nil."
           (when (equal (nth 0 elements) "reserved")
             (throw 'found (cons (nth 2 elements) (nth 1 elements)))))))))
 
-(defcustom clearcase-checkout-comment-type 'normal
+(defcustom clearcase-checkout-comment-type 'none
   "The type of comments expected from the user on checkout.
 The value of this variable should be one of the three symbols:
 
@@ -2212,6 +2212,11 @@ This method does three completely different things:
 		     ;; no one has this version checked out, checkout
 		     ;; reserved.
 		     (setq checkout-mode 'reserved)))))))
+
+       ;; No point in entering a checkout comment if it cannot be
+       ;; used later, see Bug #16
+       (unless (eq clearcase-checkout-comment-type 'none)
+          (error "Cannot enter a checkout comment, See Bug #16"))
 
        (ecase clearcase-checkout-comment-type
          ('normal 
@@ -4102,7 +4107,8 @@ See `clearcase-trace-cleartool-tq' and
 ;; files after we load vc-clearcase
 (add-hook 'after-save-hook 'clearcase-hijack-file-handler)
 
-(add-hook 'vc-before-checkin-hook 'clearcase-bind-checkout-comment)
+;; Temporary workaround for Bug #16
+;; (add-hook 'vc-before-checkin-hook 'clearcase-bind-checkout-comment)
 
 (defun clearcase-save-fprop-on-kill ()
   "Save the current buffer's FPROP when it is killed."

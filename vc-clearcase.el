@@ -2110,7 +2110,7 @@ otherwise return nil."
           (when (equal (nth 0 elements) "reserved")
             (throw 'found (cons (nth 2 elements) (nth 1 elements)))))))))
 
-(defcustom clearcase-checkout-comment-type 'none
+(defcustom clearcase-checkout-comment-type 'normal
   "The type of comments expected from the user on checkout.
 The value of this variable should be one of the three symbols:
 
@@ -2212,11 +2212,6 @@ This method does three completely different things:
 		     ;; no one has this version checked out, checkout
 		     ;; reserved.
 		     (setq checkout-mode 'reserved)))))))
-
-       ;; No point in entering a checkout comment if it cannot be
-       ;; used later, see Bug #16
-       (unless (eq clearcase-checkout-comment-type 'none)
-          (error "Cannot enter a checkout comment, See Bug #16"))
 
        (ecase clearcase-checkout-comment-type
          ('normal 
@@ -3251,6 +3246,21 @@ Return nil if no such revision exists."
 	(message "Building revision list...done.")))
     (car (cdr-safe (member rev revision-list)))))
 
+;;;;;; vc-clearcase-log-edit-mode
+(define-derived-mode vc-clearcase-log-edit-mode log-edit-mode
+  "Cc-Log-Edit"
+  "Mode to edit clearcase checkin log messages.
+Derived from `log-edit-mode', but will insert the checkout
+comment for the file, if any."
+  (let (fprop)
+    (when (and (boundp 'vc-parent-buffer) 
+               (buffer-live-p vc-parent-buffer)
+               (buffer-file-name vc-parent-buffer))
+      (setq fprop (clearcase-file-fprop (buffer-file-name vc-parent-buffer))))
+    (when (and fprop (clearcase-fprop-checkedout-p fprop))
+      (goto-char (point-max))
+      (insert (clearcase-fprop-comment fprop)))))
+
 ;;;;;; delete-file
 (defun vc-clearcase-delete-file (file)
   "Remove FILE from ClearCase.
@@ -3554,23 +3564,6 @@ will open the specified version in another window, using
             (set-file-modes file (logior (file-modes file) #o220))
 	    (vc-resynch-buffer file t t))))))
   nil)
-
-;;;;;; clearcase-bind-checkout-comment
-(defun clearcase-bind-checkout-comment ()
-  "Bind the checkout comment to the `vc-checkin' parameters.
-This function sould be run from `vc-before-checkin-hook' by
-`vc-checkin'.  We modify the COMMENT parameter to `vc-checkin' to
-contain the checkout comment, if any."
-  ;; (defun vc-checkin (files backend &optional rev comment initial-contents)
-  (declare (special files backend comment initial-contents))
-  (when (and (eq backend 'CLEARCASE)
-             files 
-             (= (length files) 1) 
-             (null comment))
-    (let ((fprop (clearcase-file-fprop (car files))))
-      (when (and fprop (clearcase-fprop-checkedout-p fprop))
-	(setq comment (clearcase-fprop-comment fprop))
-	(setq initial-contents t)))))
 
 ;;;;;; checkout-directory
 ;;;###autoload
@@ -4106,9 +4099,6 @@ See `clearcase-trace-cleartool-tq' and
 ;; This does not have to be autoloaded, we only need to detect hijacking of
 ;; files after we load vc-clearcase
 (add-hook 'after-save-hook 'clearcase-hijack-file-handler)
-
-;; Temporary workaround for Bug #16
-;; (add-hook 'vc-before-checkin-hook 'clearcase-bind-checkout-comment)
 
 (defun clearcase-save-fprop-on-kill ()
   "Save the current buffer's FPROP when it is killed."

@@ -74,7 +74,7 @@
   (require 'trace) ; avoid compiler complaint w.r.t undefined untrace-function
   )
 
-(defconst vc-clearcase-version "3.7")
+(defconst vc-clearcase-version "3.8-pre")
 
 (defconst vc-clearcase-maintainer-address "AlexHarsanyi@gmail.com")
 

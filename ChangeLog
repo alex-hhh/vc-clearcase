@@ -8,6 +8,7 @@
 	comment.
 	(clearcase-bind-checkout-comment): removed
 	(vc-clearcase-version): updated for release 3.7
+	(vc-clearcase-version): 543 updated for 3.8-pre
 
 2013-05-03  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 

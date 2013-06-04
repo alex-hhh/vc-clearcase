@@ -1,5 +1,17 @@
 -*- mode: outline; mode: bug-reference -*- 
 
+* Release 3.7
+
+** Fixes checkin for Emacs 23.3 (Bug #16)
+** vc-dir lists missing and special selection files
+** new variable 'clearcase-use-fprop-cache' 
+   used to enable caching of ClearCase status when a file is closed.  The file
+   will be opened faster since the ClearCase status need not be retrieved.
+   Enabling this option will create folders named ".vc-clearcase" in each
+   ClearCase controlled directory containing the saved information.  The
+   folders can be safely removed.
+** Various other minor fixes, see ChangeLog for more details
+
 * Release 3.6
 
 ** revision completion is available for VC commands that prompt for revisions

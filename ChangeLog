@@ -7,6 +7,7 @@
 	(vc-clearcase-log-edit-mode): new defun, inserts the checkout
 	comment.
 	(clearcase-bind-checkout-comment): removed
+	(vc-clearcase-version): updated for release 3.7
 
 2013-05-03  Alex Harsanyi  <AlexHarsanyi@gmail.com>
 
